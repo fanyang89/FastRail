@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+package raft;
+
+option go_package = "./raft";
+option csharp_namespace = "RaftNET";
+
+service Raft {
+  rpc Vote(VoteRequest) returns (Void);
+  rpc RespondVote(VoteResponse) returns (Void);
+  rpc Append(AppendRequest) returns (Void);
+  rpc RespondAppend(AppendResponse) returns (Void);
+}
+
+message Void {}
+
+message VoteRequest {
+  // The candidate’s term
+  uint64 current_term = 1;
+  // The index of the candidate's last log entry
+  uint64 last_log_idx = 2;
+  // The term of the candidate's last log entry
+  uint64 last_log_term = 3;
+  // True if this is pre-vote request
+  bool is_pre_vote = 4;
+  // If the flag is set the request will not be ignored even
+  // if there is an active leader. Used during leadership transfer
+  bool force = 5;
+}
+
+message VoteResponse {
+  // Current term, for the candidate to update itself
+  uint64 current_term = 1;
+  // True means the candidate received a vote
+  bool vote_granted = 2;
+  // True if it is a reply to pre-vote request
+  bool is_pre_vote = 3;
+}
+
+message Command {
+  bytes buffer = 1;
+}
+
+message ServerAddress {
+  uint64 server_id = 1;
+  bytes server_info = 2;
+}
+
+message ConfigMember {
+  ServerAddress server_address = 1;
+  bool can_vote = 2;
+}
+
+message Configuration {
+  // Contains the current configuration. When configuration
+  // change is in progress, contains the new configuration
+  repeated ConfigMember current = 1;
+  // Used during the transitioning period of configuration
+  // changes
+  repeated ConfigMember previous = 2;
+}
+
+message LogEntry {
+  uint64 term = 1;
+  uint64 idx = 2;
+
+  oneof data {
+    // Dummy entry is used when a leader needs to commit an entry
+    // (after leadership change for instance) but there is nothing
+    // else to commit.
+    Void dummy = 3;
+    Command command = 4;
+    Configuration configuration = 5;
+  }
+}
+
+message AppendRequest {
+  // The leader's term.
+  uint64 current_term = 1;
+  // Index of the log entry immediately preceding new ones
+  uint64 prev_log_idx = 2;
+  // Term of prev_log_idx entry.
+  uint64 prev_log_term = 3;
+  // The leader's commit index.
+  uint64 leader_commit_idx = 4;
+  // log entries
+  repeated LogEntry entries = 5;
+}
+
+message AppendRejected {
+  // Index of non matching entry that caused the request
+  // to be rejected
+  uint64 non_matching_idx = 1;
+  // Last index in the follower's log, can be used to find next
+  // matching index more efficiently
+  uint64 last_idx = 2;
+}
+
+message AppendAccepted {
+  // Last entry that was appended (may be smaller than max log index
+  // in case follower's log is longer and appended entries match)
+  uint64 last_new_idx = 1;
+}
+
+message AppendResponse {
+  // Current term, for leader to update itself
+  uint64 current_term = 1;
+  // Contains an index of the last committed entry on the follower
+  // It is used by a leader to know if a follower is behind and issuing
+  // empty append entry with updates commit_index if it is
+  // Regular RAFT handles this by always sending entry append requests
+  // as a heartbeat
+  uint64 commit_idx = 2;
+
+  oneof result {
+    AppendRejected rejected = 3;
+    AppendAccepted accepted = 4;
+  }
+}
+
+message SnapshotDescriptor {
+  // Index and term of last entry in the snapshot
+  uint64 idx = 1;
+  uint64 term = 2;
+  // The committed configuration in the snapshot
+  Configuration config = 3;
+  // Id of the snapshot.
+  uint64 id = 4;
+}
+
+message InstallSnapshot {
+  // Current term on a leader
+  uint64 current_term = 1;
+  // A snapshot to install
+  SnapshotDescriptor snp = 2;
+};
+
+message SnapshotReply {
+  // Follower current term
+  uint64 current_term = 1;
+  // True if the snapshot was applied, false otherwise.
+  bool success = 2;
+};
+
+message TimeoutNow {
+  // Current term on a leader
+  uint64 current_term = 1;
+}
+
+message ReadQuorum {
+  // The leader's term.
+  uint64 current_term = 1;
+  // The leader's commit index. Has the same semantics
+  // as in append_entries.
+  uint64 leader_commit_idx = 2;
+  // The id of the read barrier. Only valid within this term.
+  uint64 id = 3;
+};
+
+message ReadQuorumReply {
+  // The leader's term, as sent in the read_quorum request.
+  // read_id is only valid (and unique) within a given term.
+  uint64 current_term = 1;
+  // Piggy-back follower's commit_index, for the same purposes
+  // as in append_reply::commit_index
+  uint64 commit_idx = 2;
+  // Copy of the id from a read_quorum request
+  uint64 id = 3;
+};
