@@ -11,7 +11,8 @@ public static class Messages {
             cfg.Current.Add(new ConfigMember {
                 ServerAddress = new ServerAddress {
                     ServerId = id
-                }
+                },
+                CanVote = true
             });
         }
 
