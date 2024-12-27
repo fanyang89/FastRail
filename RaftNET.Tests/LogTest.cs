@@ -1,35 +1,4 @@
-﻿using System.Text;
-using Google.Protobuf;
-
-namespace RaftNET.Tests;
-
-internal static class Messages {
-    public static Configuration ConfigFromIds(params ulong[] ids) {
-        var cfg = new Configuration();
-
-        foreach (var id in ids) {
-            cfg.Current.Add(new ConfigMember {
-                ServerAddress = new ServerAddress {
-                    ServerId = id
-                }
-            });
-        }
-
-        return cfg;
-    }
-
-    public static LogEntry CreateDummy() {
-        return new LogEntry { Dummy = new Void() };
-    }
-
-    public static LogEntry CreateCommand(string cmd) {
-        return new LogEntry {
-            Command = new Command {
-                Buffer = ByteString.CopyFrom(cmd, Encoding.UTF8)
-            }
-        };
-    }
-}
+﻿namespace RaftNET.Tests;
 
 public class LogTest {
     private Log log_;
@@ -58,7 +27,7 @@ public class LogTest {
             Assert.That(log_[1].Dummy, Is.Not.Null);
         });
 
-        log_.Add(new LogEntry { Configuration = cfg_ });
+        log_.Add(Messages.CreateConfiguration(cfg_));
         Assert.Multiple(() => {
             Assert.That(log_.LastIdx(), Is.EqualTo(2));
             Assert.That(log_.LastConfIdx(), Is.EqualTo(2));
