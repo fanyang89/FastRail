@@ -10,5 +10,5 @@ public enum VoteResult {
     Won,
 
     // The quorum of servers has voted against this candidate
-    Lost,
-};
+    Lost
+}

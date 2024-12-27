@@ -117,7 +117,7 @@ public class TrackerTest {
         cfg.EnterJoint(new HashSet<ConfigMember> {
             Messages.CreateConfigMember(id1),
             Messages.CreateConfigMember(id2),
-            Messages.CreateConfigMember(id3, false),
+            Messages.CreateConfigMember(id3, false)
         });
         cfg.LeaveJoint();
         _tracker.SetConfiguration(cfg, 1);
@@ -129,7 +129,7 @@ public class TrackerTest {
         // Check that non-voting member is not counted for the quorum in joint config
         cfg.EnterJoint(new HashSet<ConfigMember> {
             Messages.CreateConfigMember(id4),
-            Messages.CreateConfigMember(id5),
+            Messages.CreateConfigMember(id5)
         });
         _tracker.SetConfiguration(cfg, 1);
         Find(id4).Accepted(30);
@@ -141,7 +141,7 @@ public class TrackerTest {
         cfg.EnterJoint(new HashSet<ConfigMember> {
             Messages.CreateConfigMember(id1),
             Messages.CreateConfigMember(id2),
-            Messages.CreateConfigMember(id5, false),
+            Messages.CreateConfigMember(id5, false)
         });
         Assert.That(_tracker.Committed(0), Is.EqualTo(25));
     }

@@ -1,11 +1,9 @@
-using Google.Protobuf.Collections;
-
 namespace RaftNET;
 
 public class Tracker {
+    private readonly SortedSet<ulong> _currentVoters = new();
     private Dictionary<ulong, FollowerProgress> _followers = new();
-    private SortedSet<ulong> _currentVoters = new();
-    private SortedSet<ulong> _previousVoters = new();
+    private readonly SortedSet<ulong> _previousVoters = new();
 
     public FollowerProgress? Find(ulong id) {
         return _followers.GetValueOrDefault(id);
@@ -40,7 +38,7 @@ public class Tracker {
         _previousVoters.Clear();
 
         var oldProgress = _followers;
-        _followers = new();
+        _followers = new Dictionary<ulong, FollowerProgress>();
 
         foreach (var member in configuration.Current) {
             var id = member.ServerAddress.ServerId;
@@ -60,7 +58,7 @@ public class Tracker {
                 _followers.Add(id, new FollowerProgress {
                     Id = id,
                     NextIdx = nextIdx,
-                    CanVote = member.CanVote,
+                    CanVote = member.CanVote
                 });
             }
         }
@@ -84,7 +82,7 @@ public class Tracker {
                     _followers.Add(id, new FollowerProgress {
                         Id = id,
                         NextIdx = nextIdx,
-                        CanVote = member.CanVote,
+                        CanVote = member.CanVote
                     });
                 }
             }
@@ -116,11 +114,10 @@ public class Tracker {
             return ulong.Min(current.CommitIdx(), previous.CommitIdx());
         }
 
-        foreach (var (id, progress) in _followers) {
+        foreach (var (id, progress) in _followers)
             if (_currentVoters.Contains(id)) {
                 current.Add(progress.MatchIdx);
             }
-        }
 
         if (!current.Committed()) {
             return prevCommitIdx;

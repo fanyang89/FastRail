@@ -95,7 +95,7 @@ public class VotesTest {
                     Messages.CreateConfigMember(Id1),
                     Messages.CreateConfigMember(Id2),
                     Messages.CreateConfigMember(Id3),
-                    Messages.CreateConfigMember(Id4, false),
+                    Messages.CreateConfigMember(Id4, false)
                 }
             }
         );
@@ -110,12 +110,12 @@ public class VotesTest {
         var votes = new Votes(
             new Configuration {
                 Current = {
-                    Messages.CreateConfigMember(Id1),
+                    Messages.CreateConfigMember(Id1)
                 },
                 Previous = {
                     Messages.CreateConfigMember(Id2),
                     Messages.CreateConfigMember(Id3),
-                    Messages.CreateConfigMember(Id4, false),
+                    Messages.CreateConfigMember(Id4, false)
                 }
             }
         );
@@ -137,12 +137,12 @@ public class VotesTest {
             new Configuration {
                 Current = {
                     Messages.CreateConfigMember(Id1),
-                    Messages.CreateConfigMember(Id4),
+                    Messages.CreateConfigMember(Id4)
                 },
                 Previous = {
                     Messages.CreateConfigMember(Id2),
                     Messages.CreateConfigMember(Id3),
-                    Messages.CreateConfigMember(Id4, false),
+                    Messages.CreateConfigMember(Id4, false)
                 }
             }
         );

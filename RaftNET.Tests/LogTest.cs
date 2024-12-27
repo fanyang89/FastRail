@@ -3,8 +3,8 @@
 namespace RaftNET.Tests;
 
 public class LogTest {
-    private Log _log;
     private Configuration _cfg;
+    private Log _log;
 
     [SetUp]
     public void SetUp() {

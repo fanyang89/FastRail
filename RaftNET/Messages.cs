@@ -8,14 +8,13 @@ public static class Messages {
     public static Configuration ConfigFromIds(params ulong[] ids) {
         var cfg = new Configuration();
 
-        foreach (var id in ids) {
+        foreach (var id in ids)
             cfg.Current.Add(new ConfigMember {
                 ServerAddress = new ServerAddress {
                     ServerId = id
                 },
                 CanVote = true
             });
-        }
 
         return cfg;
     }
@@ -23,23 +22,21 @@ public static class Messages {
     public static Configuration ConfigFromIds(IEnumerable<ulong> current, IEnumerable<ulong> previous) {
         var cfg = new Configuration();
 
-        foreach (var id in current) {
+        foreach (var id in current)
             cfg.Current.Add(new ConfigMember {
                 ServerAddress = new ServerAddress {
                     ServerId = id
                 },
                 CanVote = true
             });
-        }
 
-        foreach (var id in previous) {
+        foreach (var id in previous)
             cfg.Previous.Add(new ConfigMember {
                 ServerAddress = new ServerAddress {
                     ServerId = id
                 },
                 CanVote = true
             });
-        }
 
         return cfg;
     }
@@ -99,9 +96,7 @@ public static class Messages {
     public static ISet<ConfigMember> CreateConfigMembers(params ulong[] memberIds) {
         var s = new HashSet<ConfigMember>();
 
-        foreach (var id in memberIds) {
-            s.Add(CreateConfigMember(id));
-        }
+        foreach (var id in memberIds) s.Add(CreateConfigMember(id));
 
         return s;
     }

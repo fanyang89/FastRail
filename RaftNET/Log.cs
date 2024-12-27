@@ -4,10 +4,10 @@ using Microsoft.Extensions.Logging;
 namespace RaftNET;
 
 public class Log {
-    private ulong _firstIdx;
-    private ulong _lastConfIdx;
     private readonly List<LogEntry> _log;
     private readonly ILogger<Log> _logger;
+    private ulong _firstIdx;
+    private ulong _lastConfIdx;
     private ulong _prevConfIdx;
     private SnapshotDescriptor _snapshot;
     private ulong _stableIdx;

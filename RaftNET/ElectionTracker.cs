@@ -4,16 +4,15 @@ using Google.Protobuf.Collections;
 namespace RaftNET;
 
 public class ElectionTracker {
-    private readonly ISet<ulong> _votingMembers = new HashSet<ulong>();
     private readonly ISet<ulong> _responded = new HashSet<ulong>();
+    private readonly ISet<ulong> _votingMembers = new HashSet<ulong>();
     private int _granted;
 
     public ElectionTracker(RepeatedField<ConfigMember> members) {
-        foreach (var member in members) {
+        foreach (var member in members)
             if (member.CanVote) {
                 _votingMembers.Add(member.ServerAddress.ServerId);
             }
-        }
     }
 
     public bool RegisterVote(ulong from, bool granted) {

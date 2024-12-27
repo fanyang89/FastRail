@@ -1,37 +1,37 @@
 namespace RaftNET;
 
 public class FollowerProgress {
+    private const ulong MaxInFlight = 10;
+
+    // Index that we know to be committed by the follower.
+    private ulong _commitIdx = 0;
+
+    // Number of in-flight still unACKed append entries requests.
+    private ulong _inFlight;
+
+    // True if a packet was sent already in probe mode.
+    private bool _probeSent;
+
+    private FollowerProgressState _state = FollowerProgressState.Probe;
+
+    // True if the follower is a voting one.
+    public bool CanVote = true;
+
     // ID of this server
     public ulong Id;
-
-    // Index of the next log entry to send to this server.
-    // Invariant: next_idx > match_idx.
-    public ulong NextIdx;
 
     // Index of the highest log entry known to be replicated to this server.
     // More specifically, this is the greatest `last_new_idx` received from this follower
     // in an `accepted` message. As long as the follower remains in our term we know
     // that its log must match with ours up to (and including) `match_idx`.
-    public ulong MatchIdx = 0;
-
-    // Index that we know to be committed by the follower.
-    ulong _commitIdx = 0;
+    public ulong MatchIdx;
 
     // Highest read ID the follower replied to.
     public ulong MaxAckedRead = 0;
 
-    // True if the follower is a voting one.
-    public bool CanVote = true;
-
-    FollowerProgressState _state = FollowerProgressState.Probe;
-
-    // True if a packet was sent already in probe mode.
-    bool _probeSent = false;
-
-    // Number of in-flight still unACKed append entries requests.
-    ulong _inFlight = 0;
-
-    const ulong MaxInFlight = 10;
+    // Index of the next log entry to send to this server.
+    // Invariant: next_idx > match_idx.
+    public ulong NextIdx;
 
     public bool IsStrayReject(AppendRejected rejected) {
         if (rejected.NonMatchingIdx <= MatchIdx) {

@@ -2,10 +2,10 @@ using System.Numerics;
 
 namespace RaftNET;
 
-class MatchVector<T> where T : INumber<T> {
-    private T _prevCommitIdx;
-    private List<T> _match;
+internal class MatchVector<T> where T : INumber<T> {
     private int _count;
+    private readonly List<T> _match;
+    private readonly T _prevCommitIdx;
 
     public MatchVector(T prevCommitIdx, int reserveSize) {
         _prevCommitIdx = prevCommitIdx;

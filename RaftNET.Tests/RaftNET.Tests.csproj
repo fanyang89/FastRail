@@ -21,7 +21,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\RaftNET\RaftNET.csproj" />
+        <ProjectReference Include="..\RaftNET\RaftNET.csproj"/>
     </ItemGroup>
 
 </Project>

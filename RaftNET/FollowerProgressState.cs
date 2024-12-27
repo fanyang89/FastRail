@@ -9,4 +9,4 @@ internal enum FollowerProgressState {
 
     // In this state snapshot has been transferred.
     Snapshot
-};
+}
