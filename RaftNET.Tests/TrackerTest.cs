@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-
 namespace RaftNET.Tests;
 
 public class TrackerTest {
@@ -115,7 +113,7 @@ public class TrackerTest {
         Find(id1).Accepted(20);
         Assert.That(_tracker.Committed(18), Is.EqualTo(19));
 
-        // Check that non voting member is not counted for the quorum in simple config
+        // Check that non-voting member is not counted for the quorum in simple config
         cfg.EnterJoint(new HashSet<ConfigMember> {
             Messages.CreateConfigMember(id1),
             Messages.CreateConfigMember(id2),
