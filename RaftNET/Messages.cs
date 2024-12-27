@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using Google.Protobuf;
 
@@ -11,6 +10,30 @@ public static class Messages {
 
         foreach (var id in ids) {
             cfg.Current.Add(new ConfigMember {
+                ServerAddress = new ServerAddress {
+                    ServerId = id
+                },
+                CanVote = true
+            });
+        }
+
+        return cfg;
+    }
+
+    public static Configuration ConfigFromIds(IEnumerable<ulong> current, IEnumerable<ulong> previous) {
+        var cfg = new Configuration();
+
+        foreach (var id in current) {
+            cfg.Current.Add(new ConfigMember {
+                ServerAddress = new ServerAddress {
+                    ServerId = id
+                },
+                CanVote = true
+            });
+        }
+
+        foreach (var id in previous) {
+            cfg.Previous.Add(new ConfigMember {
                 ServerAddress = new ServerAddress {
                     ServerId = id
                 },
@@ -53,6 +76,11 @@ public static class Messages {
         configuration.Current.Clear();
         configuration.Current.AddRange(cNew);
     }
+
+    public static bool IsJoint(this Configuration configuration) {
+        return configuration.Previous.Count > 0;
+    }
+
 
     public static void LeaveJoint(this Configuration configuration) {
         Debug.Assert(configuration.Previous.Count > 0);
