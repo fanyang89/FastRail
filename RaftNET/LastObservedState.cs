@@ -1,7 +1,7 @@
 ﻿namespace RaftNET;
 
-public partial class Fsm {
-    public sealed record LastObservedState : IEquatable<Fsm> {
+public partial class FSM {
+    public sealed record LastObservedState : IEquatable<FSM> {
         public ulong CurrentTerm;
         public ulong VotedFor;
         public ulong CommitIdx;
@@ -9,7 +9,7 @@ public partial class Fsm {
         public ulong LastTerm;
         public bool AbortLeadershipTransfer;
 
-        public bool Equals(Fsm? other) {
+        public bool Equals(FSM? other) {
             if (other is null) {
                 return false;
             }
@@ -22,7 +22,7 @@ public partial class Fsm {
                    AbortLeadershipTransfer == other._abortLeadershipTransfer;
         }
 
-        public void Advance(Fsm fsm) {
+        public void Advance(FSM fsm) {
             CurrentTerm = fsm._currentTerm;
             VotedFor = fsm._votedFor;
             CommitIdx = fsm._commitIdx;

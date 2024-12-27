@@ -10,29 +10,7 @@ using Message = OneOf<
     VoteRequest, VoteResponse, AppendRequest, AppendResponse,
     InstallSnapshot, SnapshotResponse, TimeoutNowRequest>;
 
-public class Follower {
-    public ulong CurrentLeader;
-}
-
-public class Candidate {
-    public Votes Votes;
-    public bool IsPreVote;
-
-    public Candidate(Configuration configuration, bool isPreVote) {
-        Votes = new Votes(configuration);
-        IsPreVote = isPreVote;
-    }
-}
-
-public class Leader {
-    public Tracker Tracker;
-    private Fsm FSM;
-    public long? stepDown;
-}
-
-public record Dummy;
-
-public partial class Fsm {
+public partial class FSM {
     private ulong _myID;
     private OneOf<Follower, Candidate, Leader> _state;
     private ulong _currentTerm;
@@ -49,13 +27,13 @@ public partial class Fsm {
     private IFailureDetector _failureDetector;
     private readonly ThreadLocal<Random> _random = new(() => new Random());
     private List<KeyValuePair<ulong, Message>> _messages = new();
-    private readonly ILogger<Fsm> _logger;
+    private readonly ILogger<FSM> _logger;
     private readonly LastObservedState _observed = new LastObservedState();
 
     public const long ElectionTimeout = 10;
 
-    public Fsm(ILogger<Fsm>? logger = null) {
-        _logger = logger ?? new NullLogger<Fsm>();
+    public FSM(ILogger<FSM>? logger = null) {
+        _logger = logger ?? new NullLogger<FSM>();
         _observed.Advance(this);
     }
 
