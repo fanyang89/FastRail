@@ -10,6 +10,9 @@ service Raft {
   rpc RespondVote(VoteResponse) returns (Void);
   rpc Append(AppendRequest) returns (Void);
   rpc RespondAppend(AppendResponse) returns (Void);
+  rpc SendSnapshot(InstallSnapshot) returns (Void);
+  rpc RespondSendSnapshot(SnapshotResponse) returns (Void);
+  rpc TimeoutNow(TimeoutNowRequest) returns (Void);
 }
 
 message Void {}
@@ -135,14 +138,14 @@ message InstallSnapshot {
   SnapshotDescriptor snp = 2;
 };
 
-message SnapshotReply {
+message SnapshotResponse {
   // Follower current term
   uint64 current_term = 1;
   // True if the snapshot was applied, false otherwise.
   bool success = 2;
 };
 
-message TimeoutNow {
+message TimeoutNowRequest {
   // Current term on a leader
   uint64 current_term = 1;
 }
