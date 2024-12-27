@@ -54,7 +54,9 @@ public class LogTest {
         // re-append last entry with diff term, should replace it
         Assert.Multiple(() => {
             Assert.That(
-                _log.MaybeAppend([Messages.CreateDummy(2, _log.LastTerm() + 1)]),
+                _log.MaybeAppend([
+                    Messages.CreateDummy(2, _log.LastTerm() + 1)
+                ]),
                 Is.EqualTo(2));
             Assert.That(_log.LastIdx(), Is.EqualTo(2));
             Assert.That(_log[2].Dummy, Is.Not.Null);

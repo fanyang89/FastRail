@@ -8,7 +8,6 @@ public class Log {
     private ulong _lastConfIdx;
     private readonly List<LogEntry> _log;
     private readonly ILogger<Log> _logger;
-    private int _memoryUsage;
     private ulong _prevConfIdx;
     private SnapshotDescriptor _snapshot;
     private ulong _stableIdx;
@@ -25,7 +24,6 @@ public class Log {
             Debug.Assert(_firstIdx <= snapshot.Idx + 1);
         }
 
-        _memoryUsage = RangeMemoryUsage(0, _log.Count);
         Debug.Assert(_firstIdx > 0);
         StableTo(LastIdx());
         InitLastConfigurationIdx();
@@ -46,34 +44,17 @@ public class Log {
         return _log.Count == 0;
     }
 
-    public Tuple<int, ulong> ApplySnapshot(SnapshotDescriptor snp, ulong maxTrailingEntries, int maxTrailingBytes) {
+    public ulong ApplySnapshot(SnapshotDescriptor snp, ulong maxTrailingEntries, int maxTrailingBytes) {
         Debug.Assert(snp.Idx > _snapshot.Idx);
 
-        int releasedMemory;
         var idx = snp.Idx;
 
         if (idx > LastIdx()) {
-            releasedMemory = _memoryUsage;
-            _memoryUsage = 0;
             _log.Clear();
             _firstIdx = idx + 1;
         } else {
             var entriesToRemove = (ulong)_log.Count - (LastIdx() - idx);
-            var trailingBytes = 0;
-
-            for (var i = 0; i < maxTrailingBytes && entriesToRemove > 0; i++) {
-                trailingBytes += MemoryUsageOf(_log[(int)(entriesToRemove - 1)]);
-
-                if (trailingBytes > maxTrailingBytes) {
-                    break;
-                }
-
-                --entriesToRemove;
-            }
-
-            releasedMemory = RangeMemoryUsage(0, (int)entriesToRemove);
             _log.RemoveRange(0, (int)entriesToRemove);
-            _memoryUsage -= releasedMemory;
             _firstIdx += entriesToRemove;
         }
 
@@ -88,7 +69,7 @@ public class Log {
         }
 
         _snapshot = snp;
-        return new Tuple<int, ulong>(releasedMemory, _firstIdx);
+        return _firstIdx;
     }
 
     public ulong MaybeAppend(IList<LogEntry> entries) {
@@ -96,30 +77,30 @@ public class Log {
 
         var lastNewIdx = entries.Last().Idx;
 
-        foreach (var entry in entries) {
-            if (entry.Idx <= LastIdx()) {
-                if (entry.Idx < _firstIdx) {
+        foreach (var e in entries) {
+            if (e.Idx <= LastIdx()) {
+                if (e.Idx < _firstIdx) {
                     _logger.LogTrace(
-                        "append_entries: skipping entry with idx {idx} less than log start {firstIdx}", entry.Idx,
+                        "append_entries: skipping entry with idx {idx} less than log start {firstIdx}", e.Idx,
                         _firstIdx);
                     continue;
                 }
 
-                if (entry.Term == GetEntry(entry.Idx).Term) {
-                    _logger.LogTrace("append_entries: entries with index {idx} has matching terms {term}", entry.Idx,
-                        entry.Term);
+                if (e.Term == GetEntry(e.Idx).Term) {
+                    _logger.LogTrace("append_entries: entries with index {idx} has matching terms {term}", e.Idx,
+                        e.Term);
                     continue;
                 }
 
                 _logger.LogTrace(
                     "append_entries: entries with index {idx} has non matching terms e.term={term}, _log[i].term = {entryTerm}",
-                    entry.Idx, entry.Term, GetEntry(entry.Idx).Term);
-                Debug.Assert(entry.Idx > _snapshot.Idx);
-                TruncateUncommitted(entry.Idx);
+                    e.Idx, e.Term, GetEntry(e.Idx).Term);
+                Debug.Assert(e.Idx > _snapshot.Idx);
+                TruncateUncommitted(e.Idx);
             }
 
-            Debug.Assert(entry.Idx == NextIdx());
-            Add(entry);
+            Debug.Assert(e.Idx == NextIdx());
+            Add(e);
         }
 
         return lastNewIdx;
@@ -154,12 +135,10 @@ public class Log {
     public void Add(LogEntry entry) {
         _log.Add(entry);
 
-        if (_log.Last().Configuration == null) {
-            return;
+        if (_log.Last().Configuration != null) {
+            _prevConfIdx = _lastConfIdx;
+            _lastConfIdx = LastIdx();
         }
-
-        _prevConfIdx = _lastConfIdx;
-        _lastConfIdx = LastIdx();
     }
 
     public ulong LastIdx() {
@@ -170,38 +149,14 @@ public class Log {
         return LastIdx() + 1;
     }
 
-    private int MemoryUsageOf(LogEntry entry) {
-        if (entry.Command == null) {
-            return 0;
-        }
-
-        var bufferSize = 0;
-
-        if (entry.Command.Buffer != null) {
-            bufferSize = entry.Command.Buffer.Length;
-        }
-
-        return 2 * sizeof(ulong) + bufferSize;
-    }
-
-    private int RangeMemoryUsage(int first, int last) {
-        var result = 0;
-
-        for (var i = first; i < last; i++) result += MemoryUsageOf(_log[i]);
-
-        return result;
-    }
-
     private void TruncateUncommitted(ulong idx) {
         Debug.Assert(idx >= _firstIdx);
         var it = (int)(idx - _firstIdx);
-        var releasedMemory = RangeMemoryUsage(it, _log.Count);
-        _log.RemoveRange(it, _log.Count - it + 1);
-        _memoryUsage -= releasedMemory;
+        _log.RemoveRange(it, _log.Count - it);
         StableTo(ulong.Min(_stableIdx, LastIdx()));
 
         if (_lastConfIdx > LastIdx()) {
-            Debug.Assert(_prevConfIdx > _lastConfIdx);
+            Debug.Assert(_prevConfIdx < _lastConfIdx);
             _lastConfIdx = _prevConfIdx;
             _prevConfIdx = 0;
         }
