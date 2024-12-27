@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Diagnostics;
 using Google.Protobuf.Collections;
 
 namespace RaftNET;
@@ -37,46 +35,59 @@ public class Tracker {
         return members;
     }
 
-    private void SetConfigurationMembers(
-        ISet<ulong> allMembers, // current and previous members
-        ulong nextIdx,
-        RepeatedField<ConfigMember> configMembers, // current or previous
-        SortedSet<ulong> voters
-    ) {
-        foreach (var member in configMembers) {
-            if (member == null) {
+    public void SetConfiguration(Configuration configuration, ulong nextIdx) {
+        _currentVoters.Clear();
+        _previousVoters.Clear();
+
+        var oldProgress = _followers;
+        _followers = new();
+
+        foreach (var member in configuration.Current) {
+            var id = member.ServerAddress.ServerId;
+
+            if (member.CanVote) {
+                _currentVoters.Add(id);
+            }
+
+            if (_followers.ContainsKey(id)) {
                 continue;
             }
 
-            var id = member.ServerAddress.ServerId;
-
-            if (!allMembers.Contains(id)) {
-                // this member is leaving cluster
-                voters.Remove(id);
-                _followers.Remove(id);
+            if (oldProgress.TryGetValue(id, out var value)) {
+                _followers[id] = value;
+                _followers[id].CanVote = member.CanVote;
             } else {
-                // this member is joining cluster or already joined
+                _followers.Add(id, new FollowerProgress {
+                    Id = id,
+                    NextIdx = nextIdx,
+                    CanVote = member.CanVote,
+                });
+            }
+        }
+
+        if (configuration.Previous.Count > 0) {
+            foreach (var member in configuration.Previous) {
+                var id = member.ServerAddress.ServerId;
+
                 if (member.CanVote) {
-                    voters.Add(id);
+                    _previousVoters.Add(id);
                 }
 
-                if (!_followers.ContainsKey(id)) {
-                    // create new follower progress for new member
+                if (_followers.ContainsKey(id)) {
+                    continue;
+                }
+
+                if (oldProgress.TryGetValue(id, out var value)) {
+                    _followers[id] = value;
+                    _followers[id].CanVote = member.CanVote;
+                } else {
                     _followers.Add(id, new FollowerProgress {
                         Id = id,
                         NextIdx = nextIdx,
+                        CanVote = member.CanVote,
                     });
                 }
             }
-        }
-    }
-
-    public void SetConfiguration(Configuration configuration, ulong nextIdx) {
-        var allMembers = GetAllMembers(configuration);
-        SetConfigurationMembers(allMembers, nextIdx, configuration.Current, _currentVoters);
-
-        if (configuration.Previous != null) {
-            SetConfigurationMembers(allMembers, nextIdx, configuration.Previous, _previousVoters);
         }
     }
 
@@ -93,7 +104,7 @@ public class Tracker {
                     current.Add(progress.MatchIdx);
                 }
 
-                if (_currentVoters.Contains(id)) {
+                if (_previousVoters.Contains(id)) {
                     previous.Add(progress.MatchIdx);
                 }
             }
@@ -105,14 +116,16 @@ public class Tracker {
             return ulong.Min(current.CommitIdx(), previous.CommitIdx());
         }
 
-        foreach (var progress in from follower in _followers
-                 let id = follower.Key
-                 let progress = follower.Value
-                 where _currentVoters.Contains(id)
-                 select progress) {
-            current.Add(progress.MatchIdx);
+        foreach (var (id, progress) in _followers) {
+            if (_currentVoters.Contains(id)) {
+                current.Add(progress.MatchIdx);
+            }
         }
 
-        return !current.Committed() ? prevCommitIdx : current.CommitIdx();
+        if (!current.Committed()) {
+            return prevCommitIdx;
+        }
+
+        return current.CommitIdx();
     }
 }

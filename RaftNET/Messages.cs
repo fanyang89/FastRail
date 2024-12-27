@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 using Google.Protobuf;
 
@@ -39,5 +41,40 @@ public static class Messages {
         return new LogEntry {
             Configuration = cfg
         };
+    }
+
+    public static void EnterJoint(this Configuration configuration, ISet<ConfigMember> cNew) {
+        if (cNew.Count == 0) {
+            throw new ArgumentException(nameof(cNew));
+        }
+
+        configuration.Previous.Clear();
+        configuration.Previous.AddRange(configuration.Current);
+        configuration.Current.Clear();
+        configuration.Current.AddRange(cNew);
+    }
+
+    public static void LeaveJoint(this Configuration configuration) {
+        Debug.Assert(configuration.Previous.Count > 0);
+        configuration.Previous.Clear();
+    }
+
+    public static ConfigMember CreateConfigMember(ulong id, bool canVote = true) {
+        return new ConfigMember {
+            ServerAddress = new ServerAddress {
+                ServerId = id
+            },
+            CanVote = canVote
+        };
+    }
+
+    public static ISet<ConfigMember> CreateConfigMembers(params ulong[] memberIds) {
+        var s = new HashSet<ConfigMember>();
+
+        foreach (var id in memberIds) {
+            s.Add(CreateConfigMember(id));
+        }
+
+        return s;
     }
 }

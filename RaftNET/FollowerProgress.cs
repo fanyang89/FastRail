@@ -21,7 +21,7 @@ public class FollowerProgress {
     public ulong MaxAckedRead = 0;
 
     // True if the follower is a voting one.
-    bool _canVote = true;
+    public bool CanVote = true;
 
     FollowerProgressState _state = FollowerProgressState.Probe;
 
