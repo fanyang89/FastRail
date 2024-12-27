@@ -1,5 +1,5 @@
 ﻿namespace RaftNET;
 
-public class Follower {
-    public ulong CurrentLeader;
+public class Follower(ulong leader) {
+    public ulong CurrentLeader = leader;
 }

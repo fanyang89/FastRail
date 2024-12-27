@@ -55,7 +55,7 @@ public partial class FSM {
         return diff > 0 || _messages.Any() || _output.StateChanged || !_observed.Equals(this);
     }
 
-    void Replicate() {
+    private void Replicate() {
         Debug.Assert(IsLeader);
 
         foreach (var (id, progress) in LeaderState.Tracker.FollowerProgresses) {
@@ -97,7 +97,7 @@ public partial class FSM {
         }
 
         output.Messages = _messages;
-        _messages = new List<KeyValuePair<ulong, Message>>();
+        _messages = [];
 
         output.AbortLeadershipTransfer = _abortLeadershipTransfer;
         _abortLeadershipTransfer = false;
@@ -270,8 +270,18 @@ public partial class FSM {
         _votedFor = 0;
     }
 
-    private void BecomeFollower(ulong leaderId) {
-        throw new NotImplementedException();
+    private void BecomeFollower(ulong leader) {
+        if (leader == _myID) {
+            throw new FSMException("FSM cannot become a follower of itself");
+        }
+        if (!IsFollower) {
+            _output.StateChanged = true;
+        }
+        _state = new Follower(leader);
+        if (leader != 0) {
+            _pingLeader = false;
+            _lastElectionTime = _clock.Now();
+        }
     }
 
     private void BecomeLeader() {
@@ -388,8 +398,62 @@ public partial class FSM {
         }
     }
 
-    private void ReplicateTo(FollowerProgress progress, bool b) {
-        throw new NotImplementedException();
+    private void ReplicateTo(FollowerProgress progress, bool allowEmpty) {
+        while (progress.CanSendTo()) {
+            var nextIdx = progress.NextIdx;
+            if (progress.NextIdx > _log.LastIdx()) {
+                nextIdx = 0;
+                if (!allowEmpty) {
+                    return;
+                }
+            }
+
+            allowEmpty = false;
+            var prevIdx = progress.NextIdx - 1;
+            var prevTerm = _log.TermFor(prevIdx);
+            if (prevTerm == null) {
+                var snapshot = _log.GetSnapshot();
+                progress.BecomeSnapshot(snapshot.Idx);
+                SendTo(progress.Id, new InstallSnapshot {
+                    CurrentTerm = _currentTerm,
+                    Snp = snapshot
+                });
+                return;
+            }
+
+            var req = new AppendRequest {
+                CurrentTerm = _currentTerm,
+                PrevLogIdx = prevIdx,
+                PrevLogTerm = prevTerm.Value,
+                LeaderCommitIdx = _commitIdx,
+            };
+
+            if (nextIdx > 0) {
+                var size = 0;
+                while (nextIdx <= _log.LastIdx() && size < _config.AppendRequestThreshold) {
+                    var entry = _log[nextIdx];
+                    req.Entries.Add(entry);
+                    size += entry.EntrySize();
+                    nextIdx++;
+                    if (progress.State == FollowerProgressState.Probe) {
+                        break;
+                    }
+                }
+
+                if (progress.State == FollowerProgressState.Pipeline) {
+                    progress.InFlight++;
+                    progress.NextIdx = nextIdx;
+                }
+            } else {
+                _logger.LogTrace("ReplicateTo[{}->{}]: send empty", _myID, progress.Id);
+            }
+
+            SendTo(progress.Id, req);
+
+            if (progress.State == FollowerProgressState.Probe) {
+                progress.ProbeSent = true;
+            }
+        }
     }
 
     public void Step(ulong from, Message msg) {

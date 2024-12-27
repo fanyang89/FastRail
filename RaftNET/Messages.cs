@@ -129,4 +129,21 @@ public static class Messages {
             throw new ArgumentException("The configuration must have at least one voter");
         }
     }
+
+    public static int EntrySize(this LogEntry entry) {
+        Debug.Assert(entry.Dummy != null || entry.Command != null || entry.Configuration != null);
+        if (entry.Command != null) {
+            return entry.Command.Buffer.Length;
+        }
+
+        if (entry.Configuration != null) {
+            var size = 0;
+            foreach (var member in entry.Configuration.Current) {
+                size += member.CalculateSize();
+            }
+            return size;
+        }
+
+        return 0; // dummy
+    }
 }
