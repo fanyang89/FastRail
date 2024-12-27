@@ -48,7 +48,7 @@ public class Log {
         return _snapshot;
     }
 
-    public ulong ApplySnapshot(SnapshotDescriptor snp, ulong maxTrailingEntries, int maxTrailingBytes) {
+    public ulong ApplySnapshot(SnapshotDescriptor snp) {
         Debug.Assert(snp.Idx > _snapshot.Idx);
 
         var idx = snp.Idx;

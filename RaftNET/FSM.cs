@@ -18,23 +18,50 @@ public partial class FSM {
     private ulong _commitIdx;
     private Log _log;
     private FSMConfig _config;
-    private bool _abortLeadershipTransfer = false;
-    private bool _pingLeader = false;
+    private bool _abortLeadershipTransfer;
+    private bool _pingLeader;
     private FSMOutput _output;
     private LogicalClock _clock;
-    private long _lastElectionTime = 0;
-    private long _randomizedElectionTimeout = ElectionTimeout + 1;
     private IFailureDetector _failureDetector;
+    private readonly ILogger<FSM> _logger;
+    private long _lastElectionTime;
+    private long _randomizedElectionTimeout = ElectionTimeout + 1;
     private readonly ThreadLocal<Random> _random = new(() => new Random());
     private List<KeyValuePair<ulong, Message>> _messages = new();
-    private readonly ILogger<FSM> _logger;
-    private readonly LastObservedState _observed = new LastObservedState();
+    private readonly LastObservedState _observed = new();
 
     public const long ElectionTimeout = 10;
 
-    public FSM(ILogger<FSM>? logger = null) {
+    public FSM(
+        ulong id,
+        ulong currentTerm,
+        ulong votedFor,
+        Log log,
+        ulong commitIdx,
+        IFailureDetector failureDetector,
+        FSMConfig config,
+        ILogger<FSM>? logger = null
+    ) {
+        _myID = id;
+        _currentTerm = currentTerm;
+        _votedFor = votedFor;
+        _log = log;
+        _failureDetector = failureDetector;
+        _config = config;
         _logger = logger ?? new NullLogger<FSM>();
+
+        if (id <= 0) {
+            throw new ArgumentException(nameof(id));
+        }
+        _commitIdx = _log.GetSnapshot().Idx;
         _observed.Advance(this);
+        _commitIdx = ulong.Max(_commitIdx, commitIdx);
+
+        if (_log.GetConfiguration().Current.Count == 1 && _log.GetConfiguration().CanVote(_myID)) {
+            BecomeCandidate(_config.EnablePreVote);
+        } else {
+            ResetElectionTimeout();
+        }
     }
 
     public bool IsFollower => _state.IsT0;
@@ -392,9 +419,13 @@ public partial class FSM {
 
             if (me == null || !me.CanVote) {
                 _logger.LogTrace("not aborting step down: we have been removed from the configuration");
-            } else if (state.stepDown <= _clock.Now()) {}
-
-            throw new NotImplementedException();
+            } else if (state.stepDown <= _clock.Now()) {
+                state.stepDown = null;
+                state.TimeoutNowSent = null;
+                _abortLeadershipTransfer = true;
+            } else if (state.TimeoutNowSent != null) {
+                SendTo(state.TimeoutNowSent.Value, new TimeoutNowRequest { CurrentTerm = _currentTerm });
+            }
         }
     }
 
@@ -555,18 +586,6 @@ public partial class FSM {
         );
     }
 
-    private void InstallSnapshotResponse(ulong from, SnapshotResponse snapshotResponse) {
-        throw new NotImplementedException();
-    }
-
-    private void RequestVote(ulong from, VoteRequest voteRequest) {
-        throw new NotImplementedException();
-    }
-
-    private void AppendEntriesResponse(ulong from, AppendResponse appendResponse) {
-        throw new NotImplementedException();
-    }
-
     public void Step(ulong from, Candidate candidate, Message message) {
         message.Switch(
             voteRequest => {
@@ -596,10 +615,6 @@ public partial class FSM {
         );
     }
 
-    private void RequestVoteResponse(ulong from, VoteResponse voteResponse) {
-        throw new NotImplementedException();
-    }
-
     public void Step(ulong from, Follower follower, Message message) {
         message.Switch(
             voteRequest => {
@@ -615,7 +630,7 @@ public partial class FSM {
                 // ignored
             },
             installSnapshot => {
-                bool success = ApplySnapshot(installSnapshot.Snp, 0, 0, false);
+                bool success = ApplySnapshot(installSnapshot.Snp, false);
                 SendTo(from, new SnapshotResponse {
                     CurrentTerm = _currentTerm,
                     Success = success
@@ -630,13 +645,197 @@ public partial class FSM {
         );
     }
 
-    private void AppendEntries(ulong from, AppendRequest appendRequest) {
-        throw new NotImplementedException();
-    }
 
     public void TransferLeadership(long timeout = 0) {}
 
-    public bool ApplySnapshot(SnapshotDescriptor snapshot, int maxTrailingEntries, int maxTrailingBytes, bool local) {
-        throw new NotImplementedException();
+    private void RequestVote(ulong from, VoteRequest request) {
+        Debug.Assert(request.IsPreVote || _currentTerm == request.CurrentTerm);
+        var canVote =
+            _votedFor == from ||
+            _votedFor == 0 && CurrentLeader == 0 ||
+            request.IsPreVote && request.CurrentTerm > _currentTerm;
+
+        if (canVote && _log.IsUpToUpdate(request.LastLogIdx, request.LastLogTerm)) {
+            if (!request.IsPreVote) {
+                _lastElectionTime = _clock.Now();
+                _votedFor = from;
+            }
+            SendTo(from, new VoteResponse {
+                CurrentTerm = request.CurrentTerm,
+                IsPreVote = request.IsPreVote,
+                VoteGranted = true
+            });
+        } else {
+            SendTo(from, new VoteResponse {
+                CurrentTerm = request.CurrentTerm,
+                IsPreVote = request.IsPreVote,
+                VoteGranted = false
+            });
+        }
+    }
+
+    private void RequestVoteResponse(ulong from, VoteResponse rsp) {
+        Debug.Assert(IsCandidate);
+        var state = CandidateState;
+        if (state.IsPreVote != rsp.IsPreVote) {
+            return;
+        }
+        state.Votes.RegisterVote(from, rsp.VoteGranted);
+
+        switch (state.Votes.CountVotes()) {
+            case VoteResult.Unknown:
+                break;
+            case VoteResult.Won:
+                if (state.IsPreVote) {
+                    BecomeCandidate(false);
+                } else {
+                    BecomeLeader();
+                }
+                break;
+            case VoteResult.Lost:
+                BecomeFollower(0);
+                break;
+        }
+    }
+
+
+    private void AppendEntries(ulong from, AppendRequest request) {
+        Debug.Assert(IsFollower);
+
+        var matchResult = _log.MatchTerm(request.PrevLogIdx, request.PrevLogTerm);
+        var match = matchResult.Item1;
+        var term = matchResult.Item2;
+
+        if (!match) {
+            SendTo(from, new AppendResponse {
+                CurrentTerm = _currentTerm,
+                CommitIdx = _commitIdx,
+                Rejected = new AppendRejected {
+                    NonMatchingIdx = request.PrevLogIdx,
+                    LastIdx = _log.LastIdx()
+                }
+            });
+            return;
+        }
+
+        var lastNewIdx = request.PrevLogIdx;
+        if (request.Entries.Count > 0) {
+            lastNewIdx = _log.MaybeAppend(request.Entries);
+        }
+        AdvanceCommitIdx(ulong.Min(request.LeaderCommitIdx, lastNewIdx));
+        SendTo(from, new AppendResponse {
+            CurrentTerm = _currentTerm,
+            CommitIdx = _commitIdx,
+            Accepted = new AppendAccepted {
+                LastNewIdx = lastNewIdx
+            }
+        });
+    }
+
+    private void AdvanceCommitIdx(ulong leaderCommitIdx) {
+        var newCommitIdx = ulong.Min(leaderCommitIdx, _log.LastIdx());
+        if (newCommitIdx > _commitIdx) {
+            _commitIdx = newCommitIdx;
+        }
+    }
+
+    private void AppendEntriesResponse(ulong from, AppendResponse response) {
+        Debug.Assert(IsLeader);
+        var progress = LeaderState.Tracker.Find(from);
+        if (progress == null) {
+            return;
+        }
+
+        if (progress.State == FollowerProgressState.Pipeline) {
+            if (progress.InFlight > 0) {
+                progress.InFlight--;
+            }
+        }
+
+        if (progress.State == FollowerProgressState.Snapshot) {
+            return;
+        }
+
+        progress.CommitIdx = ulong.Max(progress.CommitIdx, response.CommitIdx);
+
+        if (response.Accepted != null) {
+            var lastIdx = response.Accepted.LastNewIdx;
+            progress.Accepted(lastIdx);
+            progress.BecomePipeline();
+            if (LeaderState.stepDown != null &&
+                LeaderState.TimeoutNowSent == null &&
+                progress.CanVote &&
+                progress.MatchIdx == _log.LastIdx()) {
+                SendTimeoutNow(progress.Id);
+                if (!IsLeader) {
+                    return;
+                }
+            }
+            MaybeCommit();
+            if (!IsLeader) {
+                return;
+            }
+        } else {
+            var rejected = response.Rejected;
+            if (rejected.NonMatchingIdx == 0 && rejected.LastIdx == 0) {
+                ReplicateTo(progress, true);
+                return;
+            }
+            if (progress.IsStrayReject(rejected)) {
+                return;
+            }
+            progress.NextIdx = ulong.Min(rejected.NonMatchingIdx, rejected.LastIdx + 1);
+            progress.BecomeProbe();
+            Debug.Assert(progress.NextIdx > progress.MatchIdx);
+        }
+
+        progress = LeaderState.Tracker.Find(from);
+        if (progress != null) {
+            ReplicateTo(progress, false);
+        }
+    }
+
+    private void SendTimeoutNow(ulong id) {
+        SendTo(id, new TimeoutNowRequest { CurrentTerm = _currentTerm });
+        LeaderState.TimeoutNowSent = id;
+        var me = LeaderState.Tracker.Find(_myID);
+        if (me == null || !me.CanVote) {
+            BecomeFollower(0);
+        }
+    }
+
+    private void InstallSnapshotResponse(ulong from, SnapshotResponse response) {
+        var progress = LeaderState.Tracker.Find(from);
+        if (progress == null) {
+            return;
+        }
+        if (progress.State != FollowerProgressState.Snapshot) {
+            return;
+        }
+        progress.BecomeProbe();
+        if (response.Success) {
+            ReplicateTo(progress, false);
+        }
+    }
+
+    public bool ApplySnapshot(
+        SnapshotDescriptor snapshot, bool local
+    ) {
+        Debug.Assert(local && snapshot.Idx <= _observed.CommitIdx || !local && IsFollower);
+        var currentSnapshot = _log.GetSnapshot();
+        if (snapshot.Idx <= currentSnapshot.Idx || (!local && snapshot.Idx <= _commitIdx)) {
+            _output.SnapshotsToDrop.Add(snapshot.Id);
+            return false;
+        }
+        _output.SnapshotsToDrop.Add(currentSnapshot.Id);
+        _commitIdx = ulong.Max(_commitIdx, snapshot.Idx);
+        var newFirstIndex = _log.ApplySnapshot(snapshot);
+        currentSnapshot = _log.GetSnapshot();
+        _output.Snapshot = new AppliedSnapshot(
+            currentSnapshot,
+            local,
+            currentSnapshot.Idx + 1 - newFirstIndex
+        );
+        return true;
     }
 }
