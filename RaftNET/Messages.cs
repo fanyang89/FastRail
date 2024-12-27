@@ -18,8 +18,12 @@ public static class Messages {
         return cfg;
     }
 
-    public static LogEntry CreateDummy() {
-        return new LogEntry { Dummy = new Void() };
+    public static LogEntry CreateDummy(ulong idx = 0, ulong term = 0) {
+        return new LogEntry {
+            Idx = idx,
+            Term = term,
+            Dummy = new Void()
+        };
     }
 
     public static LogEntry CreateCommand(string cmd) {

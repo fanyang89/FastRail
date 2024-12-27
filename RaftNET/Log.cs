@@ -1,55 +1,215 @@
 ﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace RaftNET;
 
 public class Log {
-    private SnapshotDescriptor snapshot_;
-    private IList<LogEntry> log_;
-    private ulong firstIdx_;
-    private ulong stableIdx_;
-    private ulong lastConfIdx_;
-    private ulong prevConfIdx_;
+    private ulong _firstIdx;
+    private ulong _lastConfIdx;
+    private readonly List<LogEntry> _log;
+    private readonly ILogger<Log> _logger;
+    private int _memoryUsage;
+    private ulong _prevConfIdx;
+    private SnapshotDescriptor _snapshot;
+    private ulong _stableIdx;
 
-    public Log(SnapshotDescriptor snapshot, IList<LogEntry> logEntries) {
-        snapshot_ = snapshot;
-        log_ = logEntries;
+    public Log(SnapshotDescriptor snapshot, List<LogEntry> logEntries, ILogger<Log> logger) {
+        _logger = logger;
+        _snapshot = snapshot;
+        _log = logEntries;
 
-        if (log_.Count == 0) {
-            firstIdx_ = snapshot.Idx + 1;
+        if (_log.Count == 0) {
+            _firstIdx = snapshot.Idx + 1;
         } else {
-            firstIdx_ = log_.First().Idx;
+            _firstIdx = _log.First().Idx;
+            Debug.Assert(_firstIdx <= snapshot.Idx + 1);
         }
+
+        _memoryUsage = RangeMemoryUsage(0, _log.Count);
+        Debug.Assert(_firstIdx > 0);
+        StableTo(LastIdx());
+        InitLastConfigurationIdx();
     }
 
     public LogEntry this[ulong index] {
         get {
-            Debug.Assert(log_.Count > 0 && index >= firstIdx_);
-            return log_[(int)(index - firstIdx_)];
+            Debug.Assert(_log.Count > 0 && index >= _firstIdx);
+            return GetEntry(index);
         }
+    }
+
+    private LogEntry GetEntry(ulong idx) {
+        return _log[(int)(idx - _firstIdx)];
+    }
+
+    public bool Empty() {
+        return _log.Count == 0;
+    }
+
+    public Tuple<int, ulong> ApplySnapshot(SnapshotDescriptor snp, ulong maxTrailingEntries, int maxTrailingBytes) {
+        Debug.Assert(snp.Idx > _snapshot.Idx);
+
+        int releasedMemory;
+        var idx = snp.Idx;
+
+        if (idx > LastIdx()) {
+            releasedMemory = _memoryUsage;
+            _memoryUsage = 0;
+            _log.Clear();
+            _firstIdx = idx + 1;
+        } else {
+            var entriesToRemove = (ulong)_log.Count - (LastIdx() - idx);
+            var trailingBytes = 0;
+
+            for (var i = 0; i < maxTrailingBytes && entriesToRemove > 0; i++) {
+                trailingBytes += MemoryUsageOf(_log[(int)(entriesToRemove - 1)]);
+
+                if (trailingBytes > maxTrailingBytes) {
+                    break;
+                }
+
+                --entriesToRemove;
+            }
+
+            releasedMemory = RangeMemoryUsage(0, (int)entriesToRemove);
+            _log.RemoveRange(0, (int)entriesToRemove);
+            _memoryUsage -= releasedMemory;
+            _firstIdx += entriesToRemove;
+        }
+
+        _stableIdx = ulong.Max(idx, _stableIdx);
+
+        if (idx >= _prevConfIdx) {
+            _prevConfIdx = 0;
+
+            if (idx >= _lastConfIdx) {
+                _lastConfIdx = 0;
+            }
+        }
+
+        _snapshot = snp;
+        return new Tuple<int, ulong>(releasedMemory, _firstIdx);
+    }
+
+    public ulong MaybeAppend(IList<LogEntry> entries) {
+        Debug.Assert(entries.Count > 0);
+
+        var lastNewIdx = entries.Last().Idx;
+
+        foreach (var entry in entries) {
+            if (entry.Idx <= LastIdx()) {
+                if (entry.Idx < _firstIdx) {
+                    _logger.LogTrace(
+                        "append_entries: skipping entry with idx {idx} less than log start {firstIdx}", entry.Idx,
+                        _firstIdx);
+                    continue;
+                }
+
+                if (entry.Term == GetEntry(entry.Idx).Term) {
+                    _logger.LogTrace("append_entries: entries with index {idx} has matching terms {term}", entry.Idx,
+                        entry.Term);
+                    continue;
+                }
+
+                _logger.LogTrace(
+                    "append_entries: entries with index {idx} has non matching terms e.term={term}, _log[i].term = {entryTerm}",
+                    entry.Idx, entry.Term, GetEntry(entry.Idx).Term);
+                Debug.Assert(entry.Idx > _snapshot.Idx);
+                TruncateUncommitted(entry.Idx);
+            }
+
+            Debug.Assert(entry.Idx == NextIdx());
+            Add(entry);
+        }
+
+        return lastNewIdx;
+    }
+
+    public Tuple<bool, ulong> MatchTerm(ulong idx, ulong term) {
+        if (idx == 0) {
+            return new Tuple<bool, ulong>(true, 0);
+        }
+
+        if (idx < _snapshot.Idx) {
+            return new Tuple<bool, ulong>(true, LastTerm());
+        }
+
+        ulong myTerm;
+
+        if (idx == _snapshot.Idx) {
+            myTerm = _snapshot.Term;
+        } else {
+            var i = idx - _firstIdx;
+
+            if (i >= (ulong)_log.Count) {
+                return new Tuple<bool, ulong>(false, 0);
+            }
+
+            myTerm = _log[(int)i].Term;
+        }
+
+        return myTerm == term ? new Tuple<bool, ulong>(true, 0) : new Tuple<bool, ulong>(false, myTerm);
     }
 
     public void Add(LogEntry entry) {
-        log_.Add(entry);
+        _log.Add(entry);
 
-        if (log_.Last().Configuration == null) {
+        if (_log.Last().Configuration == null) {
             return;
         }
 
-        prevConfIdx_ = lastConfIdx_;
-        lastConfIdx_ = LastIdx();
+        _prevConfIdx = _lastConfIdx;
+        _lastConfIdx = LastIdx();
     }
 
     public ulong LastIdx() {
-        return (ulong)log_.Count + firstIdx_ - 1;
+        return (ulong)_log.Count + _firstIdx - 1;
     }
 
     public ulong NextIdx() {
         return LastIdx() + 1;
     }
 
+    private int MemoryUsageOf(LogEntry entry) {
+        if (entry.Command == null) {
+            return 0;
+        }
+
+        var bufferSize = 0;
+
+        if (entry.Command.Buffer != null) {
+            bufferSize = entry.Command.Buffer.Length;
+        }
+
+        return 2 * sizeof(ulong) + bufferSize;
+    }
+
+    private int RangeMemoryUsage(int first, int last) {
+        var result = 0;
+
+        for (var i = first; i < last; i++) result += MemoryUsageOf(_log[i]);
+
+        return result;
+    }
+
+    private void TruncateUncommitted(ulong idx) {
+        Debug.Assert(idx >= _firstIdx);
+        var it = (int)(idx - _firstIdx);
+        var releasedMemory = RangeMemoryUsage(it, _log.Count);
+        _log.RemoveRange(it, _log.Count - it + 1);
+        _memoryUsage -= releasedMemory;
+        StableTo(ulong.Min(_stableIdx, LastIdx()));
+
+        if (_lastConfIdx > LastIdx()) {
+            Debug.Assert(_prevConfIdx > _lastConfIdx);
+            _lastConfIdx = _prevConfIdx;
+            _prevConfIdx = 0;
+        }
+    }
+
     public void StableTo(ulong idx) {
         Debug.Assert(idx <= LastIdx());
-        stableIdx_ = idx;
+        _stableIdx = idx;
     }
 
     public bool IsUpToUpdate(ulong idx, ulong term) {
@@ -57,77 +217,76 @@ public class Log {
     }
 
     public ulong LastTerm() {
-        return log_.Count == 0 ? snapshot_.Term : log_.Last().Term;
+        return _log.Count == 0 ? _snapshot.Term : _log.Last().Term;
     }
 
     public ulong? TermFor(ulong idx) {
-        if (log_.Count > 0 && idx >= firstIdx_) {
-            return log_[(int)(idx - firstIdx_)].Term;
+        if (_log.Count > 0 && idx >= _firstIdx) {
+            return _log[(int)(idx - _firstIdx)].Term;
         }
 
-        if (idx == snapshot_.Idx) {
-            return snapshot_.Term;
+        if (idx == _snapshot.Idx) {
+            return _snapshot.Term;
         }
 
         return null;
     }
 
     public ulong LastConfIdx() {
-        return lastConfIdx_ == 0 ? lastConfIdx_ : snapshot_.Idx;
+        return _lastConfIdx > 0 ? _lastConfIdx : _snapshot.Idx;
     }
 
     public Configuration GetConfiguration() {
-        return lastConfIdx_ > 0 ? log_[(int)(lastConfIdx_ - firstIdx_)].Configuration : snapshot_.Config;
+        return _lastConfIdx > 0 ? _log[(int)(_lastConfIdx - _firstIdx)].Configuration : _snapshot.Config;
     }
 
     public Configuration LastConfFor(ulong idx) {
         Debug.Assert(LastIdx() >= idx);
-        Debug.Assert(idx >= snapshot_.Idx);
+        Debug.Assert(idx >= _snapshot.Idx);
 
-        if (lastConfIdx_ == 0) {
-            Debug.Assert(prevConfIdx_ > 0);
-            return snapshot_.Config;
+        if (_lastConfIdx == 0) {
+            Debug.Assert(_prevConfIdx > 0);
+            return _snapshot.Config;
         }
 
-        if (idx >= lastConfIdx_) {
-            return this[lastConfIdx_].Configuration;
+        if (idx >= _lastConfIdx) {
+            return GetEntry(_lastConfIdx).Configuration;
         }
 
-        if (prevConfIdx_ == 0) {
-            return snapshot_.Config;
+        if (_prevConfIdx == 0) {
+            return _snapshot.Config;
         }
 
-        if (idx >= prevConfIdx_) {
-            return this[prevConfIdx_].Configuration;
+        if (idx >= _prevConfIdx) {
+            return GetEntry(_prevConfIdx).Configuration;
         }
 
-        for (; idx > snapshot_.Idx; --idx) {
+        for (; idx > _snapshot.Idx; --idx)
             if (this[idx].Configuration != null) {
-                return this[idx].Configuration;
+                return GetEntry(idx).Configuration;
             }
-        }
 
-        return snapshot_.Config;
+        return _snapshot.Config;
     }
 
     public Configuration? GetPreviousConfiguration() {
-        if (prevConfIdx_ > 0) {
-            return this[prevConfIdx_].Configuration;
+        if (_prevConfIdx > 0) {
+            return this[_prevConfIdx].Configuration;
         }
 
-        return lastConfIdx_ > snapshot_.Idx ? snapshot_.Config : null;
+        return _lastConfIdx > _snapshot.Idx ? _snapshot.Config : null;
     }
 
     private void InitLastConfigurationIdx() {
-        for (var i = log_.Count - 1; i >= 0 && log_[i].Idx != snapshot_.Idx; --i) {
-            if (log_[i].Configuration == null) {
+        for (var i = _log.Count - 1; i >= 0 && _log[i].Idx != _snapshot.Idx; --i) {
+            if (_log[i].Configuration == null) {
                 continue;
             }
 
-            if (lastConfIdx_ == 0) {
-                lastConfIdx_ = log_[i].Idx;
+            if (_lastConfIdx == 0) {
+                _lastConfIdx = _log[i].Idx;
             } else {
-                prevConfIdx_ = log_[i].Idx;
+                _prevConfIdx = _log[i].Idx;
                 break;
             }
         }

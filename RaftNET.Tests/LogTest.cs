@@ -1,43 +1,64 @@
-﻿namespace RaftNET.Tests;
+﻿using Microsoft.Extensions.Logging.Abstractions;
+
+namespace RaftNET.Tests;
 
 public class LogTest {
-    private Log log_;
-    private Configuration cfg_;
+    private Log _log;
+    private Configuration _cfg;
 
     [SetUp]
     public void SetUp() {
-        cfg_ = Messages.ConfigFromIds(1);
+        _cfg = Messages.ConfigFromIds(1);
         var snp = new SnapshotDescriptor {
-            Config = cfg_
+            Config = _cfg
         };
-        log_ = new Log(snp, new List<LogEntry>());
+        _log = new Log(snp, [], new NullLogger<Log>());
     }
 
     [Test]
     public void TestAppendRaftLogs() {
         Assert.Multiple(() => {
-            Assert.That(log_.LastIdx(), Is.EqualTo(0));
-            Assert.That(log_.LastConfIdx(), Is.EqualTo(0));
+            Assert.That(_log.LastIdx(), Is.EqualTo(0));
+            Assert.That(_log.LastConfIdx(), Is.EqualTo(0));
         });
 
         // initial log with 3 entries
-        log_.Add(Messages.CreateDummy());
+        _log.Add(Messages.CreateDummy());
         Assert.Multiple(() => {
-            Assert.That(log_.LastIdx(), Is.EqualTo(1));
-            Assert.That(log_[1].Dummy, Is.Not.Null);
+            Assert.That(_log.LastIdx(), Is.EqualTo(1));
+            Assert.That(_log[1].Dummy, Is.Not.Null);
         });
 
-        log_.Add(Messages.CreateConfiguration(cfg_));
+        _log.Add(Messages.CreateConfiguration(_cfg));
         Assert.Multiple(() => {
-            Assert.That(log_.LastIdx(), Is.EqualTo(2));
-            Assert.That(log_.LastConfIdx(), Is.EqualTo(2));
-            Assert.That(log_[2].Configuration, Is.Not.Null);
+            Assert.That(_log.LastIdx(), Is.EqualTo(2));
+            Assert.That(_log.LastConfIdx(), Is.EqualTo(2));
+            Assert.That(_log[2].Configuration, Is.Not.Null);
         });
 
-        log_.Add(Messages.CreateCommand("hello world"));
+        _log.Add(Messages.CreateCommand("hello world"));
         Assert.Multiple(() => {
-            Assert.That(log_.LastIdx(), Is.EqualTo(3));
-            Assert.That(log_[2].Command, Is.Not.Null);
+            Assert.That(_log.LastIdx(), Is.EqualTo(3));
+            Assert.That(_log[3].Command, Is.Not.Null);
+        });
+
+        // re-append last entry with same term, should be no-op
+        Assert.Multiple(() => {
+            Assert.That(
+                _log.MaybeAppend([Messages.CreateDummy(2, _log.LastTerm())]),
+                Is.EqualTo(2));
+            Assert.That(_log.LastIdx(), Is.EqualTo(3));
+            Assert.That(_log[3].Command, Is.Not.Null);
+        });
+
+        // re-append last entry with diff term, should replace it
+        Assert.Multiple(() => {
+            Assert.That(
+                _log.MaybeAppend([Messages.CreateDummy(2, _log.LastTerm() + 1)]),
+                Is.EqualTo(2));
+            Assert.That(_log.LastIdx(), Is.EqualTo(2));
+            Assert.That(_log[2].Dummy, Is.Not.Null);
+            Assert.That(_log.LastConfIdx(), Is.EqualTo(0));
         });
     }
 }
