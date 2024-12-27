@@ -3,11 +3,9 @@ namespace RaftNET;
 public class LogicalClock {
     private long _now;
 
-    public void Advance(LogicalDuration duration) {
-        _now += duration.Value;
+    public void Advance(long duration = 1) {
+        _now += duration;
     }
 
-    public LogicalDuration Now() {
-        return new LogicalDuration(_now);
-    }
+    public long Now() => _now;
 }

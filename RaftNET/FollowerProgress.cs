@@ -1,18 +1,21 @@
 namespace RaftNET;
 
 public class FollowerProgress {
-    private const ulong MaxInFlight = 10;
+    public const ulong MaxInFlight = 10;
 
     // Index that we know to be committed by the follower.
-    private ulong _commitIdx = 0;
+    public ulong CommitIdx { get; set; }
 
     // Number of in-flight still unACKed append entries requests.
-    private ulong _inFlight;
+    public ulong InFlight { get; set; }
 
     // True if a packet was sent already in probe mode.
-    private bool _probeSent;
 
     private FollowerProgressState _state = FollowerProgressState.Probe;
+
+    public FollowerProgressState State => _state;
+
+    public bool ProbeSent { get; set; }
 
     // True if the follower is a voting one.
     public bool CanVote = true;
@@ -62,13 +65,13 @@ public class FollowerProgress {
 
     public void BecomeProbe() {
         _state = FollowerProgressState.Probe;
-        _probeSent = false;
+        ProbeSent = false;
     }
 
     public void BecomePipeline() {
         if (_state != FollowerProgressState.Pipeline) {
             _state = FollowerProgressState.Pipeline;
-            _inFlight = 0;
+            InFlight = 0;
         }
     }
 
@@ -79,11 +82,11 @@ public class FollowerProgress {
 
     public bool CanSendTo() {
         return _state switch {
-            FollowerProgressState.Probe => !_probeSent,
+            FollowerProgressState.Probe => !ProbeSent,
             FollowerProgressState.Pipeline =>
                 // allow `max_in_flight` outstanding indexes
                 // FIXME: make it smarter
-                _inFlight < MaxInFlight,
+                InFlight < MaxInFlight,
             FollowerProgressState.Snapshot =>
                 // In this state we are waiting
                 // for a snapshot to be transferred

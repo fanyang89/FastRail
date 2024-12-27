@@ -2,11 +2,15 @@ namespace RaftNET;
 
 public class Tracker {
     private readonly SortedSet<ulong> _currentVoters = new();
-    private Dictionary<ulong, FollowerProgress> _followers = new();
+    private Dictionary<ulong, FollowerProgress> _followerProgressList = new();
     private readonly SortedSet<ulong> _previousVoters = new();
 
+    public SortedSet<ulong> CurrentVoters => _currentVoters;
+    public SortedSet<ulong> PreviousVoters => _previousVoters;
+    public Dictionary<ulong, FollowerProgress> FollowerProgresses => _followerProgressList;
+
     public FollowerProgress? Find(ulong id) {
-        return _followers.GetValueOrDefault(id);
+        return _followerProgressList.GetValueOrDefault(id);
     }
 
     private ISet<ulong> GetAllMembers(Configuration configuration) {
@@ -37,8 +41,8 @@ public class Tracker {
         _currentVoters.Clear();
         _previousVoters.Clear();
 
-        var oldProgress = _followers;
-        _followers = new Dictionary<ulong, FollowerProgress>();
+        var oldProgress = _followerProgressList;
+        _followerProgressList = new Dictionary<ulong, FollowerProgress>();
 
         foreach (var member in configuration.Current) {
             var id = member.ServerAddress.ServerId;
@@ -47,15 +51,15 @@ public class Tracker {
                 _currentVoters.Add(id);
             }
 
-            if (_followers.ContainsKey(id)) {
+            if (_followerProgressList.ContainsKey(id)) {
                 continue;
             }
 
             if (oldProgress.TryGetValue(id, out var value)) {
-                _followers[id] = value;
-                _followers[id].CanVote = member.CanVote;
+                _followerProgressList[id] = value;
+                _followerProgressList[id].CanVote = member.CanVote;
             } else {
-                _followers.Add(id, new FollowerProgress {
+                _followerProgressList.Add(id, new FollowerProgress {
                     Id = id,
                     NextIdx = nextIdx,
                     CanVote = member.CanVote
@@ -71,15 +75,15 @@ public class Tracker {
                     _previousVoters.Add(id);
                 }
 
-                if (_followers.ContainsKey(id)) {
+                if (_followerProgressList.ContainsKey(id)) {
                     continue;
                 }
 
                 if (oldProgress.TryGetValue(id, out var value)) {
-                    _followers[id] = value;
-                    _followers[id].CanVote = member.CanVote;
+                    _followerProgressList[id] = value;
+                    _followerProgressList[id].CanVote = member.CanVote;
                 } else {
-                    _followers.Add(id, new FollowerProgress {
+                    _followerProgressList.Add(id, new FollowerProgress {
                         Id = id,
                         NextIdx = nextIdx,
                         CanVote = member.CanVote
@@ -97,7 +101,7 @@ public class Tracker {
         if (_previousVoters.Count > 0) {
             var previous = new MatchVector<ulong>(prevCommitIdx, _previousVoters.Count);
 
-            foreach (var (id, progress) in _followers) {
+            foreach (var (id, progress) in _followerProgressList) {
                 if (_currentVoters.Contains(id)) {
                     current.Add(progress.MatchIdx);
                 }
@@ -114,7 +118,7 @@ public class Tracker {
             return ulong.Min(current.CommitIdx(), previous.CommitIdx());
         }
 
-        foreach (var (id, progress) in _followers)
+        foreach (var (id, progress) in _followerProgressList)
             if (_currentVoters.Contains(id)) {
                 current.Add(progress.MatchIdx);
             }
@@ -124,5 +128,9 @@ public class Tracker {
         }
 
         return current.CommitIdx();
+    }
+
+    public ActivityTracker GetActivityTracker() {
+        return new ActivityTracker(this);
     }
 }

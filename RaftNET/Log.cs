@@ -44,6 +44,10 @@ public class Log {
         return _log.Count == 0;
     }
 
+    public SnapshotDescriptor GetSnapshot() {
+        return _snapshot;
+    }
+
     public ulong ApplySnapshot(SnapshotDescriptor snp, ulong maxTrailingEntries, int maxTrailingBytes) {
         Debug.Assert(snp.Idx > _snapshot.Idx);
 
@@ -149,6 +153,10 @@ public class Log {
         return LastIdx() + 1;
     }
 
+    public ulong StableIdx() {
+        return _stableIdx;
+    }
+
     private void TruncateUncommitted(ulong idx) {
         Debug.Assert(idx >= _firstIdx);
         var it = (int)(idx - _firstIdx);
@@ -192,10 +200,18 @@ public class Log {
     }
 
     public Configuration GetConfiguration() {
-        return _lastConfIdx > 0 ? _log[(int)(_lastConfIdx - _firstIdx)].Configuration : _snapshot.Config;
+        if (_lastConfIdx > 0) {
+            var cfg = _log[(int)(_lastConfIdx - _firstIdx)].Configuration;
+            return new Configuration(cfg);
+        }
+        return new Configuration(_snapshot.Config);
     }
 
     public Configuration LastConfFor(ulong idx) {
+        return new Configuration(DoLastConfFor(idx));
+    }
+
+    private Configuration DoLastConfFor(ulong idx) {
         Debug.Assert(LastIdx() >= idx);
         Debug.Assert(idx >= _snapshot.Idx);
 
@@ -216,15 +232,25 @@ public class Log {
             return GetEntry(_prevConfIdx).Configuration;
         }
 
-        for (; idx > _snapshot.Idx; --idx)
+        for (; idx > _snapshot.Idx; --idx) {
             if (this[idx].Configuration != null) {
                 return GetEntry(idx).Configuration;
             }
+        }
 
         return _snapshot.Config;
     }
 
+
     public Configuration? GetPreviousConfiguration() {
+        var cfg = DoGetPreviousConfiguration();
+        if (cfg == null) {
+            return cfg;
+        }
+        return new Configuration(cfg);
+    }
+
+    private Configuration? DoGetPreviousConfiguration() {
         if (_prevConfIdx > 0) {
             return this[_prevConfIdx].Configuration;
         }

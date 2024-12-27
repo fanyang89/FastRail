@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Google.Protobuf;
+using Google.Protobuf.Collections;
 
 namespace RaftNET;
 
@@ -8,13 +9,14 @@ public static class Messages {
     public static Configuration ConfigFromIds(params ulong[] ids) {
         var cfg = new Configuration();
 
-        foreach (var id in ids)
+        foreach (var id in ids) {
             cfg.Current.Add(new ConfigMember {
                 ServerAddress = new ServerAddress {
                     ServerId = id
                 },
                 CanVote = true
             });
+        }
 
         return cfg;
     }
@@ -22,21 +24,23 @@ public static class Messages {
     public static Configuration ConfigFromIds(IEnumerable<ulong> current, IEnumerable<ulong> previous) {
         var cfg = new Configuration();
 
-        foreach (var id in current)
+        foreach (var id in current) {
             cfg.Current.Add(new ConfigMember {
                 ServerAddress = new ServerAddress {
                     ServerId = id
                 },
                 CanVote = true
             });
+        }
 
-        foreach (var id in previous)
+        foreach (var id in previous) {
             cfg.Previous.Add(new ConfigMember {
                 ServerAddress = new ServerAddress {
                     ServerId = id
                 },
                 CanVote = true
             });
+        }
 
         return cfg;
     }
@@ -63,6 +67,14 @@ public static class Messages {
         };
     }
 
+
+    public static void EnterJoint(
+        this Configuration configuration, RepeatedField<ConfigMember> members
+    ) {
+        var s = members.ToDictionary(member => member.ServerAddress.ServerId);
+        EnterJoint(configuration, new HashSet<ConfigMember>(s.Values));
+    }
+
     public static void EnterJoint(this Configuration configuration, ISet<ConfigMember> cNew) {
         if (cNew.Count == 0) {
             throw new ArgumentException(nameof(cNew));
@@ -84,6 +96,11 @@ public static class Messages {
         configuration.Previous.Clear();
     }
 
+    public static bool CanVote(this Configuration configuration, ulong id) {
+        return configuration.Current.Any(x => x.ServerAddress.ServerId == id && x.CanVote) ||
+               configuration.Previous.Any(x => x.ServerAddress.ServerId == id && x.CanVote);
+    }
+
     public static ConfigMember CreateConfigMember(ulong id, bool canVote = true) {
         return new ConfigMember {
             ServerAddress = new ServerAddress {
@@ -96,8 +113,20 @@ public static class Messages {
     public static ISet<ConfigMember> CreateConfigMembers(params ulong[] memberIds) {
         var s = new HashSet<ConfigMember>();
 
-        foreach (var id in memberIds) s.Add(CreateConfigMember(id));
+        foreach (var id in memberIds) {
+            s.Add(CreateConfigMember(id));
+        }
 
         return s;
+    }
+
+    public static void CheckConfiguration(RepeatedField<ConfigMember> cNew) {
+        if (cNew.Count == 0) {
+            throw new ArgumentException("Attempt to transition to an empty Raft configuration");
+        }
+
+        if (!cNew.Any(x => x.CanVote)) {
+            throw new ArgumentException("The configuration must have at least one voter");
+        }
     }
 }
