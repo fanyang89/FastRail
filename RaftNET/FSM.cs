@@ -87,10 +87,10 @@ public partial class FSM {
             output.TermAndVote = new(_currentTerm, _votedFor);
         }
 
-        var observed_ci = ulong.Max(_observed.CommitIdx, _log.GetSnapshot().Idx);
+        var observedCI = ulong.Max(_observed.CommitIdx, _log.GetSnapshot().Idx);
 
-        if (observed_ci < _commitIdx) {
-            for (var idx = observed_ci + 1; idx <= _commitIdx; ++idx) {
+        if (observedCI < _commitIdx) {
+            for (var idx = observedCI + 1; idx <= _commitIdx; ++idx) {
                 var entry = _log[idx];
                 output.Committed.Add(entry);
             }
@@ -405,7 +405,7 @@ public partial class FSM {
                 ignoreTerm = msg.VoteRequest().IsPreVote;
             } else if (msg.IsVoteResponse()) {
                 var rsp = msg.VoteResponse();
-                ignoreTerm = rsp.IsPreVote && rsp.VoteGranted;
+                ignoreTerm = rsp is { IsPreVote: true, VoteGranted: true };
             }
 
             if (!ignoreTerm) {
