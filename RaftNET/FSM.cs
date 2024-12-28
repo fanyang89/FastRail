@@ -3,6 +3,7 @@ using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OneOf;
+using RaftNET.Services;
 
 namespace RaftNET;
 
@@ -25,6 +26,7 @@ public partial class FSM {
     private readonly ThreadLocal<Random> _random = new(() => new Random());
     private List<ToMessage> _messages = new();
     private readonly LastObservedState _observed = new();
+    private readonly Notifier _eventNotify;
 
     public const long ElectionTimeout = 10;
 
@@ -36,6 +38,7 @@ public partial class FSM {
         ulong commitIdx,
         IFailureDetector failureDetector,
         FSMConfig config,
+        Notifier eventNotify,
         ILogger<FSM>? logger = null
     ) {
         _myID = id;
@@ -44,6 +47,7 @@ public partial class FSM {
         _log = log;
         _failureDetector = failureDetector;
         _config = config;
+        _eventNotify = eventNotify;
         _logger = logger ?? new NullLogger<FSM>();
 
         if (id <= 0) {
@@ -525,26 +529,26 @@ public partial class FSM {
 
     public void Step(ulong from, Message msg) {
         Debug.Assert(from != _myID, "fsm cannot process messages from itself");
-        if (msg.CurrentTerm() > _currentTerm) {
+        if (msg.CurrentTerm > _currentTerm) {
             ulong leader = 0;
-            if (msg.IsAppendRequest() || msg.IsInstallSnapshot()) {
+            if (msg.IsAppendRequest || msg.IsInstallSnapshot) {
                 leader = from;
             }
 
             bool ignoreTerm = false;
-            if (msg.IsVoteRequest()) {
-                ignoreTerm = msg.VoteRequest().IsPreVote;
-            } else if (msg.IsVoteResponse()) {
-                var rsp = msg.VoteResponse();
+            if (msg.IsVoteRequest) {
+                ignoreTerm = msg.VoteRequest.IsPreVote;
+            } else if (msg.IsVoteResponse) {
+                var rsp = msg.VoteResponse;
                 ignoreTerm = rsp is { IsPreVote: true, VoteGranted: true };
             }
 
             if (!ignoreTerm) {
                 BecomeFollower(leader);
-                UpdateCurrentTerm(msg.CurrentTerm());
+                UpdateCurrentTerm(msg.CurrentTerm);
             }
-        } else if (msg.CurrentTerm() < _currentTerm) {
-            if (msg.IsAppendRequest()) {
+        } else if (msg.CurrentTerm < _currentTerm) {
+            if (msg.IsAppendRequest) {
                 SendTo(from, new AppendResponse {
                     CurrentTerm = _currentTerm,
                     CommitIdx = _commitIdx,
@@ -553,13 +557,13 @@ public partial class FSM {
                         NonMatchingIdx = 0
                     }
                 });
-            } else if (msg.IsInstallSnapshot()) {
+            } else if (msg.IsInstallSnapshot) {
                 SendTo(from, new SnapshotResponse {
                     CurrentTerm = _currentTerm,
                     Success = false
                 });
-            } else if (msg.IsVoteRequest()) {
-                if (msg.VoteRequest().IsPreVote) {
+            } else if (msg.IsVoteRequest) {
+                if (msg.VoteRequest.IsPreVote) {
                     SendTo(from, new VoteResponse {
                         CurrentTerm = _currentTerm,
                         VoteGranted = false,
@@ -567,12 +571,12 @@ public partial class FSM {
                     });
                 }
             } else {
-                _logger.LogTrace("ignored a message with lower term from {}, term: {}", from, msg.CurrentTerm());
+                _logger.LogTrace("ignored a message with lower term from {}, term: {}", from, msg.CurrentTerm);
             }
             return;
         } else {
             // _current_term == msg.current_term
-            if (msg.IsAppendRequest() || msg.IsInstallSnapshot()) {
+            if (msg.IsAppendRequest || msg.IsInstallSnapshot) {
                 if (IsCandidate) {
                     BecomeFollower(from);
                 } else if (CurrentLeader == 0) {

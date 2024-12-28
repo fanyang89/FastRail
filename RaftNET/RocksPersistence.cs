@@ -1,4 +1,5 @@
 ﻿using Google.Protobuf;
+using Microsoft.Extensions.FileProviders;
 using RocksDbSharp;
 
 namespace RaftNET;
@@ -24,6 +25,8 @@ public class RocksPersistence : IPersistence, IDisposable {
             _db.Dispose();
         }
     }
+
+    public void Initialize() {}
 
     public void StoreTermVote(ulong term, ulong vote) {
         lock (_keyTermVote) {
@@ -102,9 +105,12 @@ public class RocksPersistence : IPersistence, IDisposable {
         }
     }
 
-    public SnapshotDescriptor LoadSnapshotDescriptor() {
+    public SnapshotDescriptor? LoadSnapshotDescriptor() {
         lock (_keySnapshot) {
             var buf = _db.Get(_keySnapshot);
+            if (buf == null) {
+                return null;
+            }
             var snapshot = SnapshotDescriptor.Parser.ParseFrom(buf);
             return snapshot;
         }

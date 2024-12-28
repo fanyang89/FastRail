@@ -5,6 +5,7 @@ namespace RaftNET.Examples;
 
 class Program {
     static async Task<int> Main(string[] args) {
+        using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
         var rootCommand = new RootCommand("Example for Raft.NET");
 
         var dataDirOption = new Option<DirectoryInfo?>(
@@ -18,68 +19,33 @@ class Program {
         rootCommand.AddOption(myIdOption);
 
         rootCommand.SetHandler(
-            (dataDir, myId) => {
-                if (dataDir == null) {
-                    throw new ArgumentException(nameof(dataDir));
-                }
-
-                var builder = WebApplication.CreateBuilder(args);
-                builder.Services.AddSingleton<IPersistence, RocksPersistence>(CreatePersistence(dataDir));
-                builder.Services.AddSingleton(CreateLog);
-                builder.Services.AddSingleton(CreateFSM(myId));
-                builder.Services.AddGrpc();
-
-                var app = builder.Build();
-                app.MapGrpcService<RaftService>();
-                app.MapGet("/", () => "Raft.NET example service");
-                app.Run();
-            },
-            dataDirOption, myIdOption);
-
+            Run(args, loggerFactory),
+            dataDirOption, myIdOption
+        );
         return await rootCommand.InvokeAsync(args);
     }
 
-    private static Func<IServiceProvider, RocksPersistence> CreatePersistence(DirectoryInfo dataDir) {
-        return provider => new RocksPersistence(dataDir.FullName);
-    }
-
-    private static Func<IServiceProvider, FSM> CreateFSM(ulong myId) {
-        return provider => {
-            var persistence = provider.GetService<IPersistence>();
-            var logger = provider.GetService<ILogger<FSM>>();
-            var log = provider.GetService<Log>();
-            if (persistence == null || logger == null || log == null) {
-                throw new ArgumentNullException();
+    private static Action<DirectoryInfo?, ulong> Run(string[] args, ILoggerFactory loggerFactory) {
+        return (dataDir, myId) => {
+            if (dataDir == null) {
+                throw new ArgumentException(nameof(dataDir));
+            }
+            if (myId == 0) {
+                throw new ArgumentException(nameof(myId));
             }
 
-            ulong term = 0;
-            ulong votedFor = 0;
-            var tv = persistence.LoadTermVote();
-            if (tv != null) {
-                term = tv.Term;
-                votedFor = tv.VotedFor;
-            }
-            var commitIdx = persistence.LoadCommitIdx();
-            return new FSM(
-                myId, term, votedFor, log, commitIdx,
-                new TrivialFailureDetector(),
-                new FSMConfig(),
-                logger
-            );
-        };
-    }
-
-    private static Func<IServiceProvider, Log> CreateLog() {
-        return provider => {
-            var persistence = provider.GetService<IPersistence>();
-            var logger = provider.GetService<ILogger<Log>>();
-            if (persistence == null || logger == null) {
-                throw new ArgumentNullException();
-            }
-
-            var snapshot = persistence.LoadSnapshotDescriptor();
-            var logEntries = persistence.LoadLog();
-            return new Log(snapshot, logEntries, logger);
+            var builder = WebApplication.CreateBuilder(args);
+            builder.Services.AddSingleton<RaftService.Config>(_ =>
+                new RaftService.Config {
+                    DataDir = dataDir.FullName,
+                    MyId = myId,
+                    LoggerFactory = loggerFactory
+                });
+            builder.Services.AddGrpc();
+            var app = builder.Build();
+            app.MapGrpcService<RaftService>();
+            app.MapGet("/", () => "Raft.NET example service");
+            app.Run();
         };
     }
 }

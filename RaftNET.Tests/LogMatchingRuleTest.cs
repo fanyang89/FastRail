@@ -8,7 +8,7 @@ public class LogMatchingRuleTest : FSMTestBase {
     private VoteResponse RequestVote(FSM fsm, ulong term, ulong lastLogIdx, ulong lastLogTerm) {
         fsm.Step(Id2, new VoteRequest { CurrentTerm = term, LastLogIdx = lastLogIdx, LastLogTerm = lastLogTerm });
         var output = fsm.GetOutput();
-        return output.Messages.Last().Message.VoteResponse();
+        return output.Messages.Last().Message.VoteResponse;
     }
 
     [Test]

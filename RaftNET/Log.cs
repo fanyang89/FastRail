@@ -13,9 +13,9 @@ public class Log {
     private SnapshotDescriptor _snapshot;
     private ulong _stableIdx;
 
-    public Log(SnapshotDescriptor snapshot, List<LogEntry>? logEntries = null, ILogger<Log>? logger = null) {
+    public Log(SnapshotDescriptor? snapshot, List<LogEntry>? logEntries = null, ILogger<Log>? logger = null) {
         _logger = logger ?? new NullLogger<Log>();
-        _snapshot = snapshot;
+        _snapshot = snapshot ?? new SnapshotDescriptor();
         _log = logEntries ?? [];
 
         if (_log.Count == 0) {

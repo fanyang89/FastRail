@@ -1,8 +1,8 @@
 namespace RaftNET;
 
 public interface IStateMachine {
-    void Apply(IList<Command> commands);
+    void Apply(List<Command> commands);
     ulong TakeSnapshot();
-    void DropSnapshot();
+    void DropSnapshot(ulong snapshot);
     void LoadSnapshot(ulong snapshot);
 }

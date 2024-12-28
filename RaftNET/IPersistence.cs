@@ -6,7 +6,7 @@ public interface IPersistence {
     void StoreCommitIdx(ulong idx);
     ulong LoadCommitIdx();
     void StoreSnapshotDescriptor(SnapshotDescriptor snapshot, ulong preserveLogEntries);
-    SnapshotDescriptor LoadSnapshotDescriptor();
+    SnapshotDescriptor? LoadSnapshotDescriptor();
     void StoreLogEntries(IEnumerable<LogEntry> entries);
     List<LogEntry> LoadLog();
     void TruncateLog(ulong idx);

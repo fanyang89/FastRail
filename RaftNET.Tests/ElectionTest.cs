@@ -1,72 +1,6 @@
-﻿using System.Diagnostics;
-using System.Text;
-using Microsoft.Extensions.Logging;
+﻿using System.Text;
 
 namespace RaftNET.Tests;
-
-public class FSMDebug : FSM {
-    public FSMDebug(
-        ulong id, ulong currentTerm, ulong votedFor, Log log, IFailureDetector failureDetector,
-        FSMConfig config, ILogger<FSM>? logger = null
-    ) : base(id, currentTerm, votedFor, log, 0, failureDetector, config, logger) {
-    }
-
-    public void BecomeFollower(ulong leader) {
-        base.BecomeFollower(leader);
-    }
-
-    public FollowerProgress? GetProgress(ulong id) {
-        return LeaderState.Tracker.Find(id);
-    }
-
-    public Log GetLog() {
-        return base.GetLog();
-    }
-
-    public bool IsLeadershipTransferActive() {
-        Debug.Assert(IsLeader);
-        return LeaderState.stepDown != null;
-    }
-}
-
-public class FSMTestBase {
-    protected void ElectionTimeout(FSM fsm) {
-        for (var i = 0; i <= 2 * FSM.ElectionTimeout; ++i) {
-            fsm.Tick();
-        }
-    }
-
-    protected void ElectionThreshold(FSM fsm) {
-        for (var i = 0; i < FSM.ElectionTimeout; ++i) {
-            fsm.Tick();
-        }
-    }
-
-    protected void MakeCandidate(FSM fsm) {
-        Assert.That(fsm.IsFollower, Is.True);
-        while (fsm.IsFollower) {
-            fsm.Tick();
-        }
-    }
-
-    protected readonly FSMConfig FSMConfig = new FSMConfig {
-        AppendRequestThreshold = 1,
-        EnablePreVote = false
-    };
-
-    protected readonly FSMConfig FSMPreVoteConfig = new FSMConfig {
-        AppendRequestThreshold = 1,
-        EnablePreVote = true
-    };
-
-    protected FSMDebug CreateFollower(ulong id, Log log, IFailureDetector fd) {
-        return new FSMDebug(id, 0, 0, log, fd, FSMConfig);
-    }
-
-    protected FSMDebug CreateFollower(ulong id, Log log) {
-        return CreateFollower(id, log, new TrivialFailureDetector());
-    }
-}
 
 public class ElectionTest : FSMTestBase {
     private const ulong Id1 = 1;
@@ -176,14 +110,14 @@ public class ElectionTest : FSMTestBase {
         Assert.That(fsm.IsCandidate, Is.True);
 
         output = fsm.GetOutput();
-        var msg = output.Messages.Last().Message.VoteRequest();
+        var msg = output.Messages.Last().Message.VoteRequest;
         fsm.Step(Id2, msg);
 
         // We could figure out this round is going to a nowhere, but
         // we're not that smart and simply wait for a vote_reply.
         Assert.That(fsm.IsCandidate, Is.True);
         output = fsm.GetOutput();
-        var rsp = output.Messages.Last().Message.VoteResponse();
+        var rsp = output.Messages.Last().Message.VoteResponse;
         Assert.That(rsp.VoteGranted, Is.False);
     }
 
@@ -206,7 +140,7 @@ public class ElectionTest : FSMTestBase {
         });
 
         var output = fsm.GetOutput();
-        var reply = output.Messages.Last().Message.VoteResponse();
+        var reply = output.Messages.Last().Message.VoteResponse;
         Assert.That(!reply.VoteGranted);
 
         fd.MarkAllDead();
