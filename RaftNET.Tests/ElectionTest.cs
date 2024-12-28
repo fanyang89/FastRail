@@ -49,18 +49,18 @@ public class FSMTestBase {
         }
     }
 
-    private readonly FSMConfig _fsmConfig = new FSMConfig {
+    protected readonly FSMConfig FSMConfig = new FSMConfig {
         AppendRequestThreshold = 1,
         EnablePreVote = false
     };
 
-    private readonly FSMConfig _fsmPreVoteConfig = new FSMConfig {
+    protected readonly FSMConfig FSMPreVoteConfig = new FSMConfig {
         AppendRequestThreshold = 1,
         EnablePreVote = true
     };
 
     protected FSMDebug CreateFollower(ulong id, Log log, IFailureDetector fd) {
-        return new FSMDebug(id, 0, 0, log, fd, _fsmConfig);
+        return new FSMDebug(id, 0, 0, log, fd, FSMConfig);
     }
 
     protected FSMDebug CreateFollower(ulong id, Log log) {
