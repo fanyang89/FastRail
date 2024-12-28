@@ -186,4 +186,39 @@ public class ElectionTest : FSMTestBase {
         var rsp = output.Messages.Last().Message.VoteResponse();
         Assert.That(rsp.VoteGranted, Is.False);
     }
+
+    [Test]
+    public void FourNodes() {
+        var fd = new DiscreteFailureDetector();
+        var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4);
+        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var fsm = CreateFollower(Id1, log, fd);
+        Assert.That(fsm.IsFollower);
+
+        fsm.Step(Id4, new AppendRequest {
+            CurrentTerm = 1, PrevLogIdx = 1, PrevLogTerm = 1
+        });
+
+        fsm.GetOutput();
+
+        fsm.Step(Id3, new VoteRequest {
+            CurrentTerm = 1, LastLogIdx = 1, LastLogTerm = 1
+        });
+
+        var output = fsm.GetOutput();
+        var reply = output.Messages.Last().Message.VoteResponse();
+        Assert.That(!reply.VoteGranted);
+
+        fd.MarkAllDead();
+        ElectionTimeout(fsm);
+        Assert.That(fsm.IsCandidate);
+
+        output = fsm.GetOutput();
+        Assert.That(output.TermAndVote, Is.Not.Null);
+        var currentTerm = output.TermAndVote.Term;
+        fsm.Step(Id2, new VoteResponse { CurrentTerm = currentTerm, VoteGranted = true });
+        Assert.That(fsm.IsCandidate);
+        fsm.Step(Id3, new VoteResponse { CurrentTerm = currentTerm, VoteGranted = true });
+        Assert.That(fsm.IsLeader);
+    }
 }
