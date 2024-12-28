@@ -17,7 +17,7 @@ public class FSMOutput {
     public IList<LogEntry> LogEntries { get; set; } = new List<LogEntry>();
     public IList<LogEntry> Committed { get; set; } = new List<LogEntry>();
     public IList<KeyValuePair<ulong, Message>> Messages = new List<KeyValuePair<ulong, Message>>();
-    public KeyValuePair<ulong, ulong> TermAndVote { get; set; }
+    public KeyValuePair<ulong, ulong>? TermAndVote { get; set; }
     public bool AbortLeadershipTransfer { get; set; }
     public ISet<ConfigMember>? Configuration { get; set; }
     public IList<ulong> SnapshotsToDrop { get; set; } = new List<ulong>();

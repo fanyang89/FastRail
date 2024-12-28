@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace RaftNET;
 
@@ -12,10 +13,10 @@ public class Log {
     private SnapshotDescriptor _snapshot;
     private ulong _stableIdx;
 
-    public Log(SnapshotDescriptor snapshot, List<LogEntry> logEntries, ILogger<Log> logger) {
-        _logger = logger;
+    public Log(SnapshotDescriptor snapshot, List<LogEntry>? logEntries = null, ILogger<Log>? logger = null) {
+        _logger = logger ?? new NullLogger<Log>();
         _snapshot = snapshot;
-        _log = logEntries;
+        _log = logEntries ?? [];
 
         if (_log.Count == 0) {
             _firstIdx = snapshot.Idx + 1;

@@ -20,8 +20,8 @@ public partial class FSM {
     private FSMConfig _config;
     private bool _abortLeadershipTransfer;
     private bool _pingLeader;
-    private FSMOutput _output;
-    private LogicalClock _clock;
+    private FSMOutput _output = new();
+    private LogicalClock _clock = new();
     private IFailureDetector _failureDetector;
     private readonly ILogger<FSM> _logger;
     private long _lastElectionTime;
@@ -75,7 +75,7 @@ public partial class FSM {
 
     private Follower FollowerState => _state.AsT0;
     private Candidate CandidateState => _state.AsT1;
-    private Leader LeaderState => _state.AsT2;
+    protected Leader LeaderState => _state.AsT2;
 
     public bool HasOutput() {
         var diff = _log.LastIdx() - _log.StableIdx();
@@ -105,7 +105,7 @@ public partial class FSM {
         _output = new FSMOutput();
 
         if (diff > 0) {
-            for (var i = _log.StableIdx() + 1; i < _log.LastIdx(); ++i) {
+            for (var i = _log.StableIdx() + 1; i <= _log.LastIdx(); ++i) {
                 output.LogEntries.Add(_log[i]);
             }
         }
@@ -145,20 +145,17 @@ public partial class FSM {
         _observed.Advance(this);
 
         if (output.LogEntries.Count > 0) {
+            AdvanceStableIdx(output.LogEntries.Last().Idx);
         }
 
         return output;
     }
 
     void AdvanceStableIdx(ulong idx) {
-        var prevStableIdx = _log.StableIdx();
         _log.StableTo(idx);
         if (IsLeader) {
             var leaderProgress = LeaderState.Tracker.Find(_myID);
             if (leaderProgress != null) {
-                // If this server is leader and is part of the current
-                // configuration, update its progress and optionally
-                // commit new entries.
                 leaderProgress.Accepted(idx);
                 MaybeCommit();
             }
@@ -297,7 +294,7 @@ public partial class FSM {
         _votedFor = 0;
     }
 
-    private void BecomeFollower(ulong leader) {
+    protected void BecomeFollower(ulong leader) {
         if (leader == _myID) {
             throw new FSMException("FSM cannot become a follower of itself");
         }
@@ -837,5 +834,9 @@ public partial class FSM {
             currentSnapshot.Idx + 1 - newFirstIndex
         );
         return true;
+    }
+
+    protected Log GetLog() {
+        return _log;
     }
 }
