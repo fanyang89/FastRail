@@ -22,11 +22,11 @@ public class RaftService(
         new NullLogger<FSM>() // TODO: inject logger
     );
 
-    private readonly string _fromServerIdKey = "raftnet-from-id";
+    public static string KeyFromId = "raftnet-from-id";
 
     private ulong GetFromServerId(Metadata metadata) {
-        Debug.Assert(metadata.Any(x => x.Key == _fromServerIdKey));
-        var entry = metadata.First(x => x.Key == _fromServerIdKey);
+        Debug.Assert(metadata.Any(x => x.Key == KeyFromId));
+        var entry = metadata.First(x => x.Key == KeyFromId);
         return Convert.ToUInt64(entry.Value);
     }
 
