@@ -112,7 +112,9 @@ public partial class FSM {
         }
 
         if (_observed.CurrentTerm != _currentTerm || _observed.VotedFor != _votedFor) {
-            output.TermAndVote = new(_currentTerm, _votedFor);
+            output.TermAndVote = new TermVote {
+                Term = _currentTerm, VotedFor = _votedFor
+            };
         }
 
         var observedCI = ulong.Max(_observed.CommitIdx, _log.GetSnapshot().Idx);
