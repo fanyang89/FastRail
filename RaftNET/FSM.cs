@@ -75,7 +75,12 @@ public partial class FSM {
 
     public bool HasOutput() {
         var diff = _log.LastIdx() - _log.StableIdx();
-        return diff > 0 || _messages.Any() || _output.StateChanged || !_observed.Equals(this);
+        return diff > 0 ||
+               _output.StateChanged ||
+               _messages.Any() ||
+               !_observed.Equals(this) ||
+               _output.Snapshot != null ||
+               _output.SnapshotsToDrop.Any();
     }
 
     private void Replicate() {
