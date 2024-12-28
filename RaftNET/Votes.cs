@@ -35,8 +35,12 @@ public class Votes {
     public ISet<ServerAddress> Voters => new HashSet<ServerAddress>(_voters.Values);
 
     public void RegisterVote(ulong from, bool granted) {
-        var registered = _current.RegisterVote(from, granted) ||
-                         (_previous != null && _previous.RegisterVote(from, granted));
+        var registered = _current.RegisterVote(from, granted);
+
+        if (_previous != null) {
+            _previous.RegisterVote(from, granted);
+            registered = true;
+        }
 
         // We can get an outdated vote from a node that is now non-voting member.
         // Such vote should be ignored.
