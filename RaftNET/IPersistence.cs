@@ -8,6 +8,6 @@ public interface IPersistence {
     void StoreSnapshotDescriptor(SnapshotDescriptor snapshot, ulong preserveLogEntries);
     SnapshotDescriptor LoadSnapshotDescriptor();
     void StoreLogEntries(IEnumerable<LogEntry> entries);
-    IList<LogEntry> LoadLog();
+    List<LogEntry> LoadLog();
     void TruncateLog(ulong idx);
 };

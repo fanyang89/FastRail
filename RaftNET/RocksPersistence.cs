@@ -121,7 +121,7 @@ public class RocksPersistence : IPersistence, IDisposable {
         }
     }
 
-    public IList<LogEntry> LoadLog() {
+    public List<LogEntry> LoadLog() {
         var entries = new List<LogEntry>();
         lock (_keyLogEntryPrefix) {
             using var iter = _db.NewIterator();
