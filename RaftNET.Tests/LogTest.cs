@@ -1,6 +1,4 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
-
-namespace RaftNET.Tests;
+﻿namespace RaftNET.Tests;
 
 public class LogTest {
     private ulong Id1 = 1;

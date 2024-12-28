@@ -6,13 +6,9 @@ using OneOf;
 
 namespace RaftNET;
 
-using Message = OneOf<
-    VoteRequest, VoteResponse, AppendRequest, AppendResponse,
-    InstallSnapshot, SnapshotResponse, TimeoutNowRequest>;
-
 public partial class FSM {
     private ulong _myID;
-    private OneOf<Follower, Candidate, Leader> _state;
+    private OneOf<Follower, Candidate, Leader> _state = new Follower(0);
     private ulong _currentTerm;
     private ulong _votedFor;
     private ulong _commitIdx;
@@ -27,7 +23,7 @@ public partial class FSM {
     private long _lastElectionTime;
     private long _randomizedElectionTimeout = ElectionTimeout + 1;
     private readonly ThreadLocal<Random> _random = new(() => new Random());
-    private List<KeyValuePair<ulong, Message>> _messages = new();
+    private List<ToMessage> _messages = new();
     private readonly LastObservedState _observed = new();
 
     public const long ElectionTimeout = 10;
@@ -285,7 +281,35 @@ public partial class FSM {
 
 
     private void SendTo(ulong to, Message message) {
-        _messages.Add(new KeyValuePair<ulong, Message>(to, message));
+        _messages.Add(new ToMessage(to, message));
+    }
+
+    private void SendTo(ulong to, VoteRequest request) {
+        SendTo(to, new Message(request));
+    }
+
+    private void SendTo(ulong to, VoteResponse response) {
+        SendTo(to, new Message(response));
+    }
+
+    private void SendTo(ulong to, AppendRequest request) {
+        SendTo(to, new Message(request));
+    }
+
+    private void SendTo(ulong to, AppendResponse response) {
+        SendTo(to, new Message(response));
+    }
+
+    private void SendTo(ulong to, InstallSnapshot request) {
+        SendTo(to, new Message(request));
+    }
+
+    private void SendTo(ulong to, SnapshotResponse response) {
+        SendTo(to, new Message(response));
+    }
+
+    private void SendTo(ulong to, TimeoutNowRequest request) {
+        SendTo(to, new Message(request));
     }
 
     private void UpdateCurrentTerm(ulong term) {
@@ -483,6 +507,14 @@ public partial class FSM {
             }
         }
     }
+
+    public void Step(ulong from, VoteRequest msg) { Step(from, new Message(msg)); }
+    public void Step(ulong from, VoteResponse msg) { Step(from, new Message(msg)); }
+    public void Step(ulong from, AppendRequest msg) { Step(from, new Message(msg)); }
+    public void Step(ulong from, AppendResponse msg) { Step(from, new Message(msg)); }
+    public void Step(ulong from, InstallSnapshot msg) { Step(from, new Message(msg)); }
+    public void Step(ulong from, SnapshotResponse msg) { Step(from, new Message(msg)); }
+    public void Step(ulong from, TimeoutNowRequest msg) { Step(from, new Message(msg)); }
 
     public void Step(ulong from, Message msg) {
         Debug.Assert(from != _myID, "fsm cannot process messages from itself");
