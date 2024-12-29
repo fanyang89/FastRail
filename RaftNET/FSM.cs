@@ -15,10 +15,10 @@ public partial class FSM {
     private ulong _votedFor;
     private ulong _commitIdx;
     private Log _log;
-    private FSMConfig _config;
+    private Config _config;
     private bool _abortLeadershipTransfer;
     private bool _pingLeader;
-    private FSMOutput _output = new();
+    private Output _output = new();
     private LogicalClock _clock = new();
     private IFailureDetector _failureDetector;
     private readonly ILogger<FSM> _logger;
@@ -38,7 +38,7 @@ public partial class FSM {
         Log log,
         ulong commitIdx,
         IFailureDetector failureDetector,
-        FSMConfig config,
+        Config config,
         Notifier eventNotify,
         ILogger<FSM>? logger = null
     ) {
@@ -98,7 +98,7 @@ public partial class FSM {
         }
     }
 
-    public FSMOutput GetOutput() {
+    public Output GetOutput() {
         var diff = _log.LastIdx() - _log.StableIdx();
 
         if (IsLeader) {
@@ -108,7 +108,7 @@ public partial class FSM {
         }
 
         var output = _output;
-        _output = new FSMOutput();
+        _output = new Output();
 
         if (diff > 0) {
             for (var i = _log.StableIdx() + 1; i <= _log.LastIdx(); ++i) {

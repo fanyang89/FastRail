@@ -3,7 +3,7 @@
 namespace RaftNET;
 
 public static class ByteArrayUtil {
-    public static byte[] Concat(byte[] a, byte[] b) {
+    private static byte[] Concat(byte[] a, byte[] b) {
         var buf = new byte[a.Length + b.Length];
         a.CopyTo(new Memory<byte>(buf));
         b.CopyTo(new Memory<byte>(buf, a.Length, b.Length));

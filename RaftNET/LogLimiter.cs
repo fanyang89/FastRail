@@ -3,7 +3,7 @@
 public class LogLimiter(int initialCount, int maxCount) {
     private readonly SemaphoreSlim _semaphore = new(initialCount, maxCount);
 
-    public void WaitOne() {
+    private void WaitOne() {
         _semaphore.Wait();
     }
 

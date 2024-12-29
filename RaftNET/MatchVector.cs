@@ -2,18 +2,13 @@ using System.Numerics;
 
 namespace RaftNET;
 
-internal class MatchVector<T> where T : INumber<T> {
+internal class MatchVector<T>(T prevCommitIdx, int reserveSize)
+    where T : INumber<T> {
     private int _count;
-    private readonly List<T> _match;
-    private readonly T _prevCommitIdx;
-
-    public MatchVector(T prevCommitIdx, int reserveSize) {
-        _prevCommitIdx = prevCommitIdx;
-        _match = new List<T>(reserveSize);
-    }
+    private readonly List<T> _match = new(reserveSize);
 
     public void Add(T matchIdx) {
-        if (matchIdx > _prevCommitIdx) {
+        if (matchIdx > prevCommitIdx) {
             ++_count;
         }
 

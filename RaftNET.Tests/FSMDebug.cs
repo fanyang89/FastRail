@@ -9,7 +9,7 @@ public class FSMDebug : FSM {
 
     public FSMDebug(
         ulong id, ulong currentTerm, ulong votedFor, Log log, IFailureDetector failureDetector,
-        FSMConfig config, ILogger<FSM>? logger = null
+        Config config, ILogger<FSM>? logger = null
     ) : base(id, currentTerm, votedFor, log, 0, failureDetector, config, Notifier, logger) {
     }
 

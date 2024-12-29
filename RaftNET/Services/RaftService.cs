@@ -41,7 +41,7 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
         var fd = new TrivialFailureDetector();
-        var fsmConfig = new FSMConfig(
+        var fsmConfig = new FSM.Config(
             config.EnablePreVote,
             config.AppendRequestThreshold,
             config.MaxLogSize
@@ -104,7 +104,7 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
         return async () => {
             while (!cancellationToken.IsCancellationRequested) {
                 _fsmEventNotify.Wait();
-                FSMOutput? batch = null;
+                FSM.Output? batch = null;
                 lock (_fsm) {
                     var hasOutput = _fsm.HasOutput();
                     if (hasOutput) {
@@ -118,7 +118,7 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
         };
     }
 
-    private async Task ProcessFSMOutput(ulong lastStable, FSMOutput batch) {
+    private async Task ProcessFSMOutput(ulong lastStable, FSM.Output batch) {
         if (batch.TermAndVote != null) {
             var term = batch.TermAndVote.Term;
             var vote = batch.TermAndVote.VotedFor;

@@ -29,13 +29,13 @@ public class FSMTestBase {
         }
     }
 
-    protected readonly FSMConfig FSMConfig = new(
+    protected readonly FSM.Config FSMConfig = new(
         MaxLogSize: 4 * 1024 * 1024,
         AppendRequestThreshold: 1,
         EnablePreVote: false
     );
 
-    protected readonly FSMConfig FSMPreVoteConfig = new(
+    protected readonly FSM.Config FSMPreVoteConfig = new(
         MaxLogSize: 4 * 1024 * 1024,
         AppendRequestThreshold: 1,
         EnablePreVote: true

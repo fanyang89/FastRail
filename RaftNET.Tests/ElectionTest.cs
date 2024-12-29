@@ -8,7 +8,7 @@ public class ElectionTest : FSMTestBase {
     [TestCase(true)]
     [TestCase(false)]
     public void SingleNode(bool enablePreVote) {
-        var fsmConfig = new FSMConfig(
+        var fsmConfig = new FSM.Config(
             MaxLogSize: 4 * 1024 * 1024,
             AppendRequestThreshold: 1,
             EnablePreVote: enablePreVote
