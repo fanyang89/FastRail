@@ -37,10 +37,7 @@ public class RaftService : Raft.RaftBase, IDisposable {
         _stateMachine = config.StateMachine;
         _connectionManager = new ConnectionManager(
             config.MyId, config.AddressBook, loggerFactory.CreateLogger<ConnectionManager>());
-
-        var persistence = new RocksPersistence(config.DataDir);
-        persistence.Initialize();
-        _persistence = persistence;
+        _persistence = new RocksPersistence(config.DataDir);
 
         ulong term = 0;
         ulong votedFor = 0;

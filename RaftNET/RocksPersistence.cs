@@ -26,8 +26,6 @@ public class RocksPersistence : IPersistence, IDisposable {
         }
     }
 
-    public void Initialize() {}
-
     public void StoreTermVote(ulong term, ulong vote) {
         lock (_keyTermVote) {
             var tv = new TermVote { Term = term, VotedFor = vote };
