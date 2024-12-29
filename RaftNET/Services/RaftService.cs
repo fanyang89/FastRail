@@ -9,7 +9,7 @@ using RaftNET.StateMachines;
 
 namespace RaftNET.Services;
 
-public partial class RaftService : Raft.RaftBase, IHostedService {
+public partial class RaftService : RaftNET.RaftCluster.RaftBase, IHostedService {
     private readonly FSM _fsm;
     private readonly Notifier _fsmEventNotify = new();
     private readonly ILogger<RaftService> _logger;
@@ -46,7 +46,8 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
             votedFor = tv.VotedFor;
         }
         var commitedIdx = _persistence.LoadCommitIdx();
-        var snapshot = _persistence.LoadSnapshotDescriptor();
+        var snapshot = _persistence.LoadSnapshotDescriptor() ??
+                       new SnapshotDescriptor { Config = Messages.ConfigFromIds(config.InitialMembers) };
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
         var fd = new RpcFailureDetector(config.MyId,
@@ -70,6 +71,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         _ticker = new Timer(Tick, null, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100));
         _applyTask = Task.Run(DoApply(token), token);
         _ioTask = Task.Run(DoIO(token, 0), token);
+        _logger.LogInformation("RaftService{{{}}} started", _myId);
         return Task.CompletedTask;
     }
 
@@ -84,6 +86,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         if (_ticker != null) {
             await _ticker.DisposeAsync();
         }
+        _logger.LogInformation("RaftService{{{}}} stopped", _myId);
     }
 
     private Action DoApply(CancellationToken cancellationToken) {

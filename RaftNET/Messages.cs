@@ -146,4 +146,15 @@ public static class Messages {
 
         return 0; // dummy
     }
+
+    public static Configuration ConfigFromIds(Dictionary<ulong, bool> configInitialMembers) {
+        var cfg = new Configuration();
+        foreach (var (id, canVote) in configInitialMembers) {
+            cfg.Current.Add(new ConfigMember {
+                ServerAddress = new ServerAddress { ServerId = id },
+                CanVote = canVote
+            });
+        }
+        return cfg;
+    }
 }

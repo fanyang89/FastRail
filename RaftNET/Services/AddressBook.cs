@@ -16,6 +16,12 @@ public class AddressBook : IAddressBook {
         }
     }
 
+    public Dictionary<ulong, bool> GetMembers() {
+        lock (_addresses) {
+            return _addresses.Select(x => (x.Key, true)).ToDictionary();
+        }
+    }
+
     public void Add(ulong id, string address) {
         lock (_addresses) {
             _addresses.Add(id, address);

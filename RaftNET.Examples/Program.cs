@@ -7,7 +7,7 @@ namespace RaftNET.Examples;
 
 class Program {
     static async Task<int> Main(string[] args) {
-        using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        using var loggerFactory = LoggerFactory.Instance;
         var rootCommand = new RootCommand("Example for Raft.NET");
 
         var dataDirOption = new Option<DirectoryInfo?>(
@@ -61,15 +61,17 @@ class Program {
             }
 
             var builder = WebApplication.CreateBuilder(args);
+            var addressBook = new AddressBook(initialMembers);
             builder.Services.AddHostedService<RaftService>(_ => new RaftService(
                 new RaftService.Config(
                     MyId: myId,
                     DataDir: dataDir.FullName,
                     LoggerFactory: loggerFactory,
                     StateMachine: new LogStateMachine(loggerFactory.CreateLogger<LogStateMachine>()),
-                    AddressBook: new AddressBook(initialMembers),
+                    AddressBook: addressBook,
                     ListenAddress: listenAddress,
-                    Port: listenPort
+                    Port: listenPort,
+                    InitialMembers: addressBook.GetMembers()
                 )));
             builder.Services.AddSingleton<RaftService>(
                 provider => provider.GetServices<IHostedService>().OfType<RaftService>().First());

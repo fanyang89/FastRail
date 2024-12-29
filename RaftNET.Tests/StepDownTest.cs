@@ -18,7 +18,7 @@ public class StepDownTest : FSMTestBase {
         };
         var log = new Log(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 1, 0, log,
-            new TrivialFailureDetector(), FSMConfig, _loggerFactory.CreateLogger<FSM>());
+            new TrivialFailureDetector(), FSMConfig, LoggerFactory.CreateLogger<FSM>());
 
         // Check that we move to candidate state on timeout_now message
         fsm.Step(Id2, new TimeoutNowRequest { CurrentTerm = fsm.CurrentTerm });
@@ -163,7 +163,7 @@ public class StepDownTest : FSMTestBase {
         // and there are entries above C_new in its log
         var cfg2 = Messages.ConfigFromIds(Id1, Id2, Id3);
         var log2 = new Log(new SnapshotDescriptor { Config = cfg2 });
-        var fsm2 = new FSMDebug(Id1, 1, 0, log2, new TrivialFailureDetector(), FSMConfig, _loggerFactory.CreateLogger<FSM>());
+        var fsm2 = new FSMDebug(Id1, 1, 0, log2, new TrivialFailureDetector(), FSMConfig, LoggerFactory.CreateLogger<FSM>());
 
         ElectionTimeout(fsm2);
         // Turn to a leader

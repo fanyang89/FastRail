@@ -17,7 +17,7 @@ public class LogMatchingRuleTest : FSMTestBase {
         log.Add(new LogEntry { Term = 10, Idx = 1000 });
         log.StableTo(log.LastIdx());
 
-        var fsm = new FSMDebug(Id1, 10, 0, log, new TrivialFailureDetector(), FSMConfig, _loggerFactory.CreateLogger<FSM>());
+        var fsm = new FSMDebug(Id1, 10, 0, log, new TrivialFailureDetector(), FSMConfig, LoggerFactory.CreateLogger<FSM>());
 
         // Initial state is follower
         Assert.That(fsm.IsFollower, Is.True);

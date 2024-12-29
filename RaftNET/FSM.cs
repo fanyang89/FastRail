@@ -233,68 +233,6 @@ public partial class FSM {
         }
     }
 
-    private void BecomeCandidate(bool isPreVote, bool isLeadershipTransfer = false) {
-        if (!IsCandidate) {
-            _output.StateChanged = true;
-        }
-
-        _state = new Candidate(_log.GetConfiguration(), isPreVote);
-        ResetElectionTimeout();
-
-        _lastElectionTime = _clock.Now();
-        var votes = CandidateState.Votes;
-        var voters = votes.Voters;
-
-        if (voters.All(x => x.ServerId != _myID)) {
-            if (_log.LastConfIdx() <= _commitIdx) {
-                BecomeFollower(0);
-                return;
-            }
-
-            var prevConfig = _log.GetPreviousConfiguration();
-            Debug.Assert(prevConfig != null);
-
-            if (!prevConfig.CanVote(_myID)) {
-                BecomeFollower(0);
-                return;
-            }
-        }
-
-        ulong term = _currentTerm + 1;
-
-        if (!isPreVote) {
-            UpdateCurrentTerm(term);
-        }
-
-        foreach (var server in voters) {
-            if (server.ServerId == _myID) {
-                votes.RegisterVote(server.ServerId, true);
-
-                if (!isPreVote) {
-                    _votedFor = _myID;
-                }
-
-                continue;
-            }
-
-            SendTo(server.ServerId, new VoteRequest {
-                CurrentTerm = term,
-                Force = isLeadershipTransfer,
-                IsPreVote = isPreVote,
-                LastLogIdx = _log.LastIdx(),
-                LastLogTerm = _log.LastTerm(),
-            });
-        }
-
-        if (votes.CountVotes() == VoteResult.Won) {
-            if (isPreVote) {
-                BecomeCandidate(false);
-            } else {
-                BecomeLeader();
-            }
-        }
-    }
-
 
     private void SendTo(ulong to, Message message) {
         _messages.Add(new ToMessage(to, message));
@@ -332,6 +270,7 @@ public partial class FSM {
         Debug.Assert(term > _currentTerm);
         _currentTerm = term;
         _votedFor = 0;
+        _logger.LogTrace("FSM{{{}}} update current term to {}", _myID, term);
     }
 
     protected void BecomeFollower(ulong leader) {
@@ -341,6 +280,7 @@ public partial class FSM {
         if (!IsFollower) {
             _output.StateChanged = true;
         }
+        _logger.LogInformation("FSM{{{}}} become follower", _myID);
         _state = new Follower(leader);
         if (leader != 0) {
             _pingLeader = false;
@@ -349,6 +289,7 @@ public partial class FSM {
     }
 
     private void BecomeLeader() {
+        _logger.LogInformation("FSM{{{}}} become leader", _myID);
         Debug.Assert(!IsLeader);
         _output.StateChanged = true;
         _state = new Leader(_config.MaxLogSize);
@@ -356,6 +297,69 @@ public partial class FSM {
         _pingLeader = false;
         AddEntry(new Dummy());
         LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
+    }
+
+    private void BecomeCandidate(bool isPreVote, bool isLeadershipTransfer = false) {
+        if (!IsCandidate) {
+            _output.StateChanged = true;
+        }
+
+        _logger.LogInformation("FSM{{{}}} become candidate, pre_vote: {}, force: {}", _myID, isPreVote, isLeadershipTransfer);
+        _state = new Candidate(_log.GetConfiguration(), isPreVote);
+        ResetElectionTimeout();
+
+        _lastElectionTime = _clock.Now();
+        var votes = CandidateState.Votes;
+        var voters = votes.Voters;
+
+        if (voters.All(x => x.ServerId != _myID)) {
+            if (_log.LastConfIdx() <= _commitIdx) {
+                BecomeFollower(0);
+                return;
+            }
+
+            var prevConfig = _log.GetPreviousConfiguration();
+            Debug.Assert(prevConfig != null);
+
+            if (!prevConfig.CanVote(_myID)) {
+                BecomeFollower(0);
+                return;
+            }
+        }
+
+        var term = _currentTerm + 1;
+
+        if (!isPreVote) {
+            UpdateCurrentTerm(term);
+        }
+
+        foreach (var server in voters) {
+            if (server.ServerId == _myID) {
+                votes.RegisterVote(server.ServerId, true);
+
+                if (!isPreVote) {
+                    _votedFor = _myID;
+                }
+
+                continue;
+            }
+
+            SendTo(server.ServerId, new VoteRequest {
+                CurrentTerm = term,
+                Force = isLeadershipTransfer,
+                IsPreVote = isPreVote,
+                LastLogIdx = _log.LastIdx(),
+                LastLogTerm = _log.LastTerm(),
+            });
+        }
+
+        if (votes.CountVotes() == VoteResult.Won) {
+            if (isPreVote) {
+                BecomeCandidate(false);
+            } else {
+                BecomeLeader();
+            }
+        }
     }
 
     void CheckIsLeader() {
@@ -410,6 +414,7 @@ public partial class FSM {
         Debug.Assert(_random.Value != null);
         var upper = long.Max(ElectionTimeout, _log.GetConfiguration().Current.Count);
         _randomizedElectionTimeout = ElectionTimeout + _random.Value.NextInt64(1, upper);
+        _logger.LogTrace("FSM{{{}}} election timeout reset to {}", _myID, _randomizedElectionTimeout);
     }
 
     private void TickLeader() {

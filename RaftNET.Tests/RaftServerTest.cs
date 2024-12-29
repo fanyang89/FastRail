@@ -10,20 +10,23 @@ public class RaftServerTest {
     private RaftServer _server;
     private AddressBook _addressBook;
     private readonly int _port = 15000;
+    private readonly ulong _myId = 1;
 
     [SetUp]
     public void Setup() {
         _addressBook = new AddressBook();
-        _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        _addressBook.Add(_myId, $"http://127.0.0.1:{_port}");
+        _loggerFactory = LoggerFactory.Instance;
         var tmpDir = Directory.CreateTempSubdirectory();
         _server = new RaftServer(new RaftService.Config(
-            MyId: 1,
+            MyId: _myId,
             DataDir: tmpDir.FullName,
             LoggerFactory: _loggerFactory,
             StateMachine: new EmptyStateMachine(),
             AddressBook: _addressBook,
             ListenAddress: IPAddress.Loopback,
-            Port: _port
+            Port: _port,
+            InitialMembers: _addressBook.GetMembers()
         ));
         _server.Start();
     }

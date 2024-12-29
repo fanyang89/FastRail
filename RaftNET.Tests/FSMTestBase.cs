@@ -4,7 +4,7 @@ using RaftNET.FailureDetectors;
 namespace RaftNET.Tests;
 
 public class FSMTestBase {
-    protected ILoggerFactory _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+    protected ILoggerFactory LoggerFactory = RaftNET.LoggerFactory.Instance;
     protected const ulong Id1 = 1;
     protected const ulong Id2 = 2;
     protected const ulong Id3 = 3;
@@ -43,7 +43,7 @@ public class FSMTestBase {
     );
 
     protected FSMDebug CreateFollower(ulong id, Log log, IFailureDetector fd) {
-        return new FSMDebug(id, 0, 0, log, fd, FSMConfig, _loggerFactory.CreateLogger<FSM>());
+        return new FSMDebug(id, 0, 0, log, fd, FSMConfig, LoggerFactory.CreateLogger<FSM>());
     }
 
     protected FSMDebug CreateFollower(ulong id, Log log) {

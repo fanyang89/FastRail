@@ -4,7 +4,7 @@ using Grpc.Net.Client;
 namespace RaftNET.Services;
 
 public class RaftClient : IRaftClient {
-    private readonly Raft.RaftClient _client;
+    private readonly RaftNET.RaftCluster.RaftClient _client;
     private readonly ulong _myId;
 
     public RaftClient(ulong myId, string address) {
@@ -13,7 +13,7 @@ public class RaftClient : IRaftClient {
             Credentials = ChannelCredentials.Insecure
         };
         var channel = GrpcChannel.ForAddress(address, options);
-        _client = new Raft.RaftClient(channel);
+        _client = new RaftNET.RaftCluster.RaftClient(channel);
     }
 
     public async Task Ping(DateTime deadline) {

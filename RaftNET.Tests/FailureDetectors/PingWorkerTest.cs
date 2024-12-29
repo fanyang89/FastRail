@@ -9,14 +9,14 @@ public class PingWorkerTest : IListener {
     private AddressBook _addressBook;
     private ManualClock _clock;
     private MockPingRaftClient _client;
-    public Dictionary<ulong, bool> _alive = new();
+    private readonly Dictionary<ulong, bool> _alive = new();
 
     private const ulong Id1 = 1;
     private const ulong Id2 = 2;
 
     [SetUp]
     public void Setup() {
-        _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Trace));
+        _loggerFactory = LoggerFactory.Instance;
         _addressBook = new AddressBook();
         _addressBook.Add(Id2, "fake:port");
         _clock = new ManualClock(DateTime.Now);
