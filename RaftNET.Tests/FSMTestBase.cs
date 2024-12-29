@@ -26,15 +26,17 @@ public class FSMTestBase {
         }
     }
 
-    protected readonly FSMConfig FSMConfig = new FSMConfig {
-        AppendRequestThreshold = 1,
-        EnablePreVote = false
-    };
+    protected readonly FSMConfig FSMConfig = new(
+        MaxLogSize: 4 * 1024 * 1024,
+        AppendRequestThreshold: 1,
+        EnablePreVote: false
+    );
 
-    protected readonly FSMConfig FSMPreVoteConfig = new FSMConfig {
-        AppendRequestThreshold = 1,
-        EnablePreVote = true
-    };
+    protected readonly FSMConfig FSMPreVoteConfig = new(
+        MaxLogSize: 4 * 1024 * 1024,
+        AppendRequestThreshold: 1,
+        EnablePreVote: true
+    );
 
     protected FSMDebug CreateFollower(ulong id, Log log, IFailureDetector fd) {
         return new FSMDebug(id, 0, 0, log, fd, FSMConfig);

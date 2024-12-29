@@ -41,11 +41,11 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
         var fd = new TrivialFailureDetector();
-        var fsmConfig = new FSMConfig {
-            EnablePreVote = config.EnablePreVote,
-            MaxLogSize = config.MaxLogSize,
-            AppendRequestThreshold = config.AppendRequestThreshold,
-        };
+        var fsmConfig = new FSMConfig(
+            config.EnablePreVote,
+            config.AppendRequestThreshold,
+            config.MaxLogSize
+        );
         _fsm = new FSM(
             config.MyId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify,
             config.LoggerFactory.CreateLogger<FSM>());

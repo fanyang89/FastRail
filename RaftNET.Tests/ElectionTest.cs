@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System.Text.Json.Serialization;
 
 namespace RaftNET.Tests;
 
@@ -6,9 +7,11 @@ public class ElectionTest : FSMTestBase {
     [TestCase(true)]
     [TestCase(false)]
     public void SingleNode(bool enablePreVote) {
-        var fsmConfig = new FSMConfig {
-            EnablePreVote = enablePreVote
-        };
+        var fsmConfig = new FSMConfig(
+            MaxLogSize: 4 * 1024 * 1024,
+            AppendRequestThreshold: 1,
+            EnablePreVote: enablePreVote
+        );
         var cfg = Messages.ConfigFromIds(Id1);
         var log = new Log(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), fsmConfig);

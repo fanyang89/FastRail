@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices.ComTypes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -12,6 +13,7 @@ public class Log {
     private ulong _prevConfIdx;
     private SnapshotDescriptor _snapshot;
     private ulong _stableIdx;
+    private int _memoryUsage;
 
     public Log(SnapshotDescriptor? snapshot, List<LogEntry>? logEntries = null, ILogger<Log>? logger = null) {
         _logger = logger ?? new NullLogger<Log>();
@@ -19,10 +21,10 @@ public class Log {
         _log = logEntries ?? [];
 
         if (_log.Count == 0) {
-            _firstIdx = snapshot.Idx + 1;
+            _firstIdx = _snapshot.Idx + 1;
         } else {
             _firstIdx = _log.First().Idx;
-            Debug.Assert(_firstIdx <= snapshot.Idx + 1);
+            Debug.Assert(_firstIdx <= _snapshot.Idx + 1);
         }
 
         Debug.Assert(_firstIdx > 0);
@@ -49,18 +51,29 @@ public class Log {
         return _snapshot;
     }
 
-    public ulong ApplySnapshot(SnapshotDescriptor snp) {
+    public ulong ApplySnapshot(SnapshotDescriptor snp, int maxTrailingEntries, int maxTrailingBytes) {
         Debug.Assert(snp.Idx > _snapshot.Idx);
 
         var idx = snp.Idx;
 
         if (idx > LastIdx()) {
+            _memoryUsage = 0;
             _log.Clear();
             _firstIdx = idx + 1;
         } else {
-            var entriesToRemove = (ulong)_log.Count - (LastIdx() - idx);
-            _log.RemoveRange(0, (int)entriesToRemove);
-            _firstIdx += entriesToRemove;
+            var entriesToRemove = _log.Count - (int)(LastIdx() - idx);
+            var trailingBytes = 0;
+            for (var i = 0; i < maxTrailingEntries && entriesToRemove > 0; ++i) {
+                trailingBytes += MemoryUsageOf(_log[entriesToRemove - 1]);
+                if (trailingBytes > maxTrailingBytes) {
+                    break;
+                }
+                --entriesToRemove;
+            }
+            var releasedMemory = MemoryUsageOf(0, entriesToRemove);
+            _log.RemoveRange(0, entriesToRemove);
+            _memoryUsage -= releasedMemory;
+            _firstIdx += (ulong)entriesToRemove;
         }
 
         _stableIdx = ulong.Max(idx, _stableIdx);
@@ -139,11 +152,24 @@ public class Log {
 
     public void Add(LogEntry entry) {
         _log.Add(entry);
-
+        _memoryUsage += MemoryUsageOf(entry);
         if (_log.Last().Configuration != null) {
             _prevConfIdx = _lastConfIdx;
             _lastConfIdx = LastIdx();
         }
+    }
+
+    private int MemoryUsageOf(LogEntry entry) {
+        switch (entry.DataCase) {
+            case LogEntry.DataOneofCase.Command:
+                return entry.Command.CalculateSize();
+            case LogEntry.DataOneofCase.Configuration:
+                return entry.Configuration.CalculateSize();
+            case LogEntry.DataOneofCase.None:
+            case LogEntry.DataOneofCase.Dummy:
+                break;
+        }
+        return 0;
     }
 
     public ulong LastIdx() {
@@ -161,7 +187,10 @@ public class Log {
     private void TruncateUncommitted(ulong idx) {
         Debug.Assert(idx >= _firstIdx);
         var it = (int)(idx - _firstIdx);
-        _log.RemoveRange(it, _log.Count - it);
+        var last = _log.Count - it;
+        var releasedMemory = MemoryUsageOf(it, _log.Count);
+        _log.RemoveRange(it, last);
+        _memoryUsage -= releasedMemory;
         StableTo(ulong.Min(_stableIdx, LastIdx()));
 
         if (_lastConfIdx > LastIdx()) {
@@ -169,6 +198,14 @@ public class Log {
             _lastConfIdx = _prevConfIdx;
             _prevConfIdx = 0;
         }
+    }
+
+    private int MemoryUsageOf(int first, int last) {
+        var usage = 0;
+        for (var i = first; i < last; i++) {
+            usage += MemoryUsageOf(_log[i]);
+        }
+        return usage;
     }
 
     public void StableTo(ulong idx) {
@@ -274,7 +311,5 @@ public class Log {
         }
     }
 
-    public int MemoryUsage() {
-        throw new NotImplementedException();
-    }
+    public int MemoryUsage() => _memoryUsage;
 }

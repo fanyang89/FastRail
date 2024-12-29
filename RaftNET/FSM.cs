@@ -671,7 +671,7 @@ public partial class FSM {
                 // ignored
             },
             installSnapshot => {
-                bool success = ApplySnapshot(installSnapshot.Snp, false);
+                var success = ApplySnapshot(installSnapshot.Snp, 0, 0, false);
                 SendTo(from, new SnapshotResponse {
                     CurrentTerm = _currentTerm,
                     Success = success
@@ -796,17 +796,15 @@ public partial class FSM {
         }
     }
 
-    private async Task AppendEntriesResponse(ulong from, AppendResponse response) {
+    private void AppendEntriesResponse(ulong from, AppendResponse response) {
         Debug.Assert(IsLeader);
         var progress = LeaderState.Tracker.Find(from);
         if (progress == null) {
             return;
         }
 
-        if (progress.State == FollowerProgressState.Pipeline) {
-            if (progress.InFlight > 0) {
-                progress.InFlight--;
-            }
+        if (progress is { State: FollowerProgressState.Pipeline, InFlight: > 0 }) {
+            progress.InFlight--;
         }
 
         if (progress.State == FollowerProgressState.Snapshot) {
@@ -876,7 +874,7 @@ public partial class FSM {
     }
 
     public bool ApplySnapshot(
-        SnapshotDescriptor snapshot, bool local
+        SnapshotDescriptor snapshot, int maxTrailingEntries, int maxTrailingBytes, bool local
     ) {
         Debug.Assert(local && snapshot.Idx <= _observed.CommitIdx || !local && IsFollower);
         var currentSnapshot = _log.GetSnapshot();
@@ -886,7 +884,7 @@ public partial class FSM {
         }
         _output.SnapshotsToDrop.Add(currentSnapshot.Id);
         _commitIdx = ulong.Max(_commitIdx, snapshot.Idx);
-        var newFirstIndex = _log.ApplySnapshot(snapshot);
+        var newFirstIndex = _log.ApplySnapshot(snapshot, maxTrailingEntries, maxTrailingBytes);
         currentSnapshot = _log.GetSnapshot();
         _output.Snapshot = new AppliedSnapshot(
             currentSnapshot,
