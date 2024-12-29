@@ -1,6 +1,9 @@
-﻿namespace RaftNET.Tests;
+﻿using Microsoft.Extensions.Logging;
+
+namespace RaftNET.Tests;
 
 public class FSMTestBase {
+    protected ILoggerFactory _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
     protected const ulong Id1 = 1;
     protected const ulong Id2 = 2;
     protected const ulong Id3 = 3;
@@ -39,7 +42,7 @@ public class FSMTestBase {
     );
 
     protected FSMDebug CreateFollower(ulong id, Log log, IFailureDetector fd) {
-        return new FSMDebug(id, 0, 0, log, fd, FSMConfig);
+        return new FSMDebug(id, 0, 0, log, fd, FSMConfig, _loggerFactory.CreateLogger<FSM>());
     }
 
     protected FSMDebug CreateFollower(ulong id, Log log) {

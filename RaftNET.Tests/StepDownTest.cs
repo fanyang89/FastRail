@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace RaftNET.Tests;
 
@@ -15,7 +16,8 @@ public class StepDownTest : FSMTestBase {
             }
         };
         var log = new Log(new SnapshotDescriptor { Config = cfg });
-        var fsm = new FSMDebug(Id1, 1, 0, log, new TrivialFailureDetector(), FSMConfig);
+        var fsm = new FSMDebug(Id1, 1, 0, log,
+            new TrivialFailureDetector(), FSMConfig, _loggerFactory.CreateLogger<FSM>());
 
         // Check that we move to candidate state on timeout_now message
         fsm.Step(Id2, new TimeoutNowRequest { CurrentTerm = fsm.CurrentTerm });
@@ -38,6 +40,7 @@ public class StepDownTest : FSMTestBase {
             CurrentTerm = fsm.CurrentTerm, CommitIdx = 0,
             Accepted = new AppendAccepted { LastNewIdx = idx }
         });
+        Assert.That(fsm.IsLeader, Is.True);
 
         // start leadership transfer while there is a fully up-to-date follower
         fsm.TransferLeadership();
@@ -111,7 +114,7 @@ public class StepDownTest : FSMTestBase {
         Assert.That(fsm.IsLeader, Is.True);
         // Commit dummy entry
         output = fsm.GetOutput();
-        Assert.That(output.Messages.Last().Message.AppendRequest, Is.True);
+        Assert.That(output.Messages.Last().Message.IsAppendRequest, Is.True);
         append = output.Messages.Last().Message.AppendRequest;
         idx = append.Entries.Last().Idx;
         fsm.Step(Id2, new AppendResponse {
@@ -159,7 +162,7 @@ public class StepDownTest : FSMTestBase {
         // and there are entries above C_new in its log
         var cfg2 = Messages.ConfigFromIds(Id1, Id2, Id3);
         var log2 = new Log(new SnapshotDescriptor { Config = cfg2 });
-        var fsm2 = new FSMDebug(Id1, 1, 0, log2, new TrivialFailureDetector(), FSMConfig);
+        var fsm2 = new FSMDebug(Id1, 1, 0, log2, new TrivialFailureDetector(), FSMConfig, _loggerFactory.CreateLogger<FSM>());
 
         ElectionTimeout(fsm2);
         // Turn to a leader
@@ -169,7 +172,7 @@ public class StepDownTest : FSMTestBase {
         });
         Assert.That(fsm2.IsLeader, Is.True);
         output = fsm2.GetOutput();
-        Assert.That(output.Messages.Last().Message.AppendRequest, Is.True);
+        Assert.That(output.Messages.Last().Message.IsAppendRequest, Is.True);
         append = output.Messages.Last().Message.AppendRequest;
         idx = append.Entries.Last().Idx;
         // Accept the dummy on id2
@@ -189,7 +192,7 @@ public class StepDownTest : FSMTestBase {
         var newConfig2 = Messages.ConfigFromIds(Id2, Id3);
         fsm2.AddEntry(newConfig2);
         output = fsm2.GetOutput();
-        Assert.That(output.Messages.Last().Message.AppendRequest, Is.True);
+        Assert.That(output.Messages.Last().Message.IsAppendRequest, Is.True);
         append = output.Messages.Last().Message.AppendRequest;
         idx = append.Entries.Last().Idx;
         // Accept joint config entry on id2
@@ -226,7 +229,7 @@ public class StepDownTest : FSMTestBase {
         });
         // C_new is now committed
         output = fsm2.GetOutput(); // this sends out the entry submitted after C_new
-        Assert.That(output.Messages.Last().Message.AppendRequest, Is.True);
+        Assert.That(output.Messages.Last().Message.IsAppendRequest, Is.True);
         append = output.Messages.Last().Message.AppendRequest;
         idx = append.Entries.Last().Idx;
         // Accept the entry

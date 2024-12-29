@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 
 namespace RaftNET.Tests;
 
@@ -14,7 +15,7 @@ public class ElectionTest : FSMTestBase {
         );
         var cfg = Messages.ConfigFromIds(Id1);
         var log = new Log(new SnapshotDescriptor { Config = cfg });
-        var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), fsmConfig);
+        var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), fsmConfig, _loggerFactory.CreateLogger<FSM>());
 
         ElectionTimeout(fsm);
         Assert.That(fsm.IsLeader, Is.True);

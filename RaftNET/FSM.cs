@@ -364,6 +364,9 @@ public partial class FSM {
         CheckIsLeader();
 
         if (LeaderState.StepDown != null) {
+            // A leader that is stepping down should not add new entries
+            // to its log (see 3.10), but it still does not know who the new
+            // leader will be.
             throw new NotLeaderException();
         }
 
@@ -448,15 +451,17 @@ public partial class FSM {
         }
 
         if (state.StepDown != null) {
+            _logger.LogTrace("Tick({}) stepdown is active", _myID);
             var me = state.Tracker.Find(_myID);
-
             if (me == null || !me.CanVote) {
-                _logger.LogTrace("not aborting step down: we have been removed from the configuration");
+                _logger.LogTrace("Tick({}) not aborting step down: we have been removed from the configuration", _myID);
             } else if (state.StepDown <= _clock.Now()) {
+                _logger.LogTrace("Tick({}) cancel step down", _myID);
                 state.StepDown = null;
                 state.TimeoutNowSent = null;
                 _abortLeadershipTransfer = true;
             } else if (state.TimeoutNowSent != null) {
+                _logger.LogTrace("Tick({}) resend TimeoutNowRequest", _myID);
                 SendTo(state.TimeoutNowSent.Value, new TimeoutNowRequest { CurrentTerm = _currentTerm });
             }
         }
@@ -698,11 +703,15 @@ public partial class FSM {
         if (voterCount == 1 && leader is { CanVote: true }) {
             throw new NoOtherVotingMemberException();
         }
-        LeaderState.LogLimiter.Wait(_log.MemoryUsage());
+
         LeaderState.StepDown = _clock.Now() + timeout;
-        _pingLeader = false;
-        AddEntry(new Dummy());
-        LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
+        LeaderState.LogLimiter.Wait(_config.MaxLogSize); // prevent new requests
+        foreach (var (_, progress) in LeaderState.Tracker.FollowerProgresses) {
+            if (progress.Id != _myID && progress.CanVote && progress.MatchIdx == _log.LastIdx()) {
+                SendTimeoutNow(progress.Id);
+                break;
+            }
+        }
     }
 
     private void RequestVote(ulong from, VoteRequest request) {
