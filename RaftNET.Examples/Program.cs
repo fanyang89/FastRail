@@ -74,15 +74,18 @@ class Program {
             }
 
             var builder = WebApplication.CreateBuilder(args);
-            builder.Services.AddSingleton<RaftService.Config>(_ =>
+            builder.Services.AddHostedService<RaftService>(_ => new RaftService(
                 new RaftService.Config(
                     MyId: myId,
                     DataDir: dataDir.FullName,
                     LoggerFactory: loggerFactory,
                     StateMachine: new LogStateMachine(loggerFactory.CreateLogger<LogStateMachine>()),
                     AddressBook: new AddressBook(initialMembers)
-                ));
+                )));
+            builder.Services.AddSingleton<RaftService>(
+                provider => provider.GetServices<IHostedService>().OfType<RaftService>().First());
             builder.Services.AddGrpc();
+
             var app = builder.Build();
             app.MapGrpcService<RaftService>();
             app.MapGet("/", () => "Raft.NET example service");

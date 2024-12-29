@@ -241,6 +241,9 @@ public class Log {
             var cfg = _log[(int)(_lastConfIdx - _firstIdx)].Configuration;
             return new Configuration(cfg);
         }
+        if (_snapshot.Config == null) {
+            return new Configuration();
+        }
         return new Configuration(_snapshot.Config);
     }
 

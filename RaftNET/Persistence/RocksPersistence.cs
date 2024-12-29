@@ -55,6 +55,9 @@ public class RocksPersistence : IPersistence, IDisposable {
     public ulong LoadCommitIdx() {
         lock (_keyCommitIdx) {
             var buf = _db.Get(_keyCommitIdx);
+            if (buf == null) {
+                return 0;
+            }
             return BitConverter.ToUInt64(buf);
         }
     }

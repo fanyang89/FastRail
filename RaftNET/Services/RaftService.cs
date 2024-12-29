@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Persistence;
@@ -8,16 +9,12 @@ using RaftNET.StateMachines;
 
 namespace RaftNET.Services;
 
-public partial class RaftService : Raft.RaftBase, IDisposable {
+public partial class RaftService : Raft.RaftBase, IHostedService {
     private readonly FSM _fsm;
     private readonly Notifier _fsmEventNotify = new();
     private readonly ILogger<RaftService> _logger;
     private readonly IStateMachine _stateMachine;
     private readonly IPersistence _persistence;
-    private readonly Timer _ticker;
-    private readonly CancellationTokenSource _cancellationTokenSource = new();
-    private readonly Task _applyTask;
-    private readonly Task _ioTask;
     private readonly BlockingCollection<ApplyMessage> _applyMessages = new();
     private readonly ConnectionManager _connectionManager;
     private readonly AddressBook _addressBook;
@@ -26,15 +23,20 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
     private ulong _appliedIdx;
     private ulong _snapshotDescIdx;
 
+    private Timer? _ticker;
+    private Task? _applyTask;
+    private Task? _ioTask;
+
     public RaftService(Config config) {
         _loggerFactory = config.LoggerFactory;
         _stateMachine = config.StateMachine;
         _addressBook = config.AddressBook;
         _myId = config.MyId;
-
         _logger = _loggerFactory.CreateLogger<RaftService>();
         _connectionManager = new ConnectionManager(_myId, _addressBook, _loggerFactory.CreateLogger<ConnectionManager>());
         _persistence = new RocksPersistence(config.DataDir);
+
+        _logger.LogInformation("Raft service initializing");
 
         ulong term = 0;
         ulong votedFor = 0;
@@ -62,23 +64,19 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
             _snapshotDescIdx = snapshot.Idx;
             _appliedIdx = snapshot.Idx;
         }
-        _ticker = new Timer(Tick, null, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100));
+    }
 
-        var token = _cancellationTokenSource.Token;
+    public Task StartAsync(CancellationToken token) {
+        _ticker = new Timer(Tick, null, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100));
         _applyTask = Task.Run(DoApply(token), token);
         _ioTask = Task.Run(DoIO(token, 0), token);
+        return Task.CompletedTask;
     }
 
-    public void Dispose() {
-        _ioTask.Wait();
-        _applyMessages.Add(new ApplyMessage());
-        _applyTask.Wait();
-        _ticker.Dispose();
-    }
-
-    public async ValueTask DisposeAsync() {
-        await _ioTask;
-        await _applyTask;
+    public async Task StopAsync(CancellationToken cancellationToken) {
+        await _ioTask.WaitAsync(cancellationToken);
+        _applyMessages.Add(new ApplyMessage(), cancellationToken);
+        await _applyTask.WaitAsync(cancellationToken);
         await _ticker.DisposeAsync();
     }
 
