@@ -1,4 +1,4 @@
-﻿namespace RaftNET;
+﻿namespace RaftNET.FailureDetectors;
 
 public interface IListener {
     void MarkAlive(ulong server);

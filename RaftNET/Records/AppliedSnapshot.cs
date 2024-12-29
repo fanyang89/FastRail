@@ -1,4 +1,4 @@
-﻿namespace RaftNET;
+﻿namespace RaftNET.Records;
 
 public record AppliedSnapshot(
     SnapshotDescriptor Snapshot,

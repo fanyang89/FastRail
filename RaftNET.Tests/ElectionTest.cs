@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using RaftNET.FailureDetectors;
 
 namespace RaftNET.Tests;
 

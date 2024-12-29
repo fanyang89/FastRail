@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using RaftNET.Services;
 
-namespace RaftNET;
+namespace RaftNET.FailureDetectors;
 
 public class RpcFailureDetector(
     ulong myId,

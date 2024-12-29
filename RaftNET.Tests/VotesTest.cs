@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using RaftNET.Elections;
 
 namespace RaftNET.Tests;
 

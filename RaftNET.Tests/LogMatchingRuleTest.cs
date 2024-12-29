@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using RaftNET.FailureDetectors;
 
 namespace RaftNET.Tests;
 

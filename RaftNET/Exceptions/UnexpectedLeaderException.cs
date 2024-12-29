@@ -1,4 +1,4 @@
-﻿namespace RaftNET;
+﻿namespace RaftNET.Exceptions;
 
 public class UnexpectedLeaderException(ulong from, ulong currentLeader) : Exception {
     public override string Message =>

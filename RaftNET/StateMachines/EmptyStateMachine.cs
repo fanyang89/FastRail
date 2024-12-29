@@ -1,4 +1,4 @@
-namespace RaftNET;
+namespace RaftNET.StateMachines;
 
 public class EmptyStateMachine : IStateMachine {
     public void Apply(List<Command> commands) {

@@ -1,3 +1,3 @@
-﻿namespace RaftNET;
+﻿namespace RaftNET.Records;
 
 public record Dummy;

@@ -1,6 +1,6 @@
 ﻿using OneOf;
 
-namespace RaftNET;
+namespace RaftNET.Records;
 
 public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshot, SnapshotResponse,
     TimeoutNowRequest> {

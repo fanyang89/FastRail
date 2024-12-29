@@ -1,6 +1,10 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using RaftNET.FailureDetectors;
+using RaftNET.Persistence;
+using RaftNET.Records;
+using RaftNET.StateMachines;
 
 namespace RaftNET.Services;
 

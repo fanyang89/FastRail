@@ -1,4 +1,6 @@
-﻿namespace RaftNET;
+﻿using RaftNET.Records;
+
+namespace RaftNET;
 
 public partial class FSM {
     public class Output {

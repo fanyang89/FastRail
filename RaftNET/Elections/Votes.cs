@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace RaftNET;
+namespace RaftNET.Elections;
 
 public class Votes {
     private readonly ElectionTracker _current;

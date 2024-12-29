@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using RaftNET.Concurrent;
 using RaftNET.Services;
 
-namespace RaftNET;
+namespace RaftNET.FailureDetectors;
 
 class PingWorker : IDisposable {
     private readonly ulong _myId;

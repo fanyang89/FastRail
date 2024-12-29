@@ -1,4 +1,6 @@
-﻿namespace RaftNET.Tests;
+﻿using RaftNET.Persistence;
+
+namespace RaftNET.Tests;
 
 public class PersistenceWorkWithSnapshot {
     private RocksPersistence _persistence;

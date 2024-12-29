@@ -1,4 +1,4 @@
-namespace RaftNET;
+namespace RaftNET.StateMachines;
 
 public interface IStateMachine {
     void Apply(List<Command> commands);

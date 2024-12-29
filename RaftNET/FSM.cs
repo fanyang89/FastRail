@@ -3,6 +3,11 @@ using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OneOf;
+using RaftNET.Elections;
+using RaftNET.Exceptions;
+using RaftNET.FailureDetectors;
+using RaftNET.Records;
+using RaftNET.Replication;
 using RaftNET.Services;
 
 namespace RaftNET;

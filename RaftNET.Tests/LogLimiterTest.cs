@@ -1,4 +1,6 @@
-﻿namespace RaftNET.Tests;
+﻿using RaftNET.Concurrent;
+
+namespace RaftNET.Tests;
 
 public class EventRecorder {
     private readonly List<int> _events = [];

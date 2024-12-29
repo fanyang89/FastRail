@@ -1,7 +1,7 @@
 ﻿using Google.Protobuf;
 using RocksDbSharp;
 
-namespace RaftNET;
+namespace RaftNET.Persistence;
 
 public class RocksPersistence : IPersistence, IDisposable {
     private readonly RocksDb _db;

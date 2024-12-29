@@ -1,8 +1,8 @@
 using System.Numerics;
 
-namespace RaftNET;
+namespace RaftNET.Replication;
 
-internal class MatchVector<T>(T prevCommitIdx, int reserveSize)
+class MatchVector<T>(T prevCommitIdx, int reserveSize)
     where T : INumber<T> {
     private int _count;
     private readonly List<T> _match = new(reserveSize);

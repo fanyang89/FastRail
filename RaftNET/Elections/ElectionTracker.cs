@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Google.Protobuf.Collections;
 
-namespace RaftNET;
+namespace RaftNET.Elections;
 
 public class ElectionTracker {
     private readonly ISet<ulong> _responded = new HashSet<ulong>();

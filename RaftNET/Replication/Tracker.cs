@@ -1,4 +1,4 @@
-namespace RaftNET;
+namespace RaftNET.Replication;
 
 public class Tracker {
     private readonly SortedSet<ulong> _currentVoters = new();

@@ -1,4 +1,4 @@
-﻿namespace RaftNET;
+﻿namespace RaftNET.Concurrent;
 
 public class LogLimiter(int initialCount, int maxCount) {
     private readonly SemaphoreSlim _semaphore = new(initialCount, maxCount);

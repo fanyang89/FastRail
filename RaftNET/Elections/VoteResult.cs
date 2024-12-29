@@ -1,4 +1,4 @@
-namespace RaftNET;
+namespace RaftNET.Elections;
 
 // Possible leader election outcomes.
 public enum VoteResult {

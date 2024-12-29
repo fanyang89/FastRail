@@ -1,4 +1,4 @@
-namespace RaftNET;
+namespace RaftNET.Replication;
 
 public class FollowerProgress {
     public const ulong MaxInFlight = 10;

@@ -1,4 +1,6 @@
-﻿namespace RaftNET.Tests;
+﻿using RaftNET.Exceptions;
+
+namespace RaftNET.Tests;
 
 public class ConfigurationChangeTest : FSMTestBase {
     [Test]

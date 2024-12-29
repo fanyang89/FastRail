@@ -1,4 +1,4 @@
-namespace RaftNET;
+namespace RaftNET.Replication;
 
 public enum FollowerProgressState {
     // In this state only one append entry is sent until matching index is found.

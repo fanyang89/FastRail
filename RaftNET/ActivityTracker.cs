@@ -1,4 +1,6 @@
-﻿namespace RaftNET;
+﻿using RaftNET.Replication;
+
+namespace RaftNET;
 
 public class ActivityTracker(Tracker tracker) {
     private int _cur;

@@ -1,3 +1,5 @@
+using RaftNET.Replication;
+
 namespace RaftNET.Tests;
 
 public class TrackerTest {

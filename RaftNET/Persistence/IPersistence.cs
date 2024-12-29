@@ -1,4 +1,4 @@
-﻿namespace RaftNET;
+﻿namespace RaftNET.Persistence;
 
 public interface IPersistence {
     void StoreTermVote(ulong term, ulong vote);
