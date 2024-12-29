@@ -33,7 +33,9 @@ public class PersistenceBasicTest {
             Assert.That(termVote.Term, Is.EqualTo(term));
             Assert.That(termVote.VotedFor, Is.EqualTo(votedFor));
             Assert.That(p.LoadCommitIdx(), Is.EqualTo(commitIdx));
-            Assert.That(p.LoadSnapshotDescriptor().Idx, Is.EqualTo(1));
+            var snapshot = p.LoadSnapshotDescriptor();
+            Assert.That(snapshot, Is.Not.Null);
+            Assert.That(snapshot.Idx, Is.EqualTo(1));
 
             var logs = p.LoadLog();
             Assert.That(logs.Count, Is.EqualTo(entries.Count));

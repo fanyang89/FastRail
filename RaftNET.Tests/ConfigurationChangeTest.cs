@@ -1,11 +1,6 @@
 ﻿namespace RaftNET.Tests;
 
 public class ConfigurationChangeTest : FSMTestBase {
-    public const ulong Id1 = 1;
-    public const ulong Id2 = 2;
-    public const ulong Id3 = 3;
-    public const ulong Id4 = 4;
-
     [Test]
     public void AddNode() {
         var cfg = Messages.ConfigFromIds(Id1, Id2);

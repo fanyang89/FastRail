@@ -1,6 +1,12 @@
 ﻿namespace RaftNET.Tests;
 
 public class FSMTestBase {
+    protected const ulong Id1 = 1;
+    protected const ulong Id2 = 2;
+    protected const ulong Id3 = 3;
+    protected const ulong Id4 = 4;
+    protected const ulong Id5 = 5;
+
     protected void ElectionTimeout(FSM fsm) {
         for (var i = 0; i <= 2 * FSM.ElectionTimeout; ++i) {
             fsm.Tick();

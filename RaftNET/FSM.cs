@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using Google.Protobuf;
+using Microsoft.AspNetCore.DataProtection.KeyManagement.Internal;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OneOf;
@@ -158,7 +159,7 @@ public partial class FSM {
         return output;
     }
 
-    void AdvanceStableIdx(ulong idx) {
+    private void AdvanceStableIdx(ulong idx) {
         _log.StableTo(idx);
         if (IsLeader) {
             var leaderProgress = LeaderState.Tracker.Find(_myID);
@@ -346,7 +347,7 @@ public partial class FSM {
     private void BecomeLeader() {
         Debug.Assert(!IsLeader);
         _output.StateChanged = true;
-        _state = new Leader();
+        _state = new Leader(_config.MaxLogSize);
         _lastElectionTime = _clock.Now();
         _pingLeader = false;
         AddEntry(new Dummy());
@@ -362,7 +363,7 @@ public partial class FSM {
     public LogEntry AddEntry(OneOf<Dummy, byte[], Configuration> command) {
         CheckIsLeader();
 
-        if (LeaderState.stepDown != null) {
+        if (LeaderState.StepDown != null) {
             throw new NotLeaderException();
         }
 
@@ -446,13 +447,13 @@ public partial class FSM {
             _lastElectionTime = _clock.Now();
         }
 
-        if (state.stepDown != null) {
+        if (state.StepDown != null) {
             var me = state.Tracker.Find(_myID);
 
             if (me == null || !me.CanVote) {
                 _logger.LogTrace("not aborting step down: we have been removed from the configuration");
-            } else if (state.stepDown <= _clock.Now()) {
-                state.stepDown = null;
+            } else if (state.StepDown <= _clock.Now()) {
+                state.StepDown = null;
                 state.TimeoutNowSent = null;
                 _abortLeadershipTransfer = true;
             } else if (state.TimeoutNowSent != null) {
@@ -685,8 +686,24 @@ public partial class FSM {
         );
     }
 
+    public void WaitForMemoryPermit(int size) {
+        CheckIsLeader();
+        LeaderState.LogLimiter.Wait(size);
+    }
 
-    public void TransferLeadership(long timeout = 0) {}
+    public void TransferLeadership(long timeout = 0) {
+        CheckIsLeader();
+        var leader = LeaderState.Tracker.Find(_myID);
+        var voterCount = GetConfiguration().Current.Count(x => x.CanVote);
+        if (voterCount == 1 && leader is { CanVote: true }) {
+            throw new NoOtherVotingMemberException();
+        }
+        LeaderState.LogLimiter.Wait(_log.MemoryUsage());
+        LeaderState.StepDown = _clock.Now() + timeout;
+        _pingLeader = false;
+        AddEntry(new Dummy());
+        LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
+    }
 
     private void RequestVote(ulong from, VoteRequest request) {
         Debug.Assert(request.IsPreVote || _currentTerm == request.CurrentTerm);
@@ -779,7 +796,7 @@ public partial class FSM {
         }
     }
 
-    private void AppendEntriesResponse(ulong from, AppendResponse response) {
+    private async Task AppendEntriesResponse(ulong from, AppendResponse response) {
         Debug.Assert(IsLeader);
         var progress = LeaderState.Tracker.Find(from);
         if (progress == null) {
@@ -802,7 +819,7 @@ public partial class FSM {
             var lastIdx = response.Accepted.LastNewIdx;
             progress.Accepted(lastIdx);
             progress.BecomePipeline();
-            if (LeaderState.stepDown != null &&
+            if (LeaderState.StepDown != null &&
                 LeaderState.TimeoutNowSent == null &&
                 progress.CanVote &&
                 progress.MatchIdx == _log.LastIdx()) {

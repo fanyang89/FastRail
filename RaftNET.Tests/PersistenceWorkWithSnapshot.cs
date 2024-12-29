@@ -30,6 +30,7 @@ public class PersistenceWorkWithSnapshot {
     public void StoreLoad() {
         _persistence.StoreSnapshotDescriptor(new SnapshotDescriptor { Idx = 5 }, _count);
         var snapshot = _persistence.LoadSnapshotDescriptor();
+        Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot.Idx, Is.EqualTo(5));
     }
 

@@ -1,9 +1,8 @@
 ﻿namespace RaftNET;
 
-public class Leader {
-    public Tracker Tracker { get; set; } = new();
-    public long? stepDown;
+public class Leader(int maxLogSize) {
+    public readonly Tracker Tracker = new();
+    public long? StepDown;
     public ulong? TimeoutNowSent;
-
-    private FSM FSM;
+    public LogLimiter LogLimiter = new(maxLogSize, maxLogSize);
 }

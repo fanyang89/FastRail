@@ -3,12 +3,6 @@
 namespace RaftNET.Tests;
 
 public class ElectionTest : FSMTestBase {
-    private const ulong Id1 = 1;
-    private const ulong Id2 = 2;
-    private const ulong Id3 = 3;
-    private const ulong Id4 = 4;
-    private const ulong Id5 = 5;
-
     [TestCase(true)]
     [TestCase(false)]
     public void SingleNode(bool enablePreVote) {

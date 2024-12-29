@@ -273,4 +273,8 @@ public class Log {
             }
         }
     }
+
+    public int MemoryUsage() {
+        throw new NotImplementedException();
+    }
 }

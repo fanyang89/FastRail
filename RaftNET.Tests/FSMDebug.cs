@@ -13,20 +13,12 @@ public class FSMDebug : FSM {
     ) : base(id, currentTerm, votedFor, log, 0, failureDetector, config, Notifier, logger) {
     }
 
-    public void BecomeFollower(ulong leader) {
-        base.BecomeFollower(leader);
-    }
-
     public FollowerProgress? GetProgress(ulong id) {
         return LeaderState.Tracker.Find(id);
     }
 
-    public Log GetLog() {
-        return base.GetLog();
-    }
-
     public bool IsLeadershipTransferActive() {
         Debug.Assert(IsLeader);
-        return LeaderState.stepDown != null;
+        return LeaderState.StepDown != null;
     }
 }

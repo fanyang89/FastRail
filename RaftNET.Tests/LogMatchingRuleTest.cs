@@ -1,10 +1,6 @@
 ﻿namespace RaftNET.Tests;
 
 public class LogMatchingRuleTest : FSMTestBase {
-    private const ulong Id1 = 1;
-    private const ulong Id2 = 2;
-    private const ulong Id3 = 3;
-
     private VoteResponse RequestVote(FSM fsm, ulong term, ulong lastLogIdx, ulong lastLogTerm) {
         fsm.Step(Id2, new VoteRequest { CurrentTerm = term, LastLogIdx = lastLogIdx, LastLogTerm = lastLogTerm });
         var output = fsm.GetOutput();

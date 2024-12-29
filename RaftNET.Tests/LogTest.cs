@@ -1,8 +1,6 @@
 ﻿namespace RaftNET.Tests;
 
 public class LogTest {
-    private ulong Id1 = 1;
-
     [Test]
     public void TestAppendRaftLogs() {
         var cfg = Messages.ConfigFromIds(1);

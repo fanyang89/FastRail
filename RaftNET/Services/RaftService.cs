@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace RaftNET.Services;
 
-public class RaftService : Raft.RaftBase, IDisposable {
+public partial class RaftService : Raft.RaftBase, IDisposable {
     private readonly FSM _fsm;
     private readonly Notifier _fsmEventNotify = new();
     private readonly ILogger<RaftService> _logger;
@@ -20,16 +20,6 @@ public class RaftService : Raft.RaftBase, IDisposable {
 
     private ulong _appliedIdx;
     private ulong _snapshotDescIdx;
-
-    public class Config {
-        public string DataDir { get; set; }
-        public ulong MyId { get; set; }
-        public IStateMachine StateMachine { get; set; }
-        public ILoggerFactory LoggerFactory { get; set; }
-        public bool EnablePreVote { get; set; } = true;
-        public Action<Event> OnEvent { get; set; }
-        public AddressBook AddressBook { get; set; }
-    }
 
     public RaftService(Config config) {
         var loggerFactory = config.LoggerFactory;
@@ -52,7 +42,9 @@ public class RaftService : Raft.RaftBase, IDisposable {
         var log = new Log(snapshot, logEntries);
         var fd = new TrivialFailureDetector();
         var fsmConfig = new FSMConfig {
-            EnablePreVote = config.EnablePreVote
+            EnablePreVote = config.EnablePreVote,
+            MaxLogSize = config.MaxLogSize,
+            AppendRequestThreshold = config.AppendRequestThreshold,
         };
         _fsm = new FSM(
             config.MyId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify,
