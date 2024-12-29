@@ -180,4 +180,10 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
             _fsm.Tick();
         }
     }
+
+    public T RunFSM<T>(Func<FSM, T> fn) {
+        lock (_fsm) {
+            return fn(_fsm);
+        }
+    }
 }

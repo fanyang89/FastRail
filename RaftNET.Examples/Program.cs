@@ -1,5 +1,7 @@
 using System.CommandLine;
+using System.Net;
 using RaftNET.Services;
+using Option = Google.Protobuf.WellKnownTypes.Option;
 
 namespace RaftNET.Examples;
 
@@ -20,6 +22,18 @@ class Program {
         myIdOption.AddAlias("-i");
         rootCommand.AddOption(myIdOption);
 
+        var listenAddressOption = new Option<IPAddress>(
+            name: "--listen-address",
+            description: "The listen address") { IsRequired = true };
+        listenAddressOption.AddAlias("-l");
+        rootCommand.AddOption(listenAddressOption);
+
+        var listenPortOption = new Option<int>(
+            name: "--port",
+            description: "The listen port") { IsRequired = true };
+        listenPortOption.AddAlias("-p");
+        rootCommand.AddOption(listenPortOption);
+
         var initialmemberOption = new Option<List<string>>(
             name: "--members",
             description: "Initial members, eg. 1=127.0.0.1:3000") {
@@ -31,13 +45,14 @@ class Program {
 
         rootCommand.SetHandler(
             Run(args, loggerFactory),
-            dataDirOption, myIdOption, initialmemberOption
+            dataDirOption, myIdOption, initialmemberOption, listenAddressOption, listenPortOption
         );
         return await rootCommand.InvokeAsync(args);
     }
 
-    private static Action<DirectoryInfo?, ulong, List<string>> Run(string[] args, ILoggerFactory loggerFactory) {
-        return (dataDir, myId, initialMembers) => {
+    private static Action<DirectoryInfo?, ulong, List<string>, IPAddress, int>
+        Run(string[] args, ILoggerFactory loggerFactory) {
+        return (dataDir, myId, initialMembers, listenAddress, listenPort) => {
             if (dataDir == null) {
                 throw new ArgumentException(nameof(dataDir));
             }
@@ -52,7 +67,9 @@ class Program {
                     DataDir: dataDir.FullName,
                     LoggerFactory: loggerFactory,
                     StateMachine: new LogStateMachine(loggerFactory.CreateLogger<LogStateMachine>()),
-                    AddressBook: new AddressBook(initialMembers)
+                    AddressBook: new AddressBook(initialMembers),
+                    ListenAddress: listenAddress,
+                    Port: listenPort
                 )));
             builder.Services.AddSingleton<RaftService>(
                 provider => provider.GetServices<IHostedService>().OfType<RaftService>().First());

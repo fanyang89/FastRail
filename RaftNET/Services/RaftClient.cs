@@ -9,7 +9,10 @@ public class RaftClient : IRaftClient {
 
     public RaftClient(ulong myId, string address) {
         _myId = myId;
-        var channel = GrpcChannel.ForAddress(address);
+        var options = new GrpcChannelOptions {
+            Credentials = ChannelCredentials.Insecure
+        };
+        var channel = GrpcChannel.ForAddress(address, options);
         _client = new Raft.RaftClient(channel);
     }
 
@@ -20,6 +23,15 @@ public class RaftClient : IRaftClient {
             }
         };
         await _client.PingAsync(new PingRequest(), metadata, deadline).ResponseAsync;
+    }
+
+    public async Task Ping() {
+        var metadata = new Metadata {
+            {
+                RaftService.KeyFromId, _myId.ToString()
+            }
+        };
+        await _client.PingAsync(new PingRequest(), metadata).ResponseAsync;
     }
 
     public async Task VoteRequest(VoteRequest request) {
