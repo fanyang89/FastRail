@@ -6,11 +6,12 @@ namespace RaftNET.FailureDetectors;
 public class RpcFailureDetector(
     ulong myId,
     AddressBook addressBook,
+    IClock clock,
     TimeSpan interval,
     TimeSpan timeout,
     ILoggerFactory loggerFactory
-) : IFailureDetector, IListener {
-    private readonly Dictionary<ulong, PingWorker> _workers = new();
+) : IFailureDetector, IListener, IDisposable {
+    private readonly Dictionary<ulong, IPingWorker> _workers = new();
     private readonly Dictionary<ulong, bool> _alive = new();
 
     public bool IsAlive(ulong server) {
@@ -19,12 +20,16 @@ public class RpcFailureDetector(
         }
     }
 
+    public virtual IPingWorker CreateWorker(ulong serverId) {
+        return new PingWorker(myId, serverId, addressBook, interval, timeout,
+            loggerFactory.CreateLogger<PingWorker>(), this, clock);
+    }
+
     public void Add(ulong serverId) {
         lock (_workers) {
-            _workers.Add(serverId,
-                new PingWorker(myId, serverId, addressBook, interval, timeout,
-                    loggerFactory.CreateLogger<PingWorker>(), this, new SystemClock())
-            );
+            var worker = CreateWorker(serverId);
+            _workers.Add(serverId, worker);
+            worker.Start();
         }
     }
 
@@ -32,8 +37,17 @@ public class RpcFailureDetector(
         lock (_workers) {
             _workers.Remove(serverId, out var worker);
             if (worker != null) {
-                worker.Dispose();
+                worker.Stop();
             }
+        }
+    }
+
+    public void RemoveAll() {
+        lock (_workers) {
+            foreach (var (_, worker) in _workers) {
+                worker.Stop();
+            }
+            _workers.Clear();
         }
     }
 
@@ -55,5 +69,10 @@ public class RpcFailureDetector(
                 worker.UpdateAddress();
             }
         }
+    }
+
+    public void Dispose() {
+        RemoveAll();
+        loggerFactory.Dispose();
     }
 }

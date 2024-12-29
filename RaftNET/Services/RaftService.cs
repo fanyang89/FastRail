@@ -50,7 +50,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
         var fd = new RpcFailureDetector(config.MyId,
-            _addressBook, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), _loggerFactory);
+            _addressBook, new SystemClock(), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), _loggerFactory);
         var fsmConfig = new FSM.Config(
             EnablePreVote: config.EnablePreVote,
             AppendRequestThreshold: config.AppendRequestThreshold,
@@ -74,10 +74,16 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
     }
 
     public async Task StopAsync(CancellationToken cancellationToken) {
-        await _ioTask.WaitAsync(cancellationToken);
+        if (_ioTask != null) {
+            await _ioTask.WaitAsync(cancellationToken);
+        }
         _applyMessages.Add(new ApplyMessage(), cancellationToken);
-        await _applyTask.WaitAsync(cancellationToken);
-        await _ticker.DisposeAsync();
+        if (_applyTask != null) {
+            await _applyTask.WaitAsync(cancellationToken);
+        }
+        if (_ticker != null) {
+            await _ticker.DisposeAsync();
+        }
     }
 
     private Action DoApply(CancellationToken cancellationToken) {

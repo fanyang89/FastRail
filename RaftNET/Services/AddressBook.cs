@@ -1,13 +1,9 @@
 ﻿namespace RaftNET.Services;
 
-public interface IAddressBook {
-    void Add(ulong id, string address);
-    string? Find(ulong id);
-    void Remove(ulong id);
-}
-
 public class AddressBook : IAddressBook {
     private readonly Dictionary<ulong, string> _addresses = new();
+
+    public AddressBook() {}
 
     public AddressBook(List<string> initialMembers) {
         foreach (var memberString in initialMembers) {
