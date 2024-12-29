@@ -50,9 +50,9 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
         var fd = new RpcFailureDetector(config.MyId,
             _addressBook, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), _loggerFactory);
         var fsmConfig = new FSM.Config(
-            config.EnablePreVote,
-            config.AppendRequestThreshold,
-            config.MaxLogSize
+            EnablePreVote: config.EnablePreVote,
+            AppendRequestThreshold: config.AppendRequestThreshold,
+            MaxLogSize: config.MaxLogSize
         );
         _fsm = new FSM(
             config.MyId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify,

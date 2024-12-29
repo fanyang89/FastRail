@@ -1,7 +1,35 @@
 using System.CommandLine;
 using RaftNET.Services;
+using RaftNET.StateMachines;
 
 namespace RaftNET.Examples;
+
+class LogStateMachine(ILogger<LogStateMachine> logger) : IStateMachine {
+    public void Apply(List<Command> commands) {
+        foreach (var command in commands) {
+            logger.LogInformation("Applying command: {}", command.Buffer);
+        }
+    }
+
+    public ulong TakeSnapshot() {
+        logger.LogInformation("Taking snapshot");
+        return 1;
+    }
+
+    public void DropSnapshot(ulong snapshot) {
+        logger.LogInformation("Drop snapshot");
+    }
+
+    public void LoadSnapshot(ulong snapshot) {
+        logger.LogInformation("Loading snapshot");
+    }
+
+    public void OnEvent(Event ev) {
+        ev.Switch(e => {
+            logger.LogInformation("Server({}) role change to {}", e.ServerId, e.Role);
+        });
+    }
+}
 
 class Program {
     static async Task<int> Main(string[] args) {
@@ -36,11 +64,13 @@ class Program {
 
             var builder = WebApplication.CreateBuilder(args);
             builder.Services.AddSingleton<RaftService.Config>(_ =>
-                new RaftService.Config {
-                    DataDir = dataDir.FullName,
-                    MyId = myId,
-                    LoggerFactory = loggerFactory
-                });
+                new RaftService.Config(
+                    MyId: myId,
+                    DataDir: dataDir.FullName,
+                    LoggerFactory: loggerFactory,
+                    StateMachine: new LogStateMachine(loggerFactory.CreateLogger<LogStateMachine>()),
+                    AddressBook: new AddressBook()
+                ));
             builder.Services.AddGrpc();
             var app = builder.Build();
             app.MapGrpcService<RaftService>();

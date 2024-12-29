@@ -1,3 +1,5 @@
+using RaftNET.Services;
+
 namespace RaftNET.StateMachines;
 
 public class EmptyStateMachine : IStateMachine {
@@ -12,5 +14,8 @@ public class EmptyStateMachine : IStateMachine {
     }
 
     public void LoadSnapshot(ulong snapshot) {
+    }
+
+    public void OnEvent(Event e) {
     }
 }

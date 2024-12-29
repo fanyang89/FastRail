@@ -6,11 +6,10 @@ public partial class FSM {
         bool EnablePreVote,
         // max size of appended entries in bytes
         int AppendRequestThreshold,
-        // Limit in bytes on the size of in-memory part of the log after
-        // which requests are stopped to be admitted until the log
-        // is shrunk back by a snapshot. Should be greater than
-        // the sum of sizes of trailing log entries, otherwise the state
-        // machine will deadlock.
+        // Limit in bytes on the size of the in-memory part of the log after which
+        // which requests are stopped until the log is shrunk by a is shrunk by a snapshot.
+        // Should be greater than than the sum of the following log entry sizes,
+        // otherwise the state machine will deadlock.
         int MaxLogSize
     );
 }

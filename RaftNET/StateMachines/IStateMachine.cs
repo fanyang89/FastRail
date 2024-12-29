@@ -1,3 +1,5 @@
+using RaftNET.Services;
+
 namespace RaftNET.StateMachines;
 
 public interface IStateMachine {
@@ -5,4 +7,5 @@ public interface IStateMachine {
     ulong TakeSnapshot();
     void DropSnapshot(ulong snapshot);
     void LoadSnapshot(ulong snapshot);
+    void OnEvent(Event e);
 }
