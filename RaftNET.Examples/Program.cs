@@ -39,22 +39,33 @@ class Program {
         var dataDirOption = new Option<DirectoryInfo?>(
             name: "--data-dir",
             description: "The data directory") { IsRequired = true };
+        dataDirOption.AddAlias("-d");
         rootCommand.AddOption(dataDirOption);
 
         var myIdOption = new Option<ulong>(
             name: "--my-id",
             description: "The ID for this server") { IsRequired = true };
+        myIdOption.AddAlias("-i");
         rootCommand.AddOption(myIdOption);
+
+        var initialmemberOption = new Option<List<string>>(
+            name: "--members",
+            description: "Initial members, eg. 1=127.0.0.1:3000") {
+            IsRequired = true,
+            AllowMultipleArgumentsPerToken = true
+        };
+        initialmemberOption.AddAlias("-m");
+        rootCommand.AddOption(initialmemberOption);
 
         rootCommand.SetHandler(
             Run(args, loggerFactory),
-            dataDirOption, myIdOption
+            dataDirOption, myIdOption, initialmemberOption
         );
         return await rootCommand.InvokeAsync(args);
     }
 
-    private static Action<DirectoryInfo?, ulong> Run(string[] args, ILoggerFactory loggerFactory) {
-        return (dataDir, myId) => {
+    private static Action<DirectoryInfo?, ulong, List<string>> Run(string[] args, ILoggerFactory loggerFactory) {
+        return (dataDir, myId, initialMembers) => {
             if (dataDir == null) {
                 throw new ArgumentException(nameof(dataDir));
             }
@@ -69,7 +80,7 @@ class Program {
                     DataDir: dataDir.FullName,
                     LoggerFactory: loggerFactory,
                     StateMachine: new LogStateMachine(loggerFactory.CreateLogger<LogStateMachine>()),
-                    AddressBook: new AddressBook()
+                    AddressBook: new AddressBook(initialMembers)
                 ));
             builder.Services.AddGrpc();
             var app = builder.Build();
