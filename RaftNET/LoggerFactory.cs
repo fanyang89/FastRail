@@ -10,17 +10,17 @@ public static class LoggerFactory {
     public static Action<ILoggingBuilder> Configure() {
         return builder => builder.AddSimpleConsole(
             options => {
-                options.IncludeScopes = true;
+                options.IncludeScopes = false;
                 options.SingleLine = true;
-                options.TimestampFormat = "hh:mm:ss ";
+                options.TimestampFormat = "hh:mm:ss.ffff ";
             });
     }
 
     public static Action<SimpleConsoleFormatterOptions> ConfigureAspNet() {
         return options => {
-            options.IncludeScopes = true;
+            options.IncludeScopes = false;
             options.SingleLine = true;
-            options.TimestampFormat = "hh:mm:ss ";
+            options.TimestampFormat = "hh:mm:ss.ffff ";
         };
     }
 }

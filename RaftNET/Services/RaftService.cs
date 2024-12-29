@@ -91,6 +91,7 @@ public partial class RaftService : RaftNET.RaftCluster.RaftBase, IHostedService 
 
     private Action DoApply(CancellationToken cancellationToken) {
         return () => {
+            _logger.LogInformation("Apply{{{}}} started", _myId);
             while (!cancellationToken.IsCancellationRequested) {
                 var message = _applyMessages.Take();
                 if (message.IsExit) {
@@ -112,11 +113,13 @@ public partial class RaftService : RaftNET.RaftCluster.RaftBase, IHostedService 
                     _ => {}
                 );
             }
+            _logger.LogInformation("Apply{{{}}} stopped", _myId);
         };
     }
 
     private Func<Task> DoIO(CancellationToken cancellationToken, ulong stableIdx) {
         return async () => {
+            _logger.LogInformation("IO{{{}}} started", _myId);
             while (!cancellationToken.IsCancellationRequested) {
                 _fsmEventNotify.Wait();
                 FSM.Output? batch = null;
@@ -130,6 +133,7 @@ public partial class RaftService : RaftNET.RaftCluster.RaftBase, IHostedService 
                     await ProcessFSMOutput(stableIdx, batch);
                 }
             }
+            _logger.LogInformation("IO{{{}}} started", _myId);
         };
     }
 

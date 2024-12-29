@@ -187,6 +187,7 @@ public partial class FSM {
         }
 
         _commitIdx = newCommitIdx;
+        _eventNotify.Signal();
 
         if (!committedConfChange) {
             return;
@@ -236,6 +237,7 @@ public partial class FSM {
 
     private void SendTo(ulong to, Message message) {
         _messages.Add(new ToMessage(to, message));
+        _eventNotify.Signal();
     }
 
     private void SendTo(ulong to, VoteRequest request) {
@@ -402,6 +404,7 @@ public partial class FSM {
             config => { logEntry.Configuration = config; }
         );
         _log.Add(logEntry);
+        _eventNotify.Signal();
 
         if (isConfig) {
             LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
@@ -469,6 +472,7 @@ public partial class FSM {
                 state.StepDown = null;
                 state.TimeoutNowSent = null;
                 _abortLeadershipTransfer = true;
+                _eventNotify.Signal();
             } else if (state.TimeoutNowSent != null) {
                 _logger.LogTrace("Tick({}) resend TimeoutNowRequest", _myID);
                 SendTo(state.TimeoutNowSent.Value, new TimeoutNowRequest { CurrentTerm = _currentTerm });
@@ -811,6 +815,7 @@ public partial class FSM {
         var newCommitIdx = ulong.Min(leaderCommitIdx, _log.LastIdx());
         if (newCommitIdx > _commitIdx) {
             _commitIdx = newCommitIdx;
+            _eventNotify.Signal();
         }
     }
 
@@ -909,6 +914,7 @@ public partial class FSM {
             local,
             currentSnapshot.Idx + 1 - newFirstIndex
         );
+        _eventNotify.Signal();
         return true;
     }
 
