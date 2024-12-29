@@ -3,21 +3,23 @@ using Grpc.Net.Client;
 
 namespace RaftNET.Services;
 
-public class RaftClient {
+public class RaftClient : IRaftClient {
     private readonly Raft.RaftClient _client;
-    private readonly GrpcChannel _channel;
     private readonly ulong _myId;
 
-    private RaftClient(ulong myId, GrpcChannel channel, Raft.RaftClient client) {
-        _client = client;
-        _channel = channel;
+    public RaftClient(ulong myId, string address) {
         _myId = myId;
+        var channel = GrpcChannel.ForAddress(address);
+        _client = new Raft.RaftClient(channel);
     }
 
-    public static RaftClient Dial(ulong myId, string address) {
-        var channel = GrpcChannel.ForAddress(address);
-        var client = new Raft.RaftClient(channel);
-        return new RaftClient(myId, channel, client);
+    public async Task Ping(DateTime deadline) {
+        var metadata = new Metadata {
+            {
+                RaftService.KeyFromId, _myId.ToString()
+            }
+        };
+        await _client.PingAsync(new PingRequest(), metadata, deadline).ResponseAsync;
     }
 
     public async Task VoteRequest(VoteRequest request) {

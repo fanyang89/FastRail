@@ -13,6 +13,7 @@ service Raft {
   rpc SendSnapshot(InstallSnapshot) returns (Void);
   rpc RespondSendSnapshot(SnapshotResponse) returns (Void);
   rpc TimeoutNow(TimeoutNowRequest) returns (Void);
+  rpc Ping(PingRequest) returns (PingResponse);
 }
 
 message Void {}
@@ -175,3 +176,7 @@ message TermVote {
   uint64 term = 1;
   uint64 voted_for = 2;
 }
+
+message PingRequest {}
+
+message PingResponse {}

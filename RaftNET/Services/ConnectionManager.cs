@@ -14,7 +14,7 @@ public class ConnectionManager(ulong myId, AddressBook addressBook, ILogger<Conn
             if (addr == null) {
                 throw new NoAddressException(id);
             } else {
-                var client = RaftClient.Dial(myId, addr);
+                var client = new RaftClient(myId, addr);
                 _channels.Add(id, client);
                 return client;
             }

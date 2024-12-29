@@ -3,7 +3,7 @@
 namespace RaftNET.Services;
 
 public partial class RaftService {
-    public class Config {
+    public record Config {
         public string DataDir { get; set; }
         public ulong MyId { get; set; }
         public IStateMachine StateMachine { get; set; }

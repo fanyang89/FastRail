@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Grpc.Core;
 using Microsoft.Extensions.Logging;
 
 namespace RaftNET.Services;
@@ -17,16 +16,20 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
     private readonly Task _ioTask;
     private readonly BlockingCollection<ApplyMessage> _applyMessages = new();
     private readonly ConnectionManager _connectionManager;
-
+    private readonly AddressBook _addressBook;
+    private readonly ulong _myId;
+    private readonly ILoggerFactory _loggerFactory;
     private ulong _appliedIdx;
     private ulong _snapshotDescIdx;
 
     public RaftService(Config config) {
-        var loggerFactory = config.LoggerFactory;
-        _logger = loggerFactory.CreateLogger<RaftService>();
+        _loggerFactory = config.LoggerFactory;
         _stateMachine = config.StateMachine;
-        _connectionManager = new ConnectionManager(
-            config.MyId, config.AddressBook, loggerFactory.CreateLogger<ConnectionManager>());
+        _addressBook = config.AddressBook;
+        _myId = config.MyId;
+
+        _logger = _loggerFactory.CreateLogger<RaftService>();
+        _connectionManager = new ConnectionManager(_myId, _addressBook, _loggerFactory.CreateLogger<ConnectionManager>());
         _persistence = new RocksPersistence(config.DataDir);
 
         ulong term = 0;
@@ -40,7 +43,8 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
         var snapshot = _persistence.LoadSnapshotDescriptor();
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
-        var fd = new TrivialFailureDetector();
+        var fd = new RpcFailureDetector(config.MyId,
+            _addressBook, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), _loggerFactory);
         var fsmConfig = new FSM.Config(
             config.EnablePreVote,
             config.AppendRequestThreshold,
@@ -167,69 +171,5 @@ public partial class RaftService : Raft.RaftBase, IDisposable {
         lock (_fsm) {
             _fsm.Tick();
         }
-    }
-
-    public override Task<Void> Vote(VoteRequest request, ServerCallContext context) {
-        var from = GetFromServerId(context.RequestHeaders);
-        lock (_fsm) {
-            _fsm.Step(from, request);
-        }
-        return Task.FromResult(new Void());
-    }
-
-    public override Task<Void> RespondVote(VoteResponse request, ServerCallContext context) {
-        var from = GetFromServerId(context.RequestHeaders);
-        lock (_fsm) {
-            _fsm.Step(from, request);
-        }
-        return Task.FromResult(new Void());
-    }
-
-    public override Task<Void> Append(AppendRequest request, ServerCallContext context) {
-        var from = GetFromServerId(context.RequestHeaders);
-        lock (_fsm) {
-            _fsm.Step(from, request);
-        }
-        return Task.FromResult(new Void());
-    }
-
-    public override Task<Void> RespondAppend(AppendResponse request, ServerCallContext context) {
-        var from = GetFromServerId(context.RequestHeaders);
-        lock (_fsm) {
-            _fsm.Step(from, request);
-        }
-        return Task.FromResult(new Void());
-    }
-
-    public override Task<Void> SendSnapshot(InstallSnapshot request, ServerCallContext context) {
-        var from = GetFromServerId(context.RequestHeaders);
-        lock (_fsm) {
-            _fsm.Step(from, request);
-        }
-        return Task.FromResult(new Void());
-    }
-
-    public override Task<Void> RespondSendSnapshot(SnapshotResponse request, ServerCallContext context) {
-        var from = GetFromServerId(context.RequestHeaders);
-        lock (_fsm) {
-            _fsm.Step(from, request);
-        }
-        return Task.FromResult(new Void());
-    }
-
-    public override Task<Void> TimeoutNow(TimeoutNowRequest request, ServerCallContext context) {
-        var from = GetFromServerId(context.RequestHeaders);
-        lock (_fsm) {
-            _fsm.Step(from, request);
-        }
-        return Task.FromResult(new Void());
-    }
-
-    public readonly static string KeyFromId = "raftnet-from-id";
-
-    private ulong GetFromServerId(Metadata metadata) {
-        Debug.Assert(metadata.Any(x => x.Key == KeyFromId));
-        var entry = metadata.First(x => x.Key == KeyFromId);
-        return Convert.ToUInt64(entry.Value);
     }
 }
