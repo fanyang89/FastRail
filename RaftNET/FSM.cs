@@ -882,4 +882,8 @@ public partial class FSM {
     protected Log GetLog() {
         return _log;
     }
+
+    public Configuration GetConfiguration() {
+        return _log.GetConfiguration();
+    }
 }
