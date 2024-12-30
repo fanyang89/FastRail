@@ -7,16 +7,15 @@ namespace RaftNET.Services;
 public class RaftCluster {
     private readonly Dictionary<ulong, RaftServer> _servers = new();
 
-    public RaftCluster(ILoggerFactory loggerFactory, ulong n = 3) {
+    public RaftCluster(ILoggerFactory loggerFactory, ulong serverCount) {
         var addressBook = new AddressBook();
-        var members = new Dictionary<ulong, bool>();
-        for (ulong i = 1; i <= n; i++) {
-            members.Add(i, true);
-        }
-        for (ulong i = 1; i <= n; i++) {
-            var tempDir = Directory.CreateTempSubdirectory("raftnet-data");
+        for (ulong i = 1; i <= serverCount; i++) {
             addressBook.Add(i, $"http://127.0.0.1:{15000 + i}");
-            _servers.Add(i, new RaftServer(new RaftService.Config(
+        }
+
+        for (ulong i = 1; i <= serverCount; i++) {
+            var tempDir = Directory.CreateTempSubdirectory("raftnet-data");
+            var serverConfig = new RaftService.Config(
                 i,
                 tempDir.FullName,
                 loggerFactory,
@@ -24,7 +23,9 @@ public class RaftCluster {
                 addressBook,
                 IPAddress.Loopback,
                 (int)(15000 + i)
-            )));
+            );
+            var server = new RaftServer(serverConfig);
+            _servers.Add(i, server);
         }
     }
 
@@ -47,5 +48,13 @@ public class RaftCluster {
             }
         }
         return null;
+    }
+
+    public Role[] Roles() {
+        var roles = new List<Role>();
+        foreach (var (id, server) in _servers) {
+            roles.Add(server.Role);
+        }
+        return roles.ToArray();
     }
 }

@@ -3,8 +3,7 @@ using RaftNET.FailureDetectors;
 
 namespace RaftNET.Tests;
 
-public class FSMTestBase {
-    protected ILoggerFactory LoggerFactory = RaftNET.LoggerFactory.Instance;
+public class FSMTestBase : RaftTestBase {
     protected const ulong Id1 = 1;
     protected const ulong Id2 = 2;
     protected const ulong Id3 = 3;

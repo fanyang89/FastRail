@@ -81,6 +81,7 @@ public partial class FSM {
     private Follower FollowerState => _state.AsT0;
     private Candidate CandidateState => _state.AsT1;
     protected Leader LeaderState => _state.AsT2;
+    public Role Role => IsFollower ? Role.Follower : IsLeader ? Role.Leader : Role.Candidate;
 
     public bool HasOutput() {
         var diff = _log.LastIdx() - _log.StableIdx();

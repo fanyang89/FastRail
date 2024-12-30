@@ -1,28 +1,34 @@
 ﻿using Microsoft.Extensions.Logging;
+using RaftNET.Services;
 
 namespace RaftNET.Tests;
 
-public class RaftClusterTest {
-    private ILoggerFactory _loggerFactory;
-    private Services.RaftCluster _cluster;
+public class RaftClusterTest : RaftTestBase {
+    private ILogger<RaftServerTest> _logger;
+    private RaftCluster _cluster;
+    private readonly ulong _serverCount = 3;
 
     [SetUp]
-    public void Setup() {
-        _loggerFactory = LoggerFactory.Instance;
-        _cluster = new Services.RaftCluster(_loggerFactory);
+    public new void Setup() {
+        _logger = LoggerFactory.CreateLogger<RaftServerTest>();
+        _cluster = new RaftCluster(LoggerFactory, _serverCount);
         _cluster.Start();
+        Thread.Sleep((int)(FSM.ElectionTimeout * 100 * 2));
+        _logger.LogInformation("Cluster started");
     }
 
     [TearDown]
-    public void TearDown() {
+    public new void TearDown() {
         _cluster.Stop();
-        _loggerFactory.Dispose();
     }
 
     [Test]
     public void TestClusterElection() {
-        Thread.Sleep(5000);
         var leader = _cluster.FindLeader();
         Assert.That(leader, Is.Not.Null);
+        var roles = _cluster.Roles();
+        Assert.That(roles.Count, Is.EqualTo(_serverCount));
+        Assert.That(roles.Count(x => x == Role.Leader), Is.EqualTo(1));
+        Assert.That(roles.Count(x => x == Role.Follower), Is.EqualTo(2));
     }
 }

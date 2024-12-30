@@ -6,14 +6,17 @@ using RaftNET.Services;
 
 namespace RaftNET.Tests;
 
-public class FSMDebug : FSM {
+public class FSMDebug(
+    ulong id,
+    ulong currentTerm,
+    ulong votedFor,
+    Log log,
+    IFailureDetector failureDetector,
+    FSM.Config config,
+    ILogger<FSM>? logger = null
+)
+    : FSM(id, currentTerm, votedFor, log, 0, failureDetector, config, Notifier, logger) {
     private readonly static Notifier Notifier = new();
-
-    public FSMDebug(
-        ulong id, ulong currentTerm, ulong votedFor, Log log, IFailureDetector failureDetector,
-        Config config, ILogger<FSM>? logger = null
-    ) : base(id, currentTerm, votedFor, log, 0, failureDetector, config, Notifier, logger) {
-    }
 
     public FollowerProgress? GetProgress(ulong id) {
         return LeaderState.Tracker.Find(id);

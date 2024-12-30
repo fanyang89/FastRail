@@ -17,12 +17,12 @@ public class ConfigurationChangeTest : FSMTestBase {
         fsm.Step(Id2, new VoteResponse { CurrentTerm = output.TermAndVote.Term, VoteGranted = true });
         Assert.That(fsm.IsLeader, Is.True);
 
-        // A new leader applies one dummy entry
+        // A new leader applies one fake entry
         output = fsm.GetOutput();
         Assert.That(output.LogEntries.Count, Is.EqualTo(1));
         Assert.That(output.LogEntries.First().Dummy, Is.Not.Null);
         Assert.That(output.Committed.Count, Is.Zero);
-        // accept dummy entry, otherwise no more entries will be sent
+        // accept fake entry, otherwise no more entries will be sent
         Assert.That(output.Messages.Count, Is.EqualTo(1));
         var msg = output.Messages.Last().Message.AppendRequest;
         var idx = msg.Entries.Last().Idx;

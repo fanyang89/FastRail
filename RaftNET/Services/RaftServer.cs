@@ -42,6 +42,8 @@ public class RaftServer {
 
     public bool IsLeader => _raftService.AcquireFSMLock(fsm => fsm.IsLeader);
 
+    public Role Role => _raftService.AcquireFSMLock(fsm => fsm.Role);
+
     public void AddEntry(byte[] buffer) {
         _raftService.AddEntry(buffer);
     }
