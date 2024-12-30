@@ -5,8 +5,12 @@ using RaftNET.StateMachines;
 
 namespace RaftNET.Tests;
 
-public class RaftServerTest {
-    private ILoggerFactory _loggerFactory;
+public class RaftTestBase {
+    protected ILoggerFactory _loggerFactory;
+    protected ILogger<RaftServerTest> _logger;
+}
+
+public class RaftServerTest : RaftTestBase {
     private RaftServer _server;
     private AddressBook _addressBook;
     private readonly int _port = 15000;
@@ -14,9 +18,11 @@ public class RaftServerTest {
 
     [SetUp]
     public void Setup() {
+        _loggerFactory = LoggerFactory.Instance;
+        _logger = _loggerFactory.CreateLogger<RaftServerTest>();
+
         _addressBook = new AddressBook();
         _addressBook.Add(_myId, $"http://127.0.0.1:{_port}");
-        _loggerFactory = LoggerFactory.Instance;
         var tmpDir = Directory.CreateTempSubdirectory();
         _server = new RaftServer(new RaftService.Config(
             MyId: _myId,
@@ -25,10 +31,9 @@ public class RaftServerTest {
             StateMachine: new EmptyStateMachine(),
             AddressBook: _addressBook,
             ListenAddress: IPAddress.Loopback,
-            Port: _port,
-            InitialMembers: _addressBook.GetMembers()
+            Port: _port
         ));
-        _server.Start();
+        _server.Start();    
     }
 
     [TearDown]
@@ -41,5 +46,10 @@ public class RaftServerTest {
     public async Task TestRpcServerBasic() {
         var client = new RaftClient(2, $"http://127.0.0.1:{_port}");
         await client.Ping();
+    }
+
+    [Test]
+    public void TestSingleServerIsLeader() {
+        Assert.That(_server.IsLeader, Is.True);
     }
 }

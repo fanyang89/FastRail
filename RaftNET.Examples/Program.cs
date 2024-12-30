@@ -70,8 +70,7 @@ class Program {
                     StateMachine: new LogStateMachine(loggerFactory.CreateLogger<LogStateMachine>()),
                     AddressBook: addressBook,
                     ListenAddress: listenAddress,
-                    Port: listenPort,
-                    InitialMembers: addressBook.GetMembers()
+                    Port: listenPort
                 )));
             builder.Services.AddSingleton<RaftService>(
                 provider => provider.GetServices<IHostedService>().OfType<RaftService>().First());

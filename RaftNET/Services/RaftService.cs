@@ -9,7 +9,7 @@ using RaftNET.StateMachines;
 
 namespace RaftNET.Services;
 
-public partial class RaftService : RaftNET.RaftCluster.RaftBase, IHostedService {
+public partial class RaftService : Raft.RaftBase, IHostedService {
     private readonly FSM _fsm;
     private readonly Notifier _fsmEventNotify = new();
     private readonly ILogger<RaftService> _logger;
@@ -46,12 +46,15 @@ public partial class RaftService : RaftNET.RaftCluster.RaftBase, IHostedService 
             votedFor = tv.VotedFor;
         }
         var commitedIdx = _persistence.LoadCommitIdx();
-        var snapshot = _persistence.LoadSnapshotDescriptor() ??
-                       new SnapshotDescriptor { Config = Messages.ConfigFromIds(config.InitialMembers) };
+        var snapshot = _persistence.LoadSnapshotDescriptor();
+        if (snapshot == null) {
+            _logger.LogInformation("Load empty snapshot, get initial members from current address book");
+            snapshot = new SnapshotDescriptor { Config = Messages.ConfigFromIds(_addressBook.GetMembers()) };
+        }
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
-        var fd = new RpcFailureDetector(config.MyId,
-            _addressBook, new SystemClock(), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), _loggerFactory);
+        var fd = new RpcFailureDetector(config.MyId, _addressBook, new SystemClock(), _loggerFactory,
+            TimeSpan.FromMilliseconds(config.PingInterval), TimeSpan.FromMilliseconds(config.PingTimeout));
         var fsmConfig = new FSM.Config(
             EnablePreVote: config.EnablePreVote,
             AppendRequestThreshold: config.AppendRequestThreshold,
@@ -188,7 +191,7 @@ public partial class RaftService : RaftNET.RaftCluster.RaftBase, IHostedService 
         }
     }
 
-    public T RunFSM<T>(Func<FSM, T> fn) {
+    public T AcquireFSMLock<T>(Func<FSM, T> fn) {
         lock (_fsm) {
             return fn(_fsm);
         }

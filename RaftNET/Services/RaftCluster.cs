@@ -23,8 +23,7 @@ public class RaftCluster {
                 StateMachine: new EmptyStateMachine(),
                 AddressBook: addressBook,
                 ListenAddress: IPAddress.Loopback,
-                Port: (int)(15000 + i),
-                InitialMembers: members
+                Port: (int)(15000 + i)
             )));
         }
     }

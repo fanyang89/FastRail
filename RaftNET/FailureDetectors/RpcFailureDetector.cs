@@ -7,9 +7,9 @@ public class RpcFailureDetector(
     ulong myId,
     AddressBook addressBook,
     IClock clock,
+    ILoggerFactory loggerFactory,
     TimeSpan interval,
-    TimeSpan timeout,
-    ILoggerFactory loggerFactory
+    TimeSpan timeout
 ) : IFailureDetector, IListener, IDisposable {
     private readonly Dictionary<ulong, IPingWorker> _workers = new();
     private readonly Dictionary<ulong, bool> _alive = new();

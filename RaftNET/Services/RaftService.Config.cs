@@ -13,7 +13,8 @@ public partial class RaftService {
         AddressBook AddressBook,
         IPAddress ListenAddress,
         int Port,
-        Dictionary<ulong, bool> InitialMembers,
+        int PingInterval = 1000, // ms
+        int PingTimeout = 1000, // ms
         int AppendRequestThreshold = 100000,
         bool EnablePreVote = true,
         int MaxLogSize = 4 * 1024 * 1024

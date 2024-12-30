@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using System.Runtime.InteropServices;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,5 +39,13 @@ public class RaftServer {
         _app.Lifetime.StopApplication();
     }
 
-    public bool IsLeader => _raftService.RunFSM(fsm => fsm.IsLeader);
+    public bool IsLeader => _raftService.AcquireFSMLock(fsm => fsm.IsLeader);
+
+    public void AddEntry(byte[] buffer) {
+        _raftService.AcquireFSMLock(fsm => fsm.AddEntry(buffer));
+    }
+
+    public void AddEntry(Configuration configuration) {
+        _raftService.AcquireFSMLock(fsm => fsm.AddEntry(configuration));
+    }
 }
