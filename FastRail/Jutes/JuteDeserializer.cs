@@ -99,4 +99,8 @@ public static class JuteDeserializer {
         value.DeserializeFrom(stream);
         return value;
     }
+
+    public static T Deserialize<T>(byte[] buffer) where T : IJuteDeserializable, new() {
+        return Deserialize<T>(new MemoryStream(buffer));
+    }
 }
