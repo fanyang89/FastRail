@@ -12,9 +12,9 @@
 
     <ItemGroup>
         <PackageReference Include="Grpc.AspNetCore" Version="2.64.0"/>
-        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
-        <PackageReference Include="OneOf" Version="3.0.271" />
-        <PackageReference Include="RocksDB" Version="9.7.3.54622" />
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0"/>
+        <PackageReference Include="OneOf" Version="3.0.271"/>
+        <PackageReference Include="RocksDB" Version="9.7.3.54622"/>
     </ItemGroup>
 
 </Project>

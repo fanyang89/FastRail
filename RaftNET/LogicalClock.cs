@@ -7,5 +7,7 @@ public class LogicalClock {
         _now += duration;
     }
 
-    public long Now() => _now;
+    public long Now() {
+        return _now;
+    }
 }

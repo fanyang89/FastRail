@@ -142,8 +142,8 @@ public partial class FSM {
         _abortLeadershipTransfer = false;
 
         if (_observed.LastConfIdx != _log.LastConfIdx() ||
-            (_observed.CurrentTerm != _log.LastTerm() &&
-             _observed.LastTerm != _log.LastTerm())) {
+            _observed.CurrentTerm != _log.LastTerm() &&
+            _observed.LastTerm != _log.LastTerm()) {
             output.Configuration = new HashSet<ConfigMember>();
             var lastLogConf = _log.GetConfiguration();
             foreach (var member in lastLogConf.Previous) {
@@ -199,7 +199,7 @@ public partial class FSM {
             _log.Add(new LogEntry {
                 Term = _currentTerm,
                 Idx = _log.NextIdx(),
-                Configuration = cfg,
+                Configuration = cfg
             });
             LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
             MaybeCommit();
@@ -351,7 +351,7 @@ public partial class FSM {
                 Force = isLeadershipTransfer,
                 IsPreVote = isPreVote,
                 LastLogIdx = _log.LastIdx(),
-                LastLogTerm = _log.LastTerm(),
+                LastLogTerm = _log.LastTerm()
             });
         }
 
@@ -364,7 +364,7 @@ public partial class FSM {
         }
     }
 
-    void CheckIsLeader() {
+    private void CheckIsLeader() {
         if (!IsLeader) {
             throw new NotLeaderException();
         }
@@ -396,7 +396,7 @@ public partial class FSM {
 
         var logEntry = new LogEntry {
             Term = _currentTerm,
-            Idx = _log.NextIdx(),
+            Idx = _log.NextIdx()
         };
         command.Switch(
             _ => { logEntry.Dummy = new Void(); },
@@ -507,7 +507,7 @@ public partial class FSM {
                 CurrentTerm = _currentTerm,
                 PrevLogIdx = prevIdx,
                 PrevLogTerm = prevTerm.Value,
-                LeaderCommitIdx = _commitIdx,
+                LeaderCommitIdx = _commitIdx
             };
 
             if (nextIdx > 0) {
@@ -554,7 +554,7 @@ public partial class FSM {
                 leader = from;
             }
 
-            bool ignoreTerm = false;
+            var ignoreTerm = false;
             if (msg.IsVoteRequest) {
                 ignoreTerm = msg.VoteRequest.IsPreVote;
             } else if (msg.IsVoteResponse) {
@@ -901,7 +901,7 @@ public partial class FSM {
     ) {
         Debug.Assert(local && snapshot.Idx <= _observed.CommitIdx || !local && IsFollower);
         var currentSnapshot = _log.GetSnapshot();
-        if (snapshot.Idx <= currentSnapshot.Idx || (!local && snapshot.Idx <= _commitIdx)) {
+        if (snapshot.Idx <= currentSnapshot.Idx || !local && snapshot.Idx <= _commitIdx) {
             _output.SnapshotsToDrop.Add(snapshot.Id);
             return false;
         }

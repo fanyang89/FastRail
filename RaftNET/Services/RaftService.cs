@@ -56,9 +56,9 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         var fd = new RpcFailureDetector(config.MyId, _addressBook, new SystemClock(), _loggerFactory,
             TimeSpan.FromMilliseconds(config.PingInterval), TimeSpan.FromMilliseconds(config.PingTimeout));
         var fsmConfig = new FSM.Config(
-            EnablePreVote: config.EnablePreVote,
-            AppendRequestThreshold: config.AppendRequestThreshold,
-            MaxLogSize: config.MaxLogSize
+            config.EnablePreVote,
+            config.AppendRequestThreshold,
+            config.MaxLogSize
         );
         _fsm = new FSM(
             config.MyId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify,

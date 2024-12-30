@@ -17,13 +17,13 @@ public class RaftCluster {
             var tempDir = Directory.CreateTempSubdirectory("raftnet-data");
             addressBook.Add(i, $"http://127.0.0.1:{15000 + i}");
             _servers.Add(i, new RaftServer(new RaftService.Config(
-                MyId: i,
-                DataDir: tempDir.FullName,
-                LoggerFactory: loggerFactory,
-                StateMachine: new EmptyStateMachine(),
-                AddressBook: addressBook,
-                ListenAddress: IPAddress.Loopback,
-                Port: (int)(15000 + i)
+                i,
+                tempDir.FullName,
+                loggerFactory,
+                new EmptyStateMachine(),
+                addressBook,
+                IPAddress.Loopback,
+                (int)(15000 + i)
             )));
         }
     }

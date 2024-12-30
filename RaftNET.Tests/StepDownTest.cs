@@ -12,7 +12,7 @@ public class StepDownTest : FSMTestBase {
                 new[] {
                     new ConfigMember { ServerAddress = new ServerAddress { ServerId = Id1 }, CanVote = true },
                     new ConfigMember { ServerAddress = new ServerAddress { ServerId = Id2 }, CanVote = true },
-                    new ConfigMember { ServerAddress = new ServerAddress { ServerId = Id3 }, CanVote = false },
+                    new ConfigMember { ServerAddress = new ServerAddress { ServerId = Id3 }, CanVote = false }
                 }
             }
         };
@@ -110,7 +110,7 @@ public class StepDownTest : FSMTestBase {
         fsm.GetOutput();
         fsm.Step(Id2, new VoteResponse {
             CurrentTerm = fsm.CurrentTerm,
-            VoteGranted = true,
+            VoteGranted = true
         });
         Assert.That(fsm.IsLeader, Is.True);
         // Commit dummy entry
@@ -169,7 +169,7 @@ public class StepDownTest : FSMTestBase {
         // Turn to a leader
         fsm2.Step(Id2, new VoteResponse {
             CurrentTerm = fsm2.CurrentTerm,
-            VoteGranted = true,
+            VoteGranted = true
         });
         Assert.That(fsm2.IsLeader, Is.True);
         output = fsm2.GetOutput();

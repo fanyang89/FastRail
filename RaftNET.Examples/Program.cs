@@ -6,37 +6,37 @@ using Option = Google.Protobuf.WellKnownTypes.Option;
 namespace RaftNET.Examples;
 
 class Program {
-    static async Task<int> Main(string[] args) {
+    private static async Task<int> Main(string[] args) {
         using var loggerFactory = LoggerFactory.Instance;
         var rootCommand = new RootCommand("Example for Raft.NET");
 
         var dataDirOption = new Option<DirectoryInfo?>(
-            name: "--data-dir",
-            description: "The data directory") { IsRequired = true };
+            "--data-dir",
+            "The data directory") { IsRequired = true };
         dataDirOption.AddAlias("-d");
         rootCommand.AddOption(dataDirOption);
 
         var myIdOption = new Option<ulong>(
-            name: "--my-id",
-            description: "The ID for this server") { IsRequired = true };
+            "--my-id",
+            "The ID for this server") { IsRequired = true };
         myIdOption.AddAlias("-i");
         rootCommand.AddOption(myIdOption);
 
         var listenAddressOption = new Option<IPAddress>(
-            name: "--listen-address",
-            description: "The listen address") { IsRequired = true };
+            "--listen-address",
+            "The listen address") { IsRequired = true };
         listenAddressOption.AddAlias("-l");
         rootCommand.AddOption(listenAddressOption);
 
         var listenPortOption = new Option<int>(
-            name: "--port",
-            description: "The listen port") { IsRequired = true };
+            "--port",
+            "The listen port") { IsRequired = true };
         listenPortOption.AddAlias("-p");
         rootCommand.AddOption(listenPortOption);
 
         var initialmemberOption = new Option<List<string>>(
-            name: "--members",
-            description: "Initial members, eg. 1=127.0.0.1:3000") {
+            "--members",
+            "Initial members, eg. 1=127.0.0.1:3000") {
             IsRequired = true,
             AllowMultipleArgumentsPerToken = true
         };
@@ -64,13 +64,13 @@ class Program {
             var addressBook = new AddressBook(initialMembers);
             builder.Services.AddHostedService<RaftService>(_ => new RaftService(
                 new RaftService.Config(
-                    MyId: myId,
-                    DataDir: dataDir.FullName,
-                    LoggerFactory: loggerFactory,
-                    StateMachine: new LogStateMachine(loggerFactory.CreateLogger<LogStateMachine>()),
-                    AddressBook: addressBook,
-                    ListenAddress: listenAddress,
-                    Port: listenPort
+                    myId,
+                    dataDir.FullName,
+                    loggerFactory,
+                    new LogStateMachine(loggerFactory.CreateLogger<LogStateMachine>()),
+                    addressBook,
+                    listenAddress,
+                    listenPort
                 )));
             builder.Services.AddSingleton<RaftService>(
                 provider => provider.GetServices<IHostedService>().OfType<RaftService>().First());

@@ -25,15 +25,15 @@ public class RaftServerTest : RaftTestBase {
         _addressBook.Add(_myId, $"http://127.0.0.1:{_port}");
         var tmpDir = Directory.CreateTempSubdirectory();
         _server = new RaftServer(new RaftService.Config(
-            MyId: _myId,
-            DataDir: tmpDir.FullName,
-            LoggerFactory: _loggerFactory,
-            StateMachine: new EmptyStateMachine(),
-            AddressBook: _addressBook,
-            ListenAddress: IPAddress.Loopback,
-            Port: _port
+            _myId,
+            tmpDir.FullName,
+            _loggerFactory,
+            new EmptyStateMachine(),
+            _addressBook,
+            IPAddress.Loopback,
+            _port
         ));
-        _server.Start();    
+        _server.Start();
     }
 
     [TearDown]

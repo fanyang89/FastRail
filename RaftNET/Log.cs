@@ -213,7 +213,7 @@ public class Log {
     }
 
     public bool IsUpToUpdate(ulong idx, ulong term) {
-        return term > LastTerm() || (term == LastTerm() && idx >= LastIdx());
+        return term > LastTerm() || term == LastTerm() && idx >= LastIdx();
     }
 
     public ulong LastTerm() {
@@ -313,5 +313,7 @@ public class Log {
         }
     }
 
-    public int MemoryUsage() => _memoryUsage;
+    public int MemoryUsage() {
+        return _memoryUsage;
+    }
 }
