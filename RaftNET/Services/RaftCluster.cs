@@ -15,15 +15,14 @@ public class RaftCluster {
 
         for (ulong i = 1; i <= serverCount; i++) {
             var tempDir = Directory.CreateTempSubdirectory("raftnet-data");
-            var serverConfig = new RaftService.Config(
-                i,
-                tempDir.FullName,
-                loggerFactory,
-                new EmptyStateMachine(),
-                addressBook,
-                IPAddress.Loopback,
-                (int)(15000 + i)
-            );
+            var serverConfig = new RaftService.Config {
+                MyId = i,
+                DataDir = tempDir.FullName,
+                LoggerFactory = loggerFactory,
+                StateMachine = new EmptyStateMachine(),
+                AddressBook = addressBook,
+                Listen = new IPEndPoint(IPAddress.Loopback, 15000 + (int)i),
+            };
             var server = new RaftServer(serverConfig);
             _servers.Add(i, server);
         }

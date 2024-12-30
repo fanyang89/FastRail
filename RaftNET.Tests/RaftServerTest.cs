@@ -21,15 +21,14 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         _addressBook = new AddressBook();
         _addressBook.Add(_myId, _listenAddress);
         var tmpDir = Directory.CreateTempSubdirectory();
-        _server = new RaftServer(new RaftService.Config(
-            _myId,
-            tmpDir.FullName,
-            LoggerFactory,
-            this,
-            _addressBook,
-            IPAddress.Loopback,
-            _port
-        ));
+        _server = new RaftServer(new RaftService.Config {
+            MyId = _myId,
+            DataDir = tmpDir.FullName,
+            LoggerFactory = LoggerFactory,
+            StateMachine = this,
+            AddressBook = _addressBook,
+            Listen = new IPEndPoint(IPAddress.Loopback, _port)
+        });
         _server.Start();
         _logger.LogInformation("Raft server started at {}", _listenAddress);
     }

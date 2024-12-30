@@ -93,4 +93,13 @@ public static class JuteSerializer {
         }
         value.SerializeTo(s);
     }
+
+    public static byte[] Serialize<T>(T? value) where T : IJuteSerializable {
+        if (value == null) {
+            return [];
+        }
+        using var ms = new MemoryStream();
+        SerializeTo(ms, value);
+        return ms.ToArray();
+    }
 }

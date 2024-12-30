@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class GetACLRequest : IJuteDeserializable, IJuteSerializable {
+public class GetACLRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
 
     public void DeserializeFrom(Stream s) {

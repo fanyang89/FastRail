@@ -273,6 +273,10 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         AddEntry(buffer, WaitType.Committed);
     }
 
+    public void AddEntryApplied(byte[] buffer) {
+        AddEntry(buffer, WaitType.Applied);
+    }
+
     public void AddEntry(Configuration configuration) {
         AddEntry(configuration, WaitType.Committed);
     }

@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class SyncRequest : IJuteDeserializable, IJuteSerializable {
+public class SyncRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
 
     public void DeserializeFrom(Stream s) {

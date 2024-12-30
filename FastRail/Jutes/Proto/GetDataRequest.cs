@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class GetDataRequest : IJuteDeserializable, IJuteSerializable {
+public class GetDataRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public bool Watch;
 

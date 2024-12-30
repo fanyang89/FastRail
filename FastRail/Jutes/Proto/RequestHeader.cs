@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class RequestHeader : IJuteDeserializable, IJuteSerializable {
+public class RequestHeader : IJuteDeserializable, IJuteSerializable {
     public int Xid;
     public int Type;
 

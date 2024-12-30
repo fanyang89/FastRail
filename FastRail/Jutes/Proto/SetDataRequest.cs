@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class SetDataRequest : IJuteDeserializable, IJuteSerializable {
+public class SetDataRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public byte[]? Data;
     public int Version;

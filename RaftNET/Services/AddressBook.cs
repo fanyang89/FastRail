@@ -28,6 +28,10 @@ public class AddressBook : IAddressBook {
         }
     }
 
+    public void Add(ulong id, int port) {
+        Add(id, $"http://127.0.0.1:{port}");
+    }
+
     public string? Find(ulong id) {
         lock (_addresses) {
             return _addresses.GetValueOrDefault(id);

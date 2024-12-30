@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-using System.Text;
+﻿using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -20,7 +19,7 @@ public class RaftServer {
         builder.Logging.ClearProviders();
         builder.Logging.AddSimpleConsole(LoggerFactory.ConfigureAspNet());
         builder.WebHost.ConfigureKestrel((_, serverOptions) => {
-            serverOptions.Listen(config.ListenAddress, config.Port, options => {
+            serverOptions.Listen(config.Listen.Address, config.Listen.Port, options => {
                 options.Protocols = HttpProtocols.Http2;
             });
         });
@@ -54,5 +53,9 @@ public class RaftServer {
 
     public void AddEntry(Configuration configuration) {
         _raftService.AddEntry(configuration);
+    }
+
+    public void AddEntryApplied(byte[] buffer) {
+        _raftService.AddEntryApplied(buffer);
     }
 }

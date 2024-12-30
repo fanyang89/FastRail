@@ -1,8 +1,6 @@
 syntax = "proto3";
 
 package raft;
-
-option go_package = "./raft";
 option csharp_namespace = "RaftNET";
 
 service Raft {

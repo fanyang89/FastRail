@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class DeleteRequest : IJuteDeserializable, IJuteSerializable {
+public class DeleteRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public int Version;
 
