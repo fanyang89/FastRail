@@ -13,7 +13,7 @@ public static class LoggerFactory {
                 options.IncludeScopes = false;
                 options.SingleLine = true;
                 options.TimestampFormat = "hh:mm:ss.ffff ";
-            });
+            }).SetMinimumLevel(LogLevel.Trace);
     }
 
     public static Action<SimpleConsoleFormatterOptions> ConfigureAspNet() {

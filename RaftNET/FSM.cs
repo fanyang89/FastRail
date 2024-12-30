@@ -126,10 +126,12 @@ public partial class FSM {
             };
         }
 
-        var observedCI = ulong.Max(_observed.CommitIdx, _log.GetSnapshot().Idx);
-
-        if (observedCI < _commitIdx) {
-            for (var idx = observedCI + 1; idx <= _commitIdx; ++idx) {
+        // Return committed entries.
+        // Observer commit index may be smaller than snapshot index
+        // in which case we should not attempt committing entries belonging to a snapshot
+        var observedCommitIdx = ulong.Max(_observed.CommitIdx, _log.GetSnapshot().Idx);
+        if (observedCommitIdx < _commitIdx) {
+            for (var idx = observedCommitIdx + 1; idx <= _commitIdx; ++idx) {
                 var entry = _log[idx];
                 output.Committed.Add(entry);
             }
@@ -374,7 +376,7 @@ public partial class FSM {
         CheckIsLeader();
 
         if (LeaderState.StepDown != null) {
-            // A leader that is stepping down should not add new entries
+            // A leader stepping down should not add new entries
             // to its log (see 3.10), but it still does not know who the new
             // leader will be.
             throw new NotLeaderException();
@@ -403,6 +405,8 @@ public partial class FSM {
             buffer => { logEntry.Command = new Command { Buffer = ByteString.CopyFrom(buffer) }; },
             config => { logEntry.Configuration = config; }
         );
+
+        _logger.LogInformation("Adding entry, idx={} term={}", logEntry.Idx, logEntry.Term);
         _log.Add(logEntry);
         _eventNotify.Signal();
 

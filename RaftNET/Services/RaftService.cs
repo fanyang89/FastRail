@@ -1,7 +1,11 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using NativeImport;
+using OneOf;
+using RaftNET.Exceptions;
 using RaftNET.FailureDetectors;
 using RaftNET.Persistence;
 using RaftNET.Records;
@@ -11,7 +15,7 @@ namespace RaftNET.Services;
 
 public partial class RaftService : Raft.RaftBase, IHostedService {
     private readonly FSM _fsm;
-    private readonly Notifier _fsmEventNotify = new();
+    private readonly Notifier _fsmEventNotify;
     private readonly ILogger<RaftService> _logger;
     private readonly IStateMachine _stateMachine;
     private readonly IPersistence _persistence;
@@ -20,6 +24,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
     private readonly AddressBook _addressBook;
     private readonly ulong _myId;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly Config _config;
     private ulong _appliedIdx;
     private ulong _snapshotDescIdx;
 
@@ -28,6 +33,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
     private Task? _ioTask;
 
     public RaftService(Config config) {
+        _config = config;
         _loggerFactory = config.LoggerFactory;
         _stateMachine = config.StateMachine;
         _addressBook = config.AddressBook;
@@ -35,6 +41,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         _logger = _loggerFactory.CreateLogger<RaftService>();
         _connectionManager = new ConnectionManager(_myId, _addressBook, _loggerFactory.CreateLogger<ConnectionManager>());
         _persistence = new RocksPersistence(config.DataDir);
+        _fsmEventNotify = new Notifier();
 
         _logger.LogInformation("Raft service initializing");
 
@@ -102,10 +109,20 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
                 }
                 message.Switch(
                     entries => {
-                        var commandEntries = entries.Where(x => x.Command != null).ToList();
-                        var commands = commandEntries.Select(x => x.Command).ToList();
-                        _stateMachine.Apply(commands);
-                        _appliedIdx = commandEntries.Last().Idx;
+                        _logger.LogTrace("Apply{{{}}} on apply {} entries", _myId, entries.Count);
+                        lock (_commitNotifiers) {
+                            NotifyWaiters(_commitNotifiers, entries);
+                        }
+                        _logger.LogTrace("Apply({}) applying...", _myId);
+                        _stateMachine.Apply(entries
+                            .Where(x => x.DataCase == LogEntry.DataOneofCase.Command)
+                            .Select(x => x.Command)
+                            .ToList()
+                        );
+                        lock (_applyNotifiers) {
+                            NotifyWaiters(_applyNotifiers, entries);
+                        }
+                        _appliedIdx = entries.Last().Idx;
                     },
                     snapshot => {
                         Debug.Assert(snapshot.Idx >= _appliedIdx);
@@ -118,6 +135,38 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
             }
             _logger.LogInformation("Apply{{{}}} stopped", _myId);
         };
+    }
+
+    private void NotifyWaiters(OrderedDictionary<TermIdx, Notifier> waiters, List<LogEntry> entries) {
+        var firstIdx = entries.First().Idx;
+        var commitIdx = entries.Last().Idx;
+        var commitTerm = entries.Last().Term;
+
+        while (waiters.Count > 0) {
+            var waiter = waiters.First();
+            if (waiter.Key.Idx > commitIdx) {
+                break;
+            }
+            var idx = waiter.Key.Idx;
+            var term = waiter.Key.Term;
+            var notifiter = waiter.Value;
+            Debug.Assert(idx >= firstIdx);
+            waiters.Remove(waiter.Key);
+            if (term == entries[(int)(idx - firstIdx)].Term) {
+                notifiter.Signal();
+            } else {
+                throw new DroppedEntryException();
+            }
+        }
+
+        while (waiters.Count > 0) {
+            var waiter = waiters.First();
+            if (waiter.Key.Term < commitTerm) {
+                throw new DroppedEntryException();
+            } else {
+                break;
+            }
+        }
     }
 
     private Func<Task> DoIO(CancellationToken cancellationToken, ulong stableIdx) {
@@ -133,6 +182,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
                     }
                 }
                 if (batch != null) {
+                    _logger.LogInformation("Processing fsm output, count={}", batch.LogEntries.Count);
                     await ProcessFSMOutput(stableIdx, batch);
                 }
             }
@@ -196,4 +246,72 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
             return fn(_fsm);
         }
     }
+
+    public void AddEntry(OneOf<byte[], Configuration> command, WaitType waitType) {
+        var commandLength = command.Match(
+            buffer => buffer.Length,
+            configuration => configuration.CalculateSize());
+        if (commandLength >= _config.MaxCommandSize) {
+            throw new CommandTooLargeException(commandLength, _config.MaxCommandSize);
+        }
+
+        LogEntry entry;
+        lock (_fsm) {
+            if (!_fsm.IsLeader) {
+                throw new NotLeaderException();
+            }
+            if (command.IsT0) {
+                entry = _fsm.AddEntry(command.AsT0);
+            } else {
+                entry = _fsm.AddEntry(command.AsT1);
+            }
+        }
+        WaitForEntry(entry, waitType);
+    }
+
+    public void AddEntry(byte[] buffer) {
+        AddEntry(buffer, WaitType.Committed);
+    }
+
+    public void AddEntry(Configuration configuration) {
+        AddEntry(configuration, WaitType.Committed);
+    }
+
+    private record TermIdx(ulong Idx, ulong Term);
+
+    private readonly OrderedDictionary<TermIdx, Notifier> _applyNotifiers = new();
+    private readonly OrderedDictionary<TermIdx, Notifier> _commitNotifiers = new();
+
+    private void WaitForEntry(LogEntry entry, WaitType waitType) {
+        var termIndex = new TermIdx(entry.Idx, entry.Term);
+        var ok = false;
+        var notifier = new Notifier();
+        switch (waitType) {
+            case WaitType.Committed:
+                lock (_commitNotifiers) {
+                    ok = _commitNotifiers.TryAdd(termIndex, notifier);
+                }
+                break;
+            case WaitType.Applied:
+                lock (_applyNotifiers) {
+                    ok = _applyNotifiers.TryAdd(termIndex, notifier);
+                }
+                break;
+        }
+        Debug.Assert(ok);
+        notifier.Wait();
+    }
+}
+
+public class CommandTooLargeException(int length, int maxLength) : Exception {
+    public override string Message { get; } = $"Command length {length} exceeded maximum of {maxLength}";
+}
+
+public enum WaitType {
+    Committed = 1,
+    Applied
+}
+
+public class DroppedEntryException : Exception {
+    public override string Message { get; } = "Entry dropped";
 }

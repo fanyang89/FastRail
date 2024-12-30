@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -42,10 +43,14 @@ public class RaftServer {
     public bool IsLeader => _raftService.AcquireFSMLock(fsm => fsm.IsLeader);
 
     public void AddEntry(byte[] buffer) {
-        _raftService.AcquireFSMLock(fsm => fsm.AddEntry(buffer));
+        _raftService.AddEntry(buffer);
+    }
+
+    public void AddEntry(string buffer) {
+        AddEntry(Encoding.UTF8.GetBytes(buffer));
     }
 
     public void AddEntry(Configuration configuration) {
-        _raftService.AcquireFSMLock(fsm => fsm.AddEntry(configuration));
+        _raftService.AddEntry(configuration);
     }
 }
