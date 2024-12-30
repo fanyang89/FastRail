@@ -1,15 +1,15 @@
 ﻿using Microsoft.Extensions.Logging;
 
-namespace RaftNET.Tests;
+namespace FastRail.Tests;
 
 [TestFixture]
-public class RaftTestBase {
+public class RailTestBase {
     protected ILoggerFactory LoggerFactory;
 
     [SetUp]
     public void Setup() {
         Console.SetOut(TestContext.Progress);
-        LoggerFactory = RaftNET.LoggerFactory.Instance;
+        LoggerFactory = FastRail.LoggerFactory.Instance;
     }
 
     [TearDown]

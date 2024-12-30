@@ -302,16 +302,3 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         notifier.Wait();
     }
 }
-
-public class CommandTooLargeException(int length, int maxLength) : Exception {
-    public override string Message { get; } = $"Command length {length} exceeded maximum of {maxLength}";
-}
-
-public enum WaitType {
-    Committed = 1,
-    Applied
-}
-
-public class DroppedEntryException : Exception {
-    public override string Message { get; } = "Entry dropped";
-}

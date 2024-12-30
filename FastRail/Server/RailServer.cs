@@ -7,8 +7,8 @@ using Microsoft.Extensions.Logging;
 
 namespace FastRail.Server;
 
-public class ZooKeeperServer(IPEndPoint endPoint, ZooKeeperServer.Config config, ILogger<ZooKeeperServer> logger) {
-    private readonly ILogger<ZooKeeperServer> _logger = logger;
+public class RailServer(IPEndPoint endPoint, RailServer.Config config, ILogger<RailServer> logger) {
+    private readonly ILogger<RailServer> _logger = logger;
     private readonly TcpListener _listener = new(endPoint);
     private readonly CancellationTokenSource _cts = new();
     private readonly SessionTracker _sessionTracker = new();
@@ -23,11 +23,12 @@ public class ZooKeeperServer(IPEndPoint endPoint, ZooKeeperServer.Config config,
     public void Start() {
         _listener.Start();
         Task.Run(async () => {
-            _logger.LogInformation("ZooKeeper server started");
+            _logger.LogInformation("Rail server started");
             while (!_cts.Token.IsCancellationRequested) {
                 var conn = await _listener.AcceptTcpClientAsync();
                 _ = Task.Run(() => HandleConnection(conn, _cts.Token));
             }
+            _logger.LogInformation("Rail server exited");
         }, _cts.Token);
     }
 
