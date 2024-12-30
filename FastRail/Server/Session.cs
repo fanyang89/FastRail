@@ -2,6 +2,6 @@
 
 public record Session {
     public long SessionID;
-    public int Timeout;
-    public bool IsClosing;
+    public TimeSpan Timeout;
+    public DateTime LastLive;
 }

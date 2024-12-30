@@ -7,17 +7,20 @@ using Microsoft.Extensions.Logging;
 
 namespace FastRail.Server;
 
-public class RailServer(IPEndPoint endPoint, RailServer.Config config, ILogger<RailServer> logger) {
-    private readonly ILogger<RailServer> _logger = logger;
+public class RailServer(IPEndPoint endPoint, RailServer.Config config, ILoggerFactory loggerFactory) : IDisposable {
+    private readonly ILogger<RailServer> _logger = loggerFactory.CreateLogger<RailServer>();
     private readonly TcpListener _listener = new(endPoint);
     private readonly CancellationTokenSource _cts = new();
-    private readonly SessionTracker _sessionTracker = new();
-    private readonly static long superSecret = 0XB3415C00L;
+    private readonly static long SuperSecret = 0XB3415C00L;
+
+    private readonly SessionTracker _sessionTracker =
+        new(TimeSpan.FromMilliseconds(config.Tick), loggerFactory.CreateLogger<SessionTracker>());
 
     public record Config {
-        public TimeSpan ReceiveTimeout = TimeSpan.FromSeconds(6);
-        public int MinSessionTimeout = 1000;
-        public int MaxSessionTimeout = 10 * 1000;
+        public readonly TimeSpan ReceiveTimeout = TimeSpan.FromSeconds(6);
+        public readonly int MinSessionTimeout = 1000;
+        public readonly int MaxSessionTimeout = 10 * 1000;
+        public readonly int Tick = 1000;
     }
 
     public void Start() {
@@ -37,24 +40,44 @@ public class RailServer(IPEndPoint endPoint, RailServer.Config config, ILogger<R
         _listener.Stop();
     }
 
-    public async Task HandleConnection(TcpClient client, CancellationToken cancellationToken) {
+    public void Dispose() {
+        _cts.Dispose();
+        _listener.Dispose();
+        _sessionTracker.Dispose();
+        loggerFactory.Dispose();
+    }
+
+    private async Task HandleConnection(TcpClient client, CancellationToken cancellationToken) {
+        _logger.LogInformation("Incoming client connection");
         await using var stream = client.GetStream();
         stream.ReadTimeout = config.ReceiveTimeout.Milliseconds;
 
         var connectRequest = await ReceiveRequest<ConnectRequest>(stream, cancellationToken);
-        var rsp = CreateSession(connectRequest);
-        await SendResponse(stream, rsp, cancellationToken);
+        var connectResponse = CreateSession(connectRequest);
+        var sessionId = connectResponse.SessionId;
+        await SendResponse(stream, connectResponse, cancellationToken);
 
+        // we're good, handle client requests now
+        var closing = false;
+        while (!closing) {
+            var requestHeader = await ReceiveRequest<RequestHeader>(stream, cancellationToken);
+            if (requestHeader.Type == (int)OpCode.Ping) {
+                _sessionTracker.Touch(sessionId);
+            } else if (requestHeader.Type == (int)OpCode.CloseSession) {
+                _sessionTracker.Remove(sessionId);
+                closing = true;
+            }
+        }
+        _logger.LogInformation("Clinet connection closed");
         await Task.CompletedTask;
     }
 
-
-    public ConnectResponse CreateSession(ConnectRequest request) {
+    private ConnectResponse CreateSession(ConnectRequest request) {
         _logger.LogInformation("Client attempting to establish new session");
-        var sessionId = _sessionTracker.Add();
         var sessionTimeout = int.Min(int.Max(request.Timeout, config.MinSessionTimeout), config.MaxSessionTimeout);
+        var sessionId = _sessionTracker.Add(TimeSpan.FromMilliseconds(sessionTimeout));
         var passwd = request.Passwd ?? [];
-        var rnd = new Random((int)(sessionId ^ superSecret));
+        var rnd = new Random((int)(sessionId ^ SuperSecret));
         rnd.NextBytes(passwd);
         return new ConnectResponse {
             ProtocolVersion = 0,
@@ -65,7 +88,7 @@ public class RailServer(IPEndPoint endPoint, RailServer.Config config, ILogger<R
         };
     }
 
-    public async Task<T> ReceiveRequest<T>(NetworkStream stream, CancellationToken cancellationToken)
+    private async Task<T> ReceiveRequest<T>(NetworkStream stream, CancellationToken cancellationToken)
         where T : IJuteDeserializable, new() {
         var buf = new byte[sizeof(int)];
         await stream.ReadExactlyAsync(buf, 0, buf.Length, cancellationToken);
@@ -76,7 +99,7 @@ public class RailServer(IPEndPoint endPoint, RailServer.Config config, ILogger<R
         return JuteDeserializer.Deserialize<T>(buf);
     }
 
-    public async Task SendResponse<T>(NetworkStream stream, T message, CancellationToken cancellationToken)
+    private async Task SendResponse<T>(NetworkStream stream, T message, CancellationToken cancellationToken)
         where T : IJuteSerializable {
         byte[] buffer;
         using (var ms = new MemoryStream()) {

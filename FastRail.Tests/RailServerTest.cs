@@ -18,8 +18,7 @@ public class RailServerTest : RailTestBase {
     public void TestRailServerCanStartAndStop() {
         var config = new RailServer.Config();
         var server = new RailServer(
-            new IPEndPoint(IPAddress.Loopback, 15000), config,
-            LoggerFactory.CreateLogger<RailServer>()
+            new IPEndPoint(IPAddress.Loopback, 15000), config, LoggerFactory
         );
         server.Start();
         server.Stop();
