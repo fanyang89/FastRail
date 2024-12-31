@@ -1,17 +1,23 @@
 ﻿using System.Buffers.Binary;
+using System.Text;
 
 namespace RaftNET;
 
 public static class ByteArrayUtil {
-    private static byte[] Concat(byte[] a, byte[] b) {
+    public static byte[] Concat(byte[] a, byte[] b) {
         var buf = new byte[a.Length + b.Length];
         a.CopyTo(new Memory<byte>(buf));
         b.CopyTo(new Memory<byte>(buf, a.Length, b.Length));
         return buf;
     }
 
+    public static byte[] Concat(byte[] a, string b) {
+        return Concat(a, Encoding.UTF8.GetBytes(b));
+    }
+
     public static byte[] Concat(byte[] a, ulong b, bool bigEndian = true) {
         var buf = new byte[sizeof(ulong)];
+
         if (bigEndian) {
             BinaryPrimitives.WriteUInt64BigEndian(buf, b);
         } else {
@@ -36,6 +42,7 @@ public static class ByteArrayUtil {
 
     public static ulong GetIdx(byte[] b, byte[] prefix, bool bigEndian = true) {
         var s = new Memory<byte>(b, prefix.Length, sizeof(ulong)).Span;
+
         if (bigEndian) {
             return BinaryPrimitives.ReadUInt64BigEndian(s);
         }

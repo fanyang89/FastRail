@@ -21,7 +21,7 @@ public class RailServer(
     private readonly TcpListener _listener = new(config.EndPoint);
     private readonly CancellationTokenSource _cts = new();
     private readonly DataStore _ds = new(config.DataDir);
-    private readonly static long SuperSecret = 0XB3415C00L;
+    private const long SuperSecret = 0XB3415C00L;
 
     private readonly SessionTracker _sessionTracker = new(TimeSpan.FromMilliseconds(config.Tick),
         loggerFactory.CreateLogger<SessionTracker>());
@@ -110,7 +110,7 @@ public class RailServer(
                         }
 
                         var mode = request.Flags.ParseCreateMode();
-                        var txn = new CreateTransaction {
+                        var txn = new CreateNodeTransaction {
                             Path = request.Path,
                             Data = ByteString.CopyFrom(request.Data),
                             Mode = mode,
@@ -121,23 +121,7 @@ public class RailServer(
                             txn.EphemeralOwner = sessionId;
                         }
 
-                        if (request.ACL != null) {
-                            foreach (var acl in request.ACL) {
-                                var a = new ACL {
-                                    Perms = acl.Perms
-                                };
-
-                                if (acl.Id != null) {
-                                    a.Id = new ID {
-                                        Scheme = acl.Id.Scheme,
-                                        Id = acl.Id.Id
-                                    };
-                                }
-                                txn.Acls.Add(a);
-                            }
-                        }
-
-                        await Broadcast(new Transaction { Create = txn });
+                        await Broadcast(new Transaction { CreateNode = txn });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid),
                             new CreateResponse { Path = request.Path });
                         break;
@@ -148,7 +132,7 @@ public class RailServer(
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
-                        await Broadcast(new Transaction { Delete = new DeleteTransaction { Path = request.Path } });
+                        await Broadcast(new Transaction { DeleteNode = new DeleteNodeTransaction { Path = request.Path } });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
                         break;
                     }
@@ -192,14 +176,61 @@ public class RailServer(
                     }
                     case OpCode.SetData: {
                         var request = JuteDeserializer.Deserialize<SetDataRequest>(requestBuffer);
-                        await Broadcast(new Transaction { Update = new UpdateTransaction() });
+
+                        if (string.IsNullOrEmpty(request.Path)) {
+                            throw new RailException(ErrorCodes.BadArguments);
+                        }
+
+                        var node = _ds.GetNode(request.Path);
+
+                        if (node == null) {
+                            throw new RailException(ErrorCodes.NoNode);
+                        }
+
+                        var txn = new UpdateNodeTransaction {
+                            Path = request.Path,
+                            Mtime = Time.CurrentTimeMillis(),
+                            Version = node.Stat.Version + 1
+                        };
+
+                        if (request.Data != null) {
+                            txn.Data = ByteString.CopyFrom(request.Data);
+                        }
+                        await Broadcast(new Transaction { UpdateNode = txn });
                         break;
                     }
-                    case OpCode.GetACL:
-                        break;
+                    case OpCode.GetACL: {
+                        var request = JuteDeserializer.Deserialize<GetACLRequest>(requestBuffer);
+
+                        if (string.IsNullOrEmpty(request.Path)) {
+                            throw new RailException(ErrorCodes.BadArguments);
+                        }
+
+                        var node = _ds.GetNode(request.Path);
+
+                        if (node == null) {
+                            throw new RailException(ErrorCodes.NoNode);
+                        }
+                        throw new NotImplementedException();
+                    }
                     case OpCode.SetACL: {
                         var request = JuteDeserializer.Deserialize<SetACLRequest>(requestBuffer);
-                        await Broadcast(new Transaction { Update = new UpdateTransaction() });
+
+                        if (string.IsNullOrEmpty(request.Path)) {
+                            throw new RailException(ErrorCodes.BadArguments);
+                        }
+
+                        var node = _ds.GetNode(request.Path);
+
+                        if (node == null) {
+                            throw new RailException(ErrorCodes.NoNode);
+                        }
+
+                        var txn = new UpdateNodeTransaction {
+                            Path = request.Path
+                        };
+
+                        await Broadcast(new Transaction { UpdateNode = new UpdateNodeTransaction() });
                         break;
                     }
                     case OpCode.GetChildren:
@@ -355,16 +386,44 @@ public class RailServer(
             var transaction = Transaction.Parser.ParseFrom(command.Buffer);
 
             switch (transaction.TxnCase) {
+                case Transaction.TxnOneofCase.CreateNode: {
+                    var txn = transaction.CreateNode;
+                    _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), new StatEntry {
+                        Czxid = txn.Zxid,
+                        Mzxid = 0,
+                        Ctime = txn.Ctime,
+                        Mtime = 0,
+                        Version = 0,
+                        Cversion = 0,
+                        Aversion = 0,
+                        EphemeralOwner = txn.EphemeralOwner,
+                        Pzxid = 0
+                    });
+                    break;
+                }
+                case Transaction.TxnOneofCase.DeleteNode: {
+                    var txn = transaction.DeleteNode;
+                    _ds.RemoveNode(txn.Path);
+                    break;
+                }
+                case Transaction.TxnOneofCase.UpdateNode: {
+                    var txn = transaction.UpdateNode;
+                    break;
+                }
+                case Transaction.TxnOneofCase.Sync: {
+                    // do nothing, we're already synced
+                    break;
+                }
+                case Transaction.TxnOneofCase.CreateSession: {
+                    var txn = transaction.CreateSession;
+                    break;
+                }
+                case Transaction.TxnOneofCase.RemoveSession: {
+                    var txn = transaction.RemoveSession;
+                    _ds.RemoveSession(txn.SessionId);
+                    break;
+                }
                 case Transaction.TxnOneofCase.None:
-                    break;
-                case Transaction.TxnOneofCase.Create:
-                    break;
-                case Transaction.TxnOneofCase.Delete:
-                    break;
-                case Transaction.TxnOneofCase.Update:
-                    break;
-                case Transaction.TxnOneofCase.Sync:
-                    break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
