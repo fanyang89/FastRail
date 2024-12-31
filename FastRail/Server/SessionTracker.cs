@@ -8,10 +8,12 @@ public class SessionTracker : IDisposable, IAsyncDisposable {
     private readonly Dictionary<long, Session> _sessions = new();
     private SortedSet<long> _expired = new();
     private readonly ILogger<SessionTracker> _logger;
+    private readonly Action<long> _onExpired;
 
-    public SessionTracker(TimeSpan tickInterval, ILogger<SessionTracker> logger) {
+    public SessionTracker(TimeSpan tickInterval, Action<long> onExpired, ILogger<SessionTracker> logger) {
         _logger = logger;
         _timer = new Timer(Tick, null, tickInterval, tickInterval);
+        _onExpired = onExpired;
     }
 
     public void Dispose() {
@@ -20,6 +22,7 @@ public class SessionTracker : IDisposable, IAsyncDisposable {
 
     public void Tick(object? state) {
         var now = DateTime.Now;
+
         lock (_sessions)
         lock (_expired) {
             foreach (var (id, session) in _sessions) {
@@ -28,9 +31,17 @@ public class SessionTracker : IDisposable, IAsyncDisposable {
                     _expired.Add(id);
                 }
             }
+
             foreach (var id in _expired) {
                 _sessions.Remove(id);
             }
+        }
+
+        lock (_expired) {
+            foreach (var id in _expired) {
+                _onExpired(id);
+            }
+            _expired.Clear();
         }
     }
 
@@ -50,6 +61,7 @@ public class SessionTracker : IDisposable, IAsyncDisposable {
             Timeout = timeout,
             LastLive = DateTime.Now
         };
+
         lock (_sessions) {
             _sessions.Add(sessionId, session);
         }

@@ -1,6 +1,7 @@
 ﻿using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using CommunityToolkit.HighPerformance;
 using FastRail.Jutes;
 using FastRail.Jutes.Proto;
 using FastRail.Protos;
@@ -12,19 +13,33 @@ using RaftNET.StateMachines;
 
 namespace FastRail.Server;
 
-public class RailServer(
-    RailServer.Config config,
-    ILoggerFactory loggerFactory
-) : IDisposable, IStateMachine {
+public class RailServer : IDisposable, IStateMachine {
     private RaftServer? _raft;
-    private readonly ILogger<RailServer> _logger = loggerFactory.CreateLogger<RailServer>();
-    private readonly TcpListener _listener = new(config.EndPoint);
+    private readonly ILogger<RailServer> _logger;
+    private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
-    private readonly DataStore _ds = new(config.DataDir);
+    private readonly DataStore _ds;
     private const long SuperSecret = 0XB3415C00L;
 
-    private readonly SessionTracker _sessionTracker = new(TimeSpan.FromMilliseconds(config.Tick),
-        loggerFactory.CreateLogger<SessionTracker>());
+    private readonly SessionTracker _sessionTracker;
+
+    private readonly Config _config;
+    private readonly ILoggerFactory _loggerFactory;
+
+    public RailServer(
+        Config config,
+        ILoggerFactory loggerFactory
+    ) {
+        _config = config;
+        _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger<RailServer>();
+        _listener = new TcpListener(config.EndPoint);
+        _ds = new DataStore(config.DataDir);
+        _sessionTracker = new SessionTracker(
+            TimeSpan.FromMilliseconds(config.Tick),
+            sessionId => { _ds.RemoveSession(sessionId); },
+            loggerFactory.CreateLogger<SessionTracker>());
+    }
 
     public record Config {
         public required string DataDir;
@@ -38,7 +53,7 @@ public class RailServer(
     public void Start() {
         _listener.Start();
         Task.Run(async () => {
-            _logger.LogInformation("Rail server started");
+            _logger.LogInformation("Rail server started at {}", _listener.LocalEndpoint);
 
             while (!_cts.Token.IsCancellationRequested) {
                 var conn = await _listener.AcceptTcpClientAsync();
@@ -57,7 +72,7 @@ public class RailServer(
         _cts.Dispose();
         _listener.Dispose();
         _sessionTracker.Dispose();
-        loggerFactory.Dispose();
+        _loggerFactory.Dispose();
     }
 
     private async Task Broadcast(Transaction transaction) {
@@ -73,9 +88,12 @@ public class RailServer(
         // by now, only leader can handle connections
         _logger.LogInformation("Incoming client connection");
         await using var conn = client.GetStream();
-        conn.ReadTimeout = config.ReceiveTimeout.Milliseconds;
+        conn.ReadTimeout = _config.ReceiveTimeout.Milliseconds;
 
         var connectRequest = await ReceiveConnectRequest(conn, token);
+        _logger.LogInformation("Incoming connection request, timeout={} session_id={}",
+            connectRequest.Timeout, connectRequest.SessionId);
+
         var connectResponse = CreateSession(connectRequest);
         var sessionId = connectResponse.SessionId;
         await Broadcast(new Transaction {
@@ -95,6 +113,7 @@ public class RailServer(
             var (requestHeader, requestBuffer) = await ReceiveRequest(conn, token);
             var requestType = requestHeader.Type.ToEnum();
             var xid = requestHeader.Xid;
+            _sessionTracker.Touch(sessionId);
 
             if (requestType == null) {
                 throw new Exception($"Invalid request type: {requestHeader.Type}");
@@ -108,7 +127,6 @@ public class RailServer(
                         if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
-
                         var mode = request.Flags.ParseCreateMode();
                         var txn = new CreateNodeTransaction {
                             Path = request.Path,
@@ -120,12 +138,12 @@ public class RailServer(
                         if (mode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
                             txn.EphemeralOwner = sessionId;
                         }
-
                         await Broadcast(new Transaction { CreateNode = txn });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid),
                             new CreateResponse { Path = request.Path });
                         break;
                     }
+
                     case OpCode.Delete: {
                         var request = JuteDeserializer.Deserialize<DeleteRequest>(requestBuffer);
 
@@ -136,13 +154,13 @@ public class RailServer(
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
                         break;
                     }
+
                     case OpCode.Exists: {
                         var request = JuteDeserializer.Deserialize<ExistsRequest>(requestBuffer);
 
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
-
                         var node = _ds.GetNode(request.Path);
 
                         if (node == null) {
@@ -154,13 +172,13 @@ public class RailServer(
                             token, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse { Stat = stat });
                         break;
                     }
+
                     case OpCode.GetData: {
                         var request = JuteDeserializer.Deserialize<GetDataRequest>(requestBuffer);
 
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
-
                         var node = _ds.GetNode(request.Path);
 
                         if (node == null) {
@@ -174,6 +192,7 @@ public class RailServer(
                             new GetDataResponse { Data = node.Data, Stat = stat });
                         break;
                     }
+
                     case OpCode.SetData: {
                         var request = JuteDeserializer.Deserialize<SetDataRequest>(requestBuffer);
 
@@ -199,42 +218,35 @@ public class RailServer(
                         await Broadcast(new Transaction { UpdateNode = txn });
                         break;
                     }
-                    case OpCode.GetACL: {
-                        var request = JuteDeserializer.Deserialize<GetACLRequest>(requestBuffer);
 
-                        if (string.IsNullOrEmpty(request.Path)) {
-                            throw new RailException(ErrorCodes.BadArguments);
-                        }
-
-                        var node = _ds.GetNode(request.Path);
-
-                        if (node == null) {
-                            throw new RailException(ErrorCodes.NoNode);
-                        }
+                    case OpCode.GetACL:
+                    case OpCode.SetACL: {
                         throw new NotImplementedException();
                     }
-                    case OpCode.SetACL: {
-                        var request = JuteDeserializer.Deserialize<SetACLRequest>(requestBuffer);
+
+                    case OpCode.GetChildren:
+                    case OpCode.GetChildren2: {
+                        var request = JuteDeserializer.Deserialize<GetChildrenRequest>(requestBuffer);
 
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
+                        var children = _ds.GetChildren(request.Path, out var stat);
 
-                        var node = _ds.GetNode(request.Path);
-
-                        if (node == null) {
-                            throw new RailException(ErrorCodes.NoNode);
+                        if (requestType == OpCode.GetChildren) {
+                            await SendResponse(conn, token,
+                                new ReplyHeader(xid, _ds.LastZxid),
+                                new GetChildrenResponse { Children = children });
+                        } else {
+                            await SendResponse(conn, token,
+                                new ReplyHeader(xid, _ds.LastZxid),
+                                new GetChildren2Response { Children = children, Stat = stat.ToStat() }
+                            );
                         }
 
-                        var txn = new UpdateNodeTransaction {
-                            Path = request.Path
-                        };
-
-                        await Broadcast(new Transaction { UpdateNode = new UpdateNodeTransaction() });
                         break;
                     }
-                    case OpCode.GetChildren:
-                        break;
+
                     case OpCode.Sync: {
                         var request = JuteDeserializer.Deserialize<SyncRequest>(requestBuffer);
 
@@ -244,12 +256,11 @@ public class RailServer(
                         await Broadcast(new Transaction { Sync = new SyncTransaction { Path = request.Path } });
                         break;
                     }
+
                     case OpCode.Ping: {
-                        _sessionTracker.Touch(sessionId);
                         break;
                     }
-                    case OpCode.GetChildren2:
-                        break;
+
                     case OpCode.Check:
                         break;
                     case OpCode.Multi:
@@ -286,12 +297,14 @@ public class RailServer(
                         break;
                     case OpCode.WhoAmI:
                         break;
-                    case OpCode.CreateSession:
+                    case OpCode.CreateSession: {
                         break;
-                    case OpCode.CloseSession:
+                    }
+                    case OpCode.CloseSession: {
                         _sessionTracker.Remove(sessionId);
                         closing = true;
                         break;
+                    }
                     case OpCode.Error:
                         break;
                     default:
@@ -308,7 +321,7 @@ public class RailServer(
 
     private ConnectResponse CreateSession(ConnectRequest request) {
         _logger.LogInformation("Client attempting to establish new session");
-        var sessionTimeout = int.Min(int.Max(request.Timeout, config.MinSessionTimeout), config.MaxSessionTimeout);
+        var sessionTimeout = int.Min(int.Max(request.Timeout, _config.MinSessionTimeout), _config.MaxSessionTimeout);
         var sessionId = _sessionTracker.Add(TimeSpan.FromMilliseconds(sessionTimeout));
         var passwd = request.Passwd ?? [];
         var rnd = new Random((int)(sessionId ^ SuperSecret));

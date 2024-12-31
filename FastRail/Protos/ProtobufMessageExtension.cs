@@ -1,3 +1,5 @@
+using FastRail.Jutes.Data;
+
 namespace FastRail.Protos;
 
 public static class ProtobufMessageExtension {
@@ -15,6 +17,22 @@ public static class ProtobufMessageExtension {
             5 => CreateMode.Ttl,
             6 => CreateMode.PersistentSequentialWithTtl,
             _ => throw new ArgumentOutOfRangeException(nameof(flags))
+        };
+    }
+
+    public static Stat ToStat(this StatEntry entry) {
+        return new Stat {
+            Czxid = entry.Czxid,
+            Mzxid = entry.Mzxid,
+            Ctime = entry.Ctime,
+            Mtime = entry.Mtime,
+            Version = entry.Version,
+            Cversion = entry.Cversion,
+            Aversion = entry.Aversion,
+            EphemeralOwner = entry.EphemeralOwner,
+            DataLength = entry.DataLength,
+            NumChildren = entry.NumChildren,
+            Pzxid = entry.Pzxid,
         };
     }
 }

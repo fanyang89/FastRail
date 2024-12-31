@@ -168,4 +168,47 @@ public class DataStore : IDisposable {
             _sessions.Remove(sessionId);
         }
     }
+
+    public List<string> GetChildren(string path, out StatEntry stat) {
+        var children = new List<string>();
+        var prefix = ByteArrayUtil.Concat(KeyDataNodePrefix, path);
+        var buffer = _db.Get(prefix);
+
+        if (buffer == null) {
+            throw new RailException(ErrorCodes.NoNode);
+        }
+
+        var node = DataNodeEntry.Parser.ParseFrom(buffer);
+        stat = node.Stat;
+
+        using var it = _db.NewIterator();
+        var depth = PathDepth(path);
+
+        for (it.Seek(prefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(prefix)) {
+                break;
+            }
+            var nodeDepth = PathDepth(it.Key());
+
+            if (nodeDepth == depth + 1) {
+                children.Add(Encoding.UTF8.GetString(it.Value()));
+            } else if (nodeDepth > depth + 1) {
+                break;
+            }
+        }
+
+        return children;
+    }
+
+    private static int PathDepth(string path) {
+        // '/' for 0, '/path' for 1, '/path/123' for 2
+        return path == "/" ? 0 : path.Count(x => x == '/');
+    }
+
+    private static int PathDepth(byte[] path) {
+        if (path.Length == 1 && path[0] == '/') {
+            return 0;
+        }
+        return path.Count(x => x == '/');
+    }
 }
