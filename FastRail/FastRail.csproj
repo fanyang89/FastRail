@@ -12,8 +12,16 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.0" />
-        <PackageReference Include="OneOf" Version="3.0.271" />
+        <Protobuf Include="Protos\FastRail.proto" GrpcServices=""/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.0"/>
+        <PackageReference Include="Grpc.Tools" Version="2.69.0-pre1">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="OneOf" Version="3.0.271"/>
         <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1"/>
         <PackageReference Include="System.Net.Sockets" Version="4.3.0"/>
     </ItemGroup>

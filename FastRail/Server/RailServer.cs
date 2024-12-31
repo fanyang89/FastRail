@@ -3,6 +3,8 @@ using System.Net;
 using System.Net.Sockets;
 using FastRail.Jutes;
 using FastRail.Jutes.Proto;
+using FastRail.Protos;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using RaftNET;
 using RaftNET.Services;
@@ -58,16 +60,13 @@ public class RailServer(
         loggerFactory.Dispose();
     }
 
-    private async Task Broadcast(BroadcastRequest request) {
+    private async Task Broadcast(Transaction transaction) {
         if (_raft == null) {
-            _logger.LogWarning("Raft server is not running, can't broadcast requests");
+            _logger.LogWarning("Raft server is not running, can't broadcast TXNs");
             return;
         }
-        using var ms = new MemoryStream();
-        request.SerializeTo(ms);
-        var buffer = ms.ToArray();
-        _raft.AddEntryApplied(buffer);
-        await Task.CompletedTask;
+        var buffer = transaction.ToByteArray();
+        await Task.Run(() => { _raft.AddEntryApplied(buffer); });
     }
 
     private async Task HandleConnection(TcpClient client, CancellationToken token) {
@@ -99,14 +98,16 @@ public class RailServer(
                         break;
                     case OpCode.Create: {
                         var request = JuteDeserializer.Deserialize<CreateRequest>(requestBuffer);
-                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        await Broadcast(new Transaction {
+                            Create = new CreateTransaction {}
+                        });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid),
                             new CreateResponse { Path = request.Path });
                         break;
                     }
                     case OpCode.Delete: {
                         var request = JuteDeserializer.Deserialize<DeleteRequest>(requestBuffer);
-                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        await Broadcast(new Transaction { Delete = new DeleteTransaction() });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
                         break;
                     }
@@ -150,21 +151,25 @@ public class RailServer(
                     }
                     case OpCode.SetData: {
                         var request = JuteDeserializer.Deserialize<SetDataRequest>(requestBuffer);
-                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        await Broadcast(new Transaction { Update = new UpdateTransaction() });
                         break;
                     }
                     case OpCode.GetACL:
                         break;
                     case OpCode.SetACL: {
                         var request = JuteDeserializer.Deserialize<SetACLRequest>(requestBuffer);
-                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        await Broadcast(new Transaction { Update = new UpdateTransaction() });
                         break;
                     }
                     case OpCode.GetChildren:
                         break;
                     case OpCode.Sync: {
                         var request = JuteDeserializer.Deserialize<SyncRequest>(requestBuffer);
-                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+
+                        if (string.IsNullOrEmpty(request.Path)) {
+                            throw new RailException(ErrorCodes.BadArguments);
+                        }
+                        await Broadcast(new Transaction { Sync = new SyncTransaction { Path = request.Path } });
                         break;
                     }
                     case OpCode.Ping: {
@@ -306,80 +311,18 @@ public class RailServer(
 
     public void Apply(List<Command> commands) {
         foreach (var command in commands) {
-            var request = new BroadcastRequest(command.Buffer.Memory);
-            var requestType = request.Type;
+            var transaction = Transaction.Parser.ParseFrom(command.Buffer);
 
-            if (requestType == null) {
-                _logger.LogInformation("invalid request type");
-                continue;
-            }
-
-            switch (requestType) {
-                case OpCode.Notification:
+            switch (transaction.TxnCase) {
+                case Transaction.TxnOneofCase.None:
                     break;
-                case OpCode.Create:
+                case Transaction.TxnOneofCase.Create:
                     break;
-                case OpCode.Delete:
+                case Transaction.TxnOneofCase.Delete:
                     break;
-                case OpCode.Exists:
+                case Transaction.TxnOneofCase.Update:
                     break;
-                case OpCode.GetData:
-                    break;
-                case OpCode.SetData:
-                    break;
-                case OpCode.GetACL:
-                    break;
-                case OpCode.SetACL:
-                    break;
-                case OpCode.GetChildren:
-                    break;
-                case OpCode.Sync:
-                    break;
-                case OpCode.Ping:
-                    break;
-                case OpCode.GetChildren2:
-                    break;
-                case OpCode.Check:
-                    break;
-                case OpCode.Multi:
-                    break;
-                case OpCode.Create2:
-                    break;
-                case OpCode.Reconfig:
-                    break;
-                case OpCode.CheckWatches:
-                    break;
-                case OpCode.RemoveWatches:
-                    break;
-                case OpCode.CreateContainer:
-                    break;
-                case OpCode.DeleteContainer:
-                    break;
-                case OpCode.CreateTtl:
-                    break;
-                case OpCode.MultiRead:
-                    break;
-                case OpCode.Auth:
-                    break;
-                case OpCode.SetWatches:
-                    break;
-                case OpCode.Sasl:
-                    break;
-                case OpCode.GetEphemerals:
-                    break;
-                case OpCode.GetAllChildrenNumber:
-                    break;
-                case OpCode.SetWatches2:
-                    break;
-                case OpCode.AddWatch:
-                    break;
-                case OpCode.WhoAmI:
-                    break;
-                case OpCode.CreateSession:
-                    break;
-                case OpCode.CloseSession:
-                    break;
-                case OpCode.Error:
+                case Transaction.TxnOneofCase.Sync:
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();

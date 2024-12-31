@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package FastRail;
+option csharp_namespace = "FastRail.Protos";
+
+message Transaction {
+  oneof Txn {
+    CreateTransaction Create = 1;
+    DeleteTransaction Delete = 2;
+    UpdateTransaction Update = 3;
+    SyncTransaction Sync = 4;
+  }
+}
+
+message CreateTransaction {
+  string path = 1;
+  bytes data = 2;
+  repeated ACL acls = 3;
+  int32 flags = 4;
+  int64 ctime = 5;
+}
+
+message DeleteTransaction {}
+
+message UpdateTransaction {}
+
+message SyncTransaction {
+  string path = 1;
+}
+
+message ID {
+  string scheme = 1;
+  string id = 2;
+}
+
+message ACL {
+  int32 perms = 1;
+  ID id = 2;
+}
+
+
