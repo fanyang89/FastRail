@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Buffers.Binary;
+using System.Text;
 using FastRail.Exceptions;
 using FastRail.Jutes;
 using FastRail.Jutes.Data;
@@ -19,7 +20,19 @@ public class DataStore : IDisposable {
         _db = RocksDb.Open(options, dataDir);
     }
 
-    public long LastZxid { get; set; }
+    public long LastZxid {
+        get {
+            var buffer = _db.Get(_keyZXid);
+            return BinaryPrimitives.ReadInt64BigEndian(buffer);
+        }
+        private set {
+            var buffer = new byte[sizeof(long)];
+            BinaryPrimitives.WriteInt64BigEndian(buffer, value);
+            _db.Put(_keyZXid, buffer);
+        }
+    }
+
+    public long NextZxid => LastZxid + 1;
 
     public void Dispose() {
         _db.Dispose();

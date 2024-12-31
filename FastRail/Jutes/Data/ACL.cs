@@ -11,5 +11,6 @@ public record ACL : IJuteDeserializable, IJuteSerializable {
 
     public void SerializeTo(Stream s) {
         JuteSerializer.SerializeTo(s, Perms);
+        JuteSerializer.SerializeTo(s, Id);
     }
 }

@@ -1,7 +1,8 @@
 ﻿namespace FastRail.Server;
 
 public enum OpCode {
-    Notification = 0,
+    // invalid
+    // Notification = 0,
     Create = 1,
     Delete = 2,
     Exists = 3,

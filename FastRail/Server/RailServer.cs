@@ -78,6 +78,14 @@ public class RailServer(
         var connectRequest = await ReceiveConnectRequest(conn, token);
         var connectResponse = CreateSession(connectRequest);
         var sessionId = connectResponse.SessionId;
+        await Broadcast(new Transaction {
+            CreateSession = new CreateSession {
+                SessionId = sessionId,
+                Password = ByteString.CopyFrom(connectResponse.Passwd),
+                Timeout = connectResponse.Timeout,
+                ReadOnly = false
+            }
+        });
         await SendConnectResponse(conn, token, connectResponse);
 
         // we're good, handle client requests now
@@ -94,20 +102,53 @@ public class RailServer(
 
             try {
                 switch (requestType) {
-                    case OpCode.Notification: // do nothing...
-                        break;
                     case OpCode.Create: {
                         var request = JuteDeserializer.Deserialize<CreateRequest>(requestBuffer);
-                        await Broadcast(new Transaction {
-                            Create = new CreateTransaction {}
-                        });
+
+                        if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
+                            throw new RailException(ErrorCodes.BadArguments);
+                        }
+
+                        var mode = request.Flags.ParseCreateMode();
+                        var txn = new CreateTransaction {
+                            Path = request.Path,
+                            Data = ByteString.CopyFrom(request.Data),
+                            Mode = mode,
+                            Ctime = Time.CurrentTimeMillis()
+                        };
+
+                        if (mode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
+                            txn.EphemeralOwner = sessionId;
+                        }
+
+                        if (request.ACL != null) {
+                            foreach (var acl in request.ACL) {
+                                var a = new ACL {
+                                    Perms = acl.Perms
+                                };
+
+                                if (acl.Id != null) {
+                                    a.Id = new ID {
+                                        Scheme = acl.Id.Scheme,
+                                        Id = acl.Id.Id
+                                    };
+                                }
+                                txn.Acls.Add(a);
+                            }
+                        }
+
+                        await Broadcast(new Transaction { Create = txn });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid),
                             new CreateResponse { Path = request.Path });
                         break;
                     }
                     case OpCode.Delete: {
                         var request = JuteDeserializer.Deserialize<DeleteRequest>(requestBuffer);
-                        await Broadcast(new Transaction { Delete = new DeleteTransaction() });
+
+                        if (string.IsNullOrEmpty(request.Path)) {
+                            throw new RailException(ErrorCodes.BadArguments);
+                        }
+                        await Broadcast(new Transaction { Delete = new DeleteTransaction { Path = request.Path } });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
                         break;
                     }
