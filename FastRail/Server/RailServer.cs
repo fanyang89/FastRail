@@ -51,6 +51,7 @@ public class RailServer : IDisposable, IStateMachine {
     }
 
     public void Start() {
+        _ds.Load();
         _listener.Start();
         Task.Run(async () => {
             _logger.LogInformation("Rail server started at {}", _listener.LocalEndpoint);
@@ -88,7 +89,6 @@ public class RailServer : IDisposable, IStateMachine {
         // by now, only leader can handle connections
         _logger.LogInformation("Incoming client connection");
         await using var conn = client.GetStream();
-        conn.ReadTimeout = _config.ReceiveTimeout.Milliseconds;
 
         var connectRequest = await ReceiveConnectRequest(conn, token);
         _logger.LogInformation("Incoming connection request, timeout={} session_id={}",
@@ -105,6 +105,7 @@ public class RailServer : IDisposable, IStateMachine {
             }
         });
         await SendConnectResponse(conn, token, connectResponse);
+        _logger.LogInformation("New session created, id={} timeout={}", sessionId, connectResponse.Timeout);
 
         // we're good, handle client requests now
         var closing = false;
@@ -258,6 +259,10 @@ public class RailServer : IDisposable, IStateMachine {
                     }
 
                     case OpCode.Ping: {
+                        _logger.LogInformation("Client ping");
+                        var pingXid = -2;
+                        var lastZxid = _ds.LastZxid;
+                        await SendResponse(conn, token, new ReplyHeader(pingXid, lastZxid));
                         break;
                     }
 
@@ -349,6 +354,7 @@ public class RailServer : IDisposable, IStateMachine {
         // body
         var bodyBuffer = new byte[packetLength - RequestHeader.SizeOf];
         await stream.ReadExactlyAsync(bodyBuffer, 0, bodyBuffer.Length, token);
+        _logger.LogTrace("Received request, xid={} op={} len={}", header.Xid, header.Type, bodyBuffer.Length);
         return await Task.FromResult((header, bodyBuffer));
     }
 
@@ -373,7 +379,7 @@ public class RailServer : IDisposable, IStateMachine {
         await stream.WriteAsync(buffer, 0, buffer.Length, token);
     }
 
-    private async Task SendResponse<T>(NetworkStream stream, CancellationToken token, ReplyHeader header, T? response)
+    private async Task SendResponse<T>(NetworkStream stream, CancellationToken token, ReplyHeader header, T response)
         where T : IJuteSerializable {
         var headerBuffer = JuteSerializer.Serialize(header);
         var bodyBuffer = JuteSerializer.Serialize(response);
@@ -390,8 +396,10 @@ public class RailServer : IDisposable, IStateMachine {
         var len = headerBuffer.Length;
         var lenBuffer = new byte[sizeof(int)];
         BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
+        _logger.LogInformation("Sending response");
         await stream.WriteAsync(lenBuffer, 0, lenBuffer.Length, token);
         await stream.WriteAsync(headerBuffer, 0, headerBuffer.Length, token);
+        _logger.LogInformation("Send response len={}", lenBuffer.Length);
     }
 
     public void Apply(List<Command> commands) {

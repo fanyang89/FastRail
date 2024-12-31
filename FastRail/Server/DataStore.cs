@@ -27,6 +27,14 @@ public class DataStore : IDisposable {
     }
 
     public void Load() {
+        var zxidBuffer = _db.Get(KeyZxid);
+
+        if (zxidBuffer == null) {
+            zxidBuffer = new byte[sizeof(long)];
+            BinaryPrimitives.WriteInt64BigEndian(zxidBuffer, 0);
+            _db.Put(KeyZxid, zxidBuffer);
+        }
+
         using var it = _db.NewIterator();
 
         for (it.SeekToFirst(); it.Valid(); it.Next()) {
