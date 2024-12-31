@@ -1,6 +1,4 @@
-﻿using System.Numerics;
-
-namespace FastRail.Server;
+﻿namespace FastRail.Server;
 
 public enum OpCode {
     Notification = 0,

@@ -13,4 +13,6 @@ public class RequestHeader : IJuteDeserializable, IJuteSerializable {
         JuteSerializer.SerializeTo(s, Xid);
         JuteSerializer.SerializeTo(s, Type);
     }
+
+    public static int SizeOf => sizeof(int) + sizeof(int);
 }

@@ -1,9 +1,9 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class ReplyHeader : IJuteDeserializable, IJuteSerializable {
-    public int Xid;
-    public long Zxid;
-    public int Err;
+class ReplyHeader(int xid, long zxid, int err = 0) : IJuteDeserializable, IJuteSerializable {
+    public int Xid = xid;
+    public long Zxid = zxid;
+    public int Err = err;
 
     public void DeserializeFrom(Stream s) {
         Xid = JuteDeserializer.DeserializeInt(s);

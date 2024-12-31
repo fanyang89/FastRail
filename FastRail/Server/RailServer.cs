@@ -2,7 +2,6 @@
 using System.Net;
 using System.Net.Sockets;
 using FastRail.Jutes;
-using FastRail.Jutes.Data;
 using FastRail.Jutes.Proto;
 using Microsoft.Extensions.Logging;
 using RaftNET;
@@ -19,7 +18,7 @@ public class RailServer(
     private readonly ILogger<RailServer> _logger = loggerFactory.CreateLogger<RailServer>();
     private readonly TcpListener _listener = new(config.EndPoint);
     private readonly CancellationTokenSource _cts = new();
-    private readonly DataStore _dataStore = new(config.DataDir);
+    private readonly DataStore _ds = new(config.DataDir);
     private readonly static long SuperSecret = 0XB3415C00L;
 
     private readonly SessionTracker _sessionTracker = new(TimeSpan.FromMilliseconds(config.Tick),
@@ -38,6 +37,7 @@ public class RailServer(
         _listener.Start();
         Task.Run(async () => {
             _logger.LogInformation("Rail server started");
+
             while (!_cts.Token.IsCancellationRequested) {
                 var conn = await _listener.AcceptTcpClientAsync();
                 _ = Task.Run(() => HandleConnection(conn, _cts.Token));
@@ -70,114 +70,162 @@ public class RailServer(
         await Task.CompletedTask;
     }
 
-    private async Task HandleConnection(TcpClient client, CancellationToken cancellationToken) {
+    private async Task HandleConnection(TcpClient client, CancellationToken token) {
         // by now, only leader can handle connections
         _logger.LogInformation("Incoming client connection");
-        await using var clientStream = client.GetStream();
-        clientStream.ReadTimeout = config.ReceiveTimeout.Milliseconds;
+        await using var conn = client.GetStream();
+        conn.ReadTimeout = config.ReceiveTimeout.Milliseconds;
 
-        var connectRequest = await ReceiveRequest<ConnectRequest>(clientStream, cancellationToken);
+        var connectRequest = await ReceiveConnectRequest(conn, token);
         var connectResponse = CreateSession(connectRequest);
         var sessionId = connectResponse.SessionId;
-        await SendResponse(clientStream, connectResponse, cancellationToken);
+        await SendConnectResponse(conn, token, connectResponse);
 
         // we're good, handle client requests now
         var closing = false;
+
         while (!closing) {
-            var requestHeader = await ReceiveRequest<RequestHeader>(clientStream, cancellationToken);
+            var (requestHeader, requestBuffer) = await ReceiveRequest(conn, token);
             var requestType = requestHeader.Type.ToEnum();
+            var xid = requestHeader.Xid;
+
             if (requestType == null) {
                 throw new Exception($"Invalid request type: {requestHeader.Type}");
             }
-            switch (requestType) {
-                case OpCode.Notification: // do nothing...
-                    break;
-                case OpCode.Create: {
-                    var request = await ReceiveRequest<CreateRequest>(clientStream, cancellationToken);
-                    await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
-                    break;
-                }
-                case OpCode.Delete: {
-                    var request = await ReceiveRequest<DeleteRequest>(clientStream, cancellationToken);
-                    await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
-                    break;
-                }
-                case OpCode.Exists: {
-                    var request = await ReceiveRequest<ExistsRequest>(clientStream, cancellationToken);
-                    Stat? stat = null;
-                    if (request.Path != null) {
-                        stat = _dataStore.Exists(request.Path);
+
+            try {
+                switch (requestType) {
+                    case OpCode.Notification: // do nothing...
+                        break;
+                    case OpCode.Create: {
+                        var request = JuteDeserializer.Deserialize<CreateRequest>(requestBuffer);
+                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid),
+                            new CreateResponse { Path = request.Path });
+                        break;
                     }
-                    await SendResponse(clientStream, new ExistsResponse { Stat = stat }, cancellationToken);
-                    break;
+                    case OpCode.Delete: {
+                        var request = JuteDeserializer.Deserialize<DeleteRequest>(requestBuffer);
+                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
+                        break;
+                    }
+                    case OpCode.Exists: {
+                        var request = JuteDeserializer.Deserialize<ExistsRequest>(requestBuffer);
+
+                        if (string.IsNullOrEmpty(request.Path)) {
+                            throw new RailException(ErrorCodes.BadArguments);
+                        }
+
+                        var node = _ds.GetNode(request.Path);
+
+                        if (node == null) {
+                            throw new RailException(ErrorCodes.NoNode);
+                        }
+                        var children = _ds.CountNodeChildren(request.Path);
+                        var stat = node.Stat.ToStat(node.Data.Length, children);
+                        await SendResponse(conn,
+                            token, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse { Stat = stat });
+                        break;
+                    }
+                    case OpCode.GetData: {
+                        var request = JuteDeserializer.Deserialize<GetDataRequest>(requestBuffer);
+
+                        if (string.IsNullOrEmpty(request.Path)) {
+                            throw new RailException(ErrorCodes.BadArguments);
+                        }
+
+                        var node = _ds.GetNode(request.Path);
+
+                        if (node == null) {
+                            throw new RailException(ErrorCodes.NoNode);
+                        }
+
+                        var children = _ds.CountNodeChildren(request.Path);
+                        var stat = node.Stat.ToStat(node.Data.Length, children);
+                        await SendResponse(conn, token,
+                            new ReplyHeader(xid, _ds.LastZxid),
+                            new GetDataResponse { Data = node.Data, Stat = stat });
+                        break;
+                    }
+                    case OpCode.SetData: {
+                        var request = JuteDeserializer.Deserialize<SetDataRequest>(requestBuffer);
+                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        break;
+                    }
+                    case OpCode.GetACL:
+                        break;
+                    case OpCode.SetACL: {
+                        var request = JuteDeserializer.Deserialize<SetACLRequest>(requestBuffer);
+                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        break;
+                    }
+                    case OpCode.GetChildren:
+                        break;
+                    case OpCode.Sync: {
+                        var request = JuteDeserializer.Deserialize<SyncRequest>(requestBuffer);
+                        await Broadcast(new BroadcastRequest(requestHeader, JuteSerializer.Serialize(request)));
+                        break;
+                    }
+                    case OpCode.Ping: {
+                        _sessionTracker.Touch(sessionId);
+                        break;
+                    }
+                    case OpCode.GetChildren2:
+                        break;
+                    case OpCode.Check:
+                        break;
+                    case OpCode.Multi:
+                        break;
+                    case OpCode.Create2:
+                        break;
+                    case OpCode.Reconfig:
+                        break;
+                    case OpCode.CheckWatches:
+                        break;
+                    case OpCode.RemoveWatches:
+                        break;
+                    case OpCode.CreateContainer:
+                        break;
+                    case OpCode.DeleteContainer:
+                        break;
+                    case OpCode.CreateTtl:
+                        break;
+                    case OpCode.MultiRead:
+                        break;
+                    case OpCode.Auth:
+                        break;
+                    case OpCode.SetWatches:
+                        break;
+                    case OpCode.Sasl:
+                        break;
+                    case OpCode.GetEphemerals:
+                        break;
+                    case OpCode.GetAllChildrenNumber:
+                        break;
+                    case OpCode.SetWatches2:
+                        break;
+                    case OpCode.AddWatch:
+                        break;
+                    case OpCode.WhoAmI:
+                        break;
+                    case OpCode.CreateSession:
+                        break;
+                    case OpCode.CloseSession:
+                        _sessionTracker.Remove(sessionId);
+                        closing = true;
+                        break;
+                    case OpCode.Error:
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
-                case OpCode.GetData:
-                    break;
-                case OpCode.SetData:
-                    break;
-                case OpCode.GetACL:
-                    break;
-                case OpCode.SetACL:
-                    break;
-                case OpCode.GetChildren:
-                    break;
-                case OpCode.Sync:
-                    break;
-                case OpCode.Ping: {
-                    _sessionTracker.Touch(sessionId);
-                    break;
-                }
-                case OpCode.GetChildren2:
-                    break;
-                case OpCode.Check:
-                    break;
-                case OpCode.Multi:
-                    break;
-                case OpCode.Create2:
-                    break;
-                case OpCode.Reconfig:
-                    break;
-                case OpCode.CheckWatches:
-                    break;
-                case OpCode.RemoveWatches:
-                    break;
-                case OpCode.CreateContainer:
-                    break;
-                case OpCode.DeleteContainer:
-                    break;
-                case OpCode.CreateTtl:
-                    break;
-                case OpCode.MultiRead:
-                    break;
-                case OpCode.Auth:
-                    break;
-                case OpCode.SetWatches:
-                    break;
-                case OpCode.Sasl:
-                    break;
-                case OpCode.GetEphemerals:
-                    break;
-                case OpCode.GetAllChildrenNumber:
-                    break;
-                case OpCode.SetWatches2:
-                    break;
-                case OpCode.AddWatch:
-                    break;
-                case OpCode.WhoAmI:
-                    break;
-                case OpCode.CreateSession:
-                    break;
-                case OpCode.CloseSession:
-                    _sessionTracker.Remove(sessionId);
-                    closing = true;
-                    break;
-                case OpCode.Error:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
+            } catch (RailException ex) {
+                var err = ex.Err;
+                await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid, err));
             }
         }
-        _logger.LogInformation("Clinet connection closed");
+        _logger.LogInformation("Client connection closed");
         await Task.CompletedTask;
     }
 
@@ -197,36 +245,75 @@ public class RailServer(
         };
     }
 
-    private async Task<T> ReceiveRequest<T>(NetworkStream stream, CancellationToken cancellationToken)
-        where T : IJuteDeserializable, new() {
-        var buf = new byte[sizeof(int)];
-        await stream.ReadExactlyAsync(buf, 0, buf.Length, cancellationToken);
-        var packetLength = BinaryPrimitives.ReadInt32BigEndian(buf);
+    private async Task<(RequestHeader, byte[])> ReceiveRequest(NetworkStream stream, CancellationToken token) {
+        // len
+        var lengthBuffer = new byte[sizeof(int)];
+        await stream.ReadExactlyAsync(lengthBuffer, 0, lengthBuffer.Length, token);
+        var packetLength = BinaryPrimitives.ReadInt32BigEndian(lengthBuffer);
 
-        buf = new byte[packetLength];
-        await stream.ReadExactlyAsync(buf, 0, packetLength, cancellationToken);
-        return JuteDeserializer.Deserialize<T>(buf);
+        // request header
+        var headerBuffer = new byte[RequestHeader.SizeOf];
+        await stream.ReadExactlyAsync(headerBuffer, 0, headerBuffer.Length, token);
+        var header = JuteDeserializer.Deserialize<RequestHeader>(headerBuffer);
+
+        // body
+        var bodyBuffer = new byte[packetLength - RequestHeader.SizeOf];
+        await stream.ReadExactlyAsync(bodyBuffer, 0, bodyBuffer.Length, token);
+        return await Task.FromResult((header, bodyBuffer));
     }
 
-    private async Task SendResponse<T>(NetworkStream stream, T message, CancellationToken cancellationToken)
+    private async Task<ConnectRequest> ReceiveConnectRequest(NetworkStream stream, CancellationToken token) {
+        // len
+        var lengthBuffer = new byte[sizeof(int)];
+        await stream.ReadExactlyAsync(lengthBuffer, 0, lengthBuffer.Length, token);
+        var packetLength = BinaryPrimitives.ReadInt32BigEndian(lengthBuffer);
+        // connect request body
+        var bodyBuffer = new byte[packetLength];
+        await stream.ReadExactlyAsync(bodyBuffer, 0, bodyBuffer.Length, token);
+        return JuteDeserializer.Deserialize<ConnectRequest>(bodyBuffer);
+    }
+
+    private async Task SendConnectResponse(NetworkStream stream, CancellationToken token, ConnectResponse response) {
+        var buffer = JuteSerializer.Serialize(response);
+        var lengthBuffer = new byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32BigEndian(lengthBuffer, buffer.Length);
+        // len
+        await stream.WriteAsync(lengthBuffer, 0, lengthBuffer.Length, token);
+        // connect response
+        await stream.WriteAsync(buffer, 0, buffer.Length, token);
+    }
+
+    private async Task SendResponse<T>(NetworkStream stream, CancellationToken token, ReplyHeader header, T? response)
         where T : IJuteSerializable {
-        byte[] buffer;
-        using (var ms = new MemoryStream()) {
-            JuteSerializer.SerializeTo(ms, message);
-            buffer = ms.ToArray();
-        }
-        JuteSerializer.SerializeTo(stream, buffer.Length);
-        await stream.WriteAsync(buffer, 0, buffer.Length, cancellationToken);
+        var headerBuffer = JuteSerializer.Serialize(header);
+        var bodyBuffer = JuteSerializer.Serialize(response);
+        var len = headerBuffer.Length + bodyBuffer.Length;
+        var lenBuffer = new byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
+        await stream.WriteAsync(lenBuffer, 0, lenBuffer.Length, token);
+        await stream.WriteAsync(headerBuffer, 0, headerBuffer.Length, token);
+        await stream.WriteAsync(bodyBuffer, 0, bodyBuffer.Length, token);
+    }
+
+    private async Task SendResponse(NetworkStream stream, CancellationToken token, ReplyHeader header) {
+        var headerBuffer = JuteSerializer.Serialize(header);
+        var len = headerBuffer.Length;
+        var lenBuffer = new byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
+        await stream.WriteAsync(lenBuffer, 0, lenBuffer.Length, token);
+        await stream.WriteAsync(headerBuffer, 0, headerBuffer.Length, token);
     }
 
     public void Apply(List<Command> commands) {
         foreach (var command in commands) {
             var request = new BroadcastRequest(command.Buffer.Memory);
             var requestType = request.Type;
+
             if (requestType == null) {
                 _logger.LogInformation("invalid request type");
                 continue;
             }
+
             switch (requestType) {
                 case OpCode.Notification:
                     break;

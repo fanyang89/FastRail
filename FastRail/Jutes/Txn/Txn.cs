@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace FastRail.Jutes.Txn;
+﻿namespace FastRail.Jutes.Txn;
 
 class Txn : IJuteDeserializable, IJuteSerializable {
     public int Type;

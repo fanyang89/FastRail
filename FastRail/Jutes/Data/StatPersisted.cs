@@ -1,37 +1,71 @@
 ﻿namespace FastRail.Jutes.Data;
 
 public record StatPersisted : IJuteDeserializable, IJuteSerializable {
-    public long Czxid; // created zxid
-    public long Mzxid; // last modified zxid
-    public long Ctime; // created
-    public long Mtime; // last modified
-    public int Version; // version
-    public int Cversion; // child version
-    public int Aversion; // acl version
-    public long EphemeralOwner; // owner id if ephemeral, 0 otw
-    public long Pzxid; // last modified children
+    // created zxid
+    public long CZxid;
+
+    // last modified zxid
+    public long MZxid;
+
+    // created
+    public long CTime;
+
+    // last modified
+    public long MTime;
+
+    // version
+    public int Version;
+
+    // child version
+    public int CVersion;
+
+    // acl version
+    public int AVersion;
+
+    // owner id if ephemeral, 0 otw
+    public long EphemeralOwner;
+
+    // last modified children
+    public long PZxid;
 
     public void DeserializeFrom(Stream s) {
-        Czxid = JuteDeserializer.DeserializeLong(s);
-        Mzxid = JuteDeserializer.DeserializeLong(s);
-        Ctime = JuteDeserializer.DeserializeLong(s);
-        Mtime = JuteDeserializer.DeserializeLong(s);
+        CZxid = JuteDeserializer.DeserializeLong(s);
+        MZxid = JuteDeserializer.DeserializeLong(s);
+        CTime = JuteDeserializer.DeserializeLong(s);
+        MTime = JuteDeserializer.DeserializeLong(s);
         Version = JuteDeserializer.DeserializeInt(s);
-        Cversion = JuteDeserializer.DeserializeInt(s);
-        Aversion = JuteDeserializer.DeserializeInt(s);
+        CVersion = JuteDeserializer.DeserializeInt(s);
+        AVersion = JuteDeserializer.DeserializeInt(s);
         EphemeralOwner = JuteDeserializer.DeserializeLong(s);
-        Pzxid = JuteDeserializer.DeserializeLong(s);
+        PZxid = JuteDeserializer.DeserializeLong(s);
     }
 
     public void SerializeTo(Stream s) {
-        JuteSerializer.SerializeTo(s, Czxid);
-        JuteSerializer.SerializeTo(s, Mzxid);
-        JuteSerializer.SerializeTo(s, Ctime);
-        JuteSerializer.SerializeTo(s, Mtime);
+        JuteSerializer.SerializeTo(s, CZxid);
+        JuteSerializer.SerializeTo(s, MZxid);
+        JuteSerializer.SerializeTo(s, CTime);
+        JuteSerializer.SerializeTo(s, MTime);
         JuteSerializer.SerializeTo(s, Version);
-        JuteSerializer.SerializeTo(s, Cversion);
-        JuteSerializer.SerializeTo(s, Aversion);
+        JuteSerializer.SerializeTo(s, CVersion);
+        JuteSerializer.SerializeTo(s, AVersion);
         JuteSerializer.SerializeTo(s, EphemeralOwner);
-        JuteSerializer.SerializeTo(s, Pzxid);
+        JuteSerializer.SerializeTo(s, PZxid);
+    }
+
+    public Stat ToStat(int dataLength, int numChildren) {
+        var s = new Stat {
+            Czxid = CZxid,
+            Mzxid = MZxid,
+            Aversion = AVersion,
+            EphemeralOwner = EphemeralOwner,
+            DataLength = dataLength,
+            NumChildren = numChildren,
+            Pzxid = PZxid,
+            Ctime = CTime,
+            Mtime = MTime,
+            Version = Version,
+            Cversion = CVersion,
+        };
+        return s;
     }
 }

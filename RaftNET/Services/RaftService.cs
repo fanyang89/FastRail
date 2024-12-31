@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using NativeImport;
 using OneOf;
 using RaftNET.Exceptions;
 using RaftNET.FailureDetectors;
@@ -149,11 +147,11 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
             }
             var idx = waiter.Key.Idx;
             var term = waiter.Key.Term;
-            var notifiter = waiter.Value;
+            var notifier = waiter.Value;
             Debug.Assert(idx >= firstIdx);
             waiters.Remove(waiter.Key);
             if (term == entries[(int)(idx - firstIdx)].Term) {
-                notifiter.Signal();
+                notifier.Signal();
             } else {
                 throw new DroppedEntryException();
             }

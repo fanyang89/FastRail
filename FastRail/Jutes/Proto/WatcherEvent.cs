@@ -1,6 +1,4 @@
-﻿using FastRail.Jutes.Data;
-
-namespace FastRail.Jutes.Proto;
+﻿namespace FastRail.Jutes.Proto;
 
 class WatcherEvent : IJuteDeserializable, IJuteSerializable {
     public int Type; // event type
