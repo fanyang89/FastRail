@@ -109,7 +109,7 @@ public class DataStore : IDisposable {
     }
 
     public void UpdateNode(string key, byte[]? data, StatEntry? stat) {
-        var keyBytes = Encoding.UTF8.GetBytes(key);
+        var keyBytes = ByteArrayUtil.Concat(KeyDataNodePrefix, key);
         var buffer = _db.Get(keyBytes);
 
         if (buffer == null) {
@@ -129,9 +129,14 @@ public class DataStore : IDisposable {
         _db.Put(keyBytes, node.ToByteArray());
     }
 
-    public DataNode? GetNode(string key) {
-        var value = _db.Get(Encoding.UTF8.GetBytes(key));
-        return value == null ? null : JuteDeserializer.Deserialize<DataNode>(value);
+    public DataNodeEntry? GetNode(string key) {
+        var keyBytes = ByteArrayUtil.Concat(KeyDataNodePrefix, key);
+        var value = _db.Get(keyBytes);
+        if (value == null) {
+            return null;
+        }
+        var node = DataNodeEntry.Parser.ParseFrom(value);
+        return node;
     }
 
     public List<SessionEntry> GetSessions() {

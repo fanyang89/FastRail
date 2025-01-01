@@ -10,7 +10,9 @@ public class RaftCluster {
     public RaftCluster(ILoggerFactory loggerFactory, ulong serverCount) {
         var addressBook = new AddressBook();
 
-        for (ulong i = 1; i <= serverCount; i++) addressBook.Add(i, $"http://127.0.0.1:{15000 + i}");
+        for (ulong i = 1; i <= serverCount; i++) {
+            addressBook.Add(i, $"https://127.0.0.1:{15000 + i}");
+        }
 
         for (ulong i = 1; i <= serverCount; i++) {
             var tempDir = Directory.CreateTempSubdirectory("raftnet-data");

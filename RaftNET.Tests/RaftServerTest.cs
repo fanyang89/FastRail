@@ -17,7 +17,7 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     [SetUp]
     public new void Setup() {
         _logger = LoggerFactory.CreateLogger<RaftServerTest>();
-        _listenAddress = $"http://127.0.0.1:{_port}";
+        _listenAddress = $"https://127.0.0.1:{_port}";
         _addressBook = new AddressBook();
         _addressBook.Add(_myId, _listenAddress);
         var tmpDir = Directory.CreateTempSubdirectory();

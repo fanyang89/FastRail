@@ -10,10 +10,9 @@ public class RaftTestBase {
     public void Setup() {
         Console.SetOut(TestContext.Progress);
         LoggerFactory = RaftNET.LoggerFactory.Instance;
+        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
     }
 
     [TearDown]
-    public void TearDown() {
-        LoggerFactory.Dispose();
-    }
+    public void TearDown() {}
 }

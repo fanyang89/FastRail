@@ -10,7 +10,7 @@ public class RaftClient : IRaftClient {
     public RaftClient(ulong myId, string address) {
         _myId = myId;
         var options = new GrpcChannelOptions {
-            Credentials = ChannelCredentials.Insecure
+            // Credentials = ChannelCredentials.Insecure
         };
         var channel = GrpcChannel.ForAddress(address, options);
         _client = new Raft.RaftClient(channel);

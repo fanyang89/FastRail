@@ -10,10 +10,9 @@ public class TestBase {
     public void Setup() {
         Console.SetOut(TestContext.Progress);
         LoggerFactory = FastRail.LoggerFactory.Instance;
+        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
     }
 
     [TearDown]
-    public void TearDown() {
-        LoggerFactory.Dispose();
-    }
+    public void TearDown() {}
 }

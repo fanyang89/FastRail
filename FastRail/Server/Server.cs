@@ -85,7 +85,6 @@ public class Server : IDisposable, IStateMachine {
         _cts.Dispose();
         _listener.Dispose();
         _sessionTracker.Dispose();
-        _loggerFactory.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -195,44 +194,26 @@ public class Server : IDisposable, IStateMachine {
                     }
 
                     case OpCode.Check:
-                        break;
                     case OpCode.Multi:
-                        break;
                     case OpCode.Create2:
-                        break;
                     case OpCode.Reconfig:
-                        break;
                     case OpCode.CheckWatches:
-                        break;
                     case OpCode.RemoveWatches:
-                        break;
                     case OpCode.CreateContainer:
-                        break;
                     case OpCode.DeleteContainer:
-                        break;
                     case OpCode.CreateTtl:
-                        break;
                     case OpCode.MultiRead:
-                        break;
                     case OpCode.Auth:
-                        break;
                     case OpCode.SetWatches:
-                        break;
                     case OpCode.Sasl:
-                        break;
                     case OpCode.GetEphemerals:
-                        break;
                     case OpCode.GetAllChildrenNumber:
-                        break;
                     case OpCode.SetWatches2:
-                        break;
                     case OpCode.AddWatch:
-                        break;
                     case OpCode.WhoAmI:
-                        break;
-                    case OpCode.CreateSession: {
-                        break;
-                    }
+                    case OpCode.CreateSession:
+                        throw new NotImplementedException();
+
                     case OpCode.CloseSession: {
                         _sessionTracker.Remove(sessionId);
                         closing = true;
@@ -263,7 +244,6 @@ public class Server : IDisposable, IStateMachine {
         if (node == null) {
             throw new RailException(ErrorCodes.NoNode);
         }
-
         var txn = new UpdateNodeTransaction {
             Path = request.Path,
             Mtime = Time.CurrentTimeMillis(),
@@ -279,11 +259,11 @@ public class Server : IDisposable, IStateMachine {
 
         node = _ds.GetNode(request.Path);
         if (node == null) {
-            throw new RailException(ErrorCodes.InvalidState);
+            throw new RailException(ErrorCodes.SystemError);
         }
 
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SetDataResponse {
-            Stat = node.Stat.ToStat(node.Data.Length, _ds.CountNodeChildren(request.Path))
+            Stat = node.Stat.ToStat()
         }, token);
     }
 
@@ -341,11 +321,11 @@ public class Server : IDisposable, IStateMachine {
         }
 
         var children = _ds.CountNodeChildren(request.Path);
-        var stat = node.Stat.ToStat(node.Data.Length, children);
+        var stat = node.Stat.ToStat();
         await SendResponse(conn,
             new ReplyHeader(xid, _ds.LastZxid),
             new GetDataResponse {
-                Data = node.Data,
+                Data = node.Data.ToArray(),
                 Stat = stat
             }, token);
     }
@@ -361,8 +341,7 @@ public class Server : IDisposable, IStateMachine {
             throw new RailException(ErrorCodes.NoNode);
         }
 
-        var children = _ds.CountNodeChildren(request.Path);
-        var stat = node.Stat.ToStat(node.Data.Length, children);
+        var stat = node.Stat.ToStat();
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse {
             Stat = stat
         }, token);

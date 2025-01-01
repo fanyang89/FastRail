@@ -75,6 +75,5 @@ public class RpcFailureDetector(
 
     public void Dispose() {
         RemoveAll();
-        loggerFactory.Dispose();
     }
 }

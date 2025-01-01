@@ -12,7 +12,7 @@ public class ErrorCodes {
     public static int Unimplemented = -6;
     public static int OperationTimeout = -7;
     public static int BadArguments = -8;
-    public static int InvalidState = -9;
+    public static int InvalidState = -9; // old client don't have
 
     // API errors
     public static int APIError = -100;
