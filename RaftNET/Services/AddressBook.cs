@@ -1,4 +1,6 @@
-﻿namespace RaftNET.Services;
+﻿using System.Net;
+
+namespace RaftNET.Services;
 
 public class AddressBook : IAddressBook {
     private readonly Dictionary<ulong, string> _addresses = new();
@@ -9,9 +11,11 @@ public class AddressBook : IAddressBook {
         foreach (var memberString in initialMembers) {
             // format: <id>=<address>
             var parts = memberString.Split('=');
+
             if (parts.Length != 2) {
                 throw new ArgumentException(nameof(initialMembers));
             }
+
             _addresses.Add(ulong.Parse(parts[0]), parts[1]);
         }
     }
@@ -26,6 +30,14 @@ public class AddressBook : IAddressBook {
         lock (_addresses) {
             _addresses.Add(id, address);
         }
+    }
+
+    public void Add(ulong id, string address, int port) {
+        Add(id, $"http://{address}:{port}");
+    }
+
+    public void Add(ulong id, IPAddress address, int port) {
+        Add(id, $"http://{address}:{port}");
     }
 
     public void Add(ulong id, int port) {

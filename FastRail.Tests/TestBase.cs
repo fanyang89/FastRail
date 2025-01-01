@@ -3,7 +3,7 @@
 namespace FastRail.Tests;
 
 [TestFixture]
-public class RailTestBase {
+public class TestBase {
     protected ILoggerFactory LoggerFactory;
 
     [SetUp]

@@ -46,16 +46,23 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         ulong term = 0;
         ulong votedFor = 0;
         var tv = _persistence.LoadTermVote();
+
         if (tv != null) {
             term = tv.Term;
             votedFor = tv.VotedFor;
         }
+
         var commitedIdx = _persistence.LoadCommitIdx();
         var snapshot = _persistence.LoadSnapshotDescriptor();
+
         if (snapshot == null) {
-            _logger.LogInformation("Load empty snapshot, get initial members from current address book");
-            snapshot = new SnapshotDescriptor { Config = Messages.ConfigFromIds(_addressBook.GetMembers()) };
+            var members = _addressBook.GetMembers();
+            _logger.LogInformation("Load empty snapshot, get {} initial members from current address book", members.Count);
+            snapshot = new SnapshotDescriptor {
+                Config = Messages.ConfigFromIds(members)
+            };
         }
+
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
         var fd = new RpcFailureDetector(config.MyId, _addressBook, new SystemClock(), _loggerFactory,
@@ -68,6 +75,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         _fsm = new FSM(
             config.MyId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify,
             config.LoggerFactory.CreateLogger<FSM>());
+
         if (snapshot is { Id: > 0 }) {
             _stateMachine.LoadSnapshot(snapshot.Id);
             _snapshotDescIdx = snapshot.Idx;
@@ -87,39 +95,50 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         if (_ioTask != null) {
             await _ioTask.WaitAsync(cancellationToken);
         }
+
         _applyMessages.Add(new ApplyMessage(), cancellationToken);
+
         if (_applyTask != null) {
             await _applyTask.WaitAsync(cancellationToken);
         }
+
         if (_ticker != null) {
             await _ticker.DisposeAsync();
         }
+
         _logger.LogInformation("RaftService{{{}}} stopped", _myId);
     }
 
     private Action DoApply(CancellationToken cancellationToken) {
         return () => {
             _logger.LogInformation("Apply{{{}}} started", _myId);
+
             while (!cancellationToken.IsCancellationRequested) {
                 var message = _applyMessages.Take();
+
                 if (message.IsExit) {
                     break;
                 }
+
                 message.Switch(
                     entries => {
                         _logger.LogTrace("Apply{{{}}} on apply {} entries", _myId, entries.Count);
+
                         lock (_commitNotifiers) {
                             NotifyWaiters(_commitNotifiers, entries);
                         }
+
                         _logger.LogTrace("Apply({}) applying...", _myId);
                         _stateMachine.Apply(entries
                             .Where(x => x.DataCase == LogEntry.DataOneofCase.Command)
                             .Select(x => x.Command)
                             .ToList()
                         );
+
                         lock (_applyNotifiers) {
                             NotifyWaiters(_applyNotifiers, entries);
                         }
+
                         _appliedIdx = entries.Last().Idx;
                     },
                     snapshot => {
@@ -131,6 +150,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
                     _ => {}
                 );
             }
+
             _logger.LogInformation("Apply{{{}}} stopped", _myId);
         };
     }
@@ -142,14 +162,17 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
 
         while (waiters.Count > 0) {
             var waiter = waiters.First();
+
             if (waiter.Key.Idx > commitIdx) {
                 break;
             }
+
             var idx = waiter.Key.Idx;
             var term = waiter.Key.Term;
             var notifier = waiter.Value;
             Debug.Assert(idx >= firstIdx);
             waiters.Remove(waiter.Key);
+
             if (term == entries[(int)(idx - firstIdx)].Term) {
                 notifier.Signal();
             } else {
@@ -159,6 +182,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
 
         while (waiters.Count > 0) {
             var waiter = waiters.First();
+
             if (waiter.Key.Term < commitTerm) {
                 throw new DroppedEntryException();
             } else {
@@ -170,20 +194,25 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
     private Func<Task> DoIO(CancellationToken cancellationToken, ulong stableIdx) {
         return async () => {
             _logger.LogInformation("IO{{{}}} started", _myId);
+
             while (!cancellationToken.IsCancellationRequested) {
                 _fsmEventNotify.Wait();
                 FSM.Output? batch = null;
+
                 lock (_fsm) {
                     var hasOutput = _fsm.HasOutput();
+
                     if (hasOutput) {
                         batch = _fsm.GetOutput();
                     }
                 }
+
                 if (batch != null) {
                     _logger.LogInformation("Processing fsm output, count={}", batch.LogEntries.Count);
                     await ProcessFSMOutput(stableIdx, batch);
                 }
             }
+
             _logger.LogInformation("IO{{{}}} started", _myId);
         };
     }
@@ -201,6 +230,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
             var preservedLogEntries = batch.Snapshot.PreservedLogEntries;
             _persistence.StoreSnapshotDescriptor(snp, preservedLogEntries);
             _snapshotDescIdx = snp.Idx;
+
             if (!isLocal) {
                 _applyMessages.Add(new ApplyMessage(snp));
             }
@@ -212,9 +242,11 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
 
         if (batch.LogEntries.Count > 0) {
             var entries = batch.LogEntries;
+
             if (lastStable >= entries.First().Idx) {
                 _persistence.TruncateLog(entries.First().Idx);
             }
+
             _persistence.StoreLogEntries(entries);
             lastStable = entries.Last().Idx;
         }
@@ -249,21 +281,25 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         var commandLength = command.Match(
             buffer => buffer.Length,
             configuration => configuration.CalculateSize());
+
         if (commandLength >= _config.MaxCommandSize) {
             throw new CommandTooLargeException(commandLength, _config.MaxCommandSize);
         }
 
         LogEntry entry;
+
         lock (_fsm) {
             if (!_fsm.IsLeader) {
                 throw new NotLeaderException();
             }
+
             if (command.IsT0) {
                 entry = _fsm.AddEntry(command.AsT0);
             } else {
                 entry = _fsm.AddEntry(command.AsT1);
             }
         }
+
         WaitForEntry(entry, waitType);
     }
 
@@ -288,18 +324,22 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         var termIndex = new TermIdx(entry.Idx, entry.Term);
         var ok = false;
         var notifier = new Notifier();
+
         switch (waitType) {
             case WaitType.Committed:
                 lock (_commitNotifiers) {
                     ok = _commitNotifiers.TryAdd(termIndex, notifier);
                 }
+
                 break;
             case WaitType.Applied:
                 lock (_applyNotifiers) {
                     ok = _applyNotifiers.TryAdd(termIndex, notifier);
                 }
+
                 break;
         }
+
         Debug.Assert(ok);
         notifier.Wait();
     }

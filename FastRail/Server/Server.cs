@@ -1,7 +1,6 @@
 ﻿using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
-using CommunityToolkit.HighPerformance;
 using FastRail.Jutes;
 using FastRail.Jutes.Proto;
 using FastRail.Protos;
@@ -13,9 +12,10 @@ using RaftNET.StateMachines;
 
 namespace FastRail.Server;
 
-public class RailServer : IDisposable, IStateMachine {
-    private RaftServer? _raft;
-    private readonly ILogger<RailServer> _logger;
+public class Server : IDisposable, IStateMachine {
+    public RaftServer? Raft { get; set; }
+
+    private readonly ILogger<Server> _logger;
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly DataStore _ds;
@@ -26,13 +26,13 @@ public class RailServer : IDisposable, IStateMachine {
     private readonly Config _config;
     private readonly ILoggerFactory _loggerFactory;
 
-    public RailServer(
+    public Server(
         Config config,
         ILoggerFactory loggerFactory
     ) {
         _config = config;
         _loggerFactory = loggerFactory;
-        _logger = loggerFactory.CreateLogger<RailServer>();
+        _logger = loggerFactory.CreateLogger<Server>();
         _listener = new TcpListener(config.EndPoint);
         _ds = new DataStore(config.DataDir);
         _sessionTracker = new SessionTracker(
@@ -50,16 +50,27 @@ public class RailServer : IDisposable, IStateMachine {
         public readonly int Tick = 1000;
     }
 
-    public void Start() {
+    public Task Start() {
         _ds.Load();
         _listener.Start();
-        Task.Run(async () => {
+        return Task.Run(async () => {
             _logger.LogInformation("Rail server started at {}", _listener.LocalEndpoint);
 
             while (!_cts.Token.IsCancellationRequested) {
                 var conn = await _listener.AcceptTcpClientAsync();
-                _ = Task.Run(() => HandleConnection(conn, _cts.Token));
+                _ = Task.Run(async () => {
+                    try {
+                        await HandleConnection(conn, _cts.Token);
+                    }
+                    catch (OperationCanceledException) {
+                        // ignored
+                    }
+                    catch (Exception e) {
+                        _logger.LogError(e, "handling connection failed");
+                    }
+                });
             }
+
             _logger.LogInformation("Rail server exited");
         }, _cts.Token);
     }
@@ -74,15 +85,17 @@ public class RailServer : IDisposable, IStateMachine {
         _listener.Dispose();
         _sessionTracker.Dispose();
         _loggerFactory.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private async Task Broadcast(Transaction transaction) {
-        if (_raft == null) {
+        if (Raft == null) {
             _logger.LogWarning("Raft server is not running, can't broadcast TXNs");
             return;
         }
+
         var buffer = transaction.ToByteArray();
-        await Task.Run(() => { _raft.AddEntryApplied(buffer); });
+        await Task.Run(() => { Raft.AddEntryApplied(buffer); });
     }
 
     private async Task HandleConnection(TcpClient client, CancellationToken token) {
@@ -128,6 +141,7 @@ public class RailServer : IDisposable, IStateMachine {
                         if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
+
                         var mode = request.Flags.ParseCreateMode();
                         var txn = new CreateNodeTransaction {
                             Path = request.Path,
@@ -139,9 +153,14 @@ public class RailServer : IDisposable, IStateMachine {
                         if (mode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
                             txn.EphemeralOwner = sessionId;
                         }
-                        await Broadcast(new Transaction { CreateNode = txn });
+
+                        await Broadcast(new Transaction {
+                            CreateNode = txn
+                        });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid),
-                            new CreateResponse { Path = request.Path });
+                            new CreateResponse {
+                                Path = request.Path
+                            });
                         break;
                     }
 
@@ -151,7 +170,12 @@ public class RailServer : IDisposable, IStateMachine {
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
-                        await Broadcast(new Transaction { DeleteNode = new DeleteNodeTransaction { Path = request.Path } });
+
+                        await Broadcast(new Transaction {
+                            DeleteNode = new DeleteNodeTransaction {
+                                Path = request.Path
+                            }
+                        });
                         await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
                         break;
                     }
@@ -162,15 +186,19 @@ public class RailServer : IDisposable, IStateMachine {
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
+
                         var node = _ds.GetNode(request.Path);
 
                         if (node == null) {
                             throw new RailException(ErrorCodes.NoNode);
                         }
+
                         var children = _ds.CountNodeChildren(request.Path);
                         var stat = node.Stat.ToStat(node.Data.Length, children);
                         await SendResponse(conn,
-                            token, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse { Stat = stat });
+                            token, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse {
+                                Stat = stat
+                            });
                         break;
                     }
 
@@ -180,6 +208,7 @@ public class RailServer : IDisposable, IStateMachine {
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
+
                         var node = _ds.GetNode(request.Path);
 
                         if (node == null) {
@@ -190,7 +219,10 @@ public class RailServer : IDisposable, IStateMachine {
                         var stat = node.Stat.ToStat(node.Data.Length, children);
                         await SendResponse(conn, token,
                             new ReplyHeader(xid, _ds.LastZxid),
-                            new GetDataResponse { Data = node.Data, Stat = stat });
+                            new GetDataResponse {
+                                Data = node.Data,
+                                Stat = stat
+                            });
                         break;
                     }
 
@@ -216,7 +248,10 @@ public class RailServer : IDisposable, IStateMachine {
                         if (request.Data != null) {
                             txn.Data = ByteString.CopyFrom(request.Data);
                         }
-                        await Broadcast(new Transaction { UpdateNode = txn });
+
+                        await Broadcast(new Transaction {
+                            UpdateNode = txn
+                        });
                         break;
                     }
 
@@ -232,16 +267,22 @@ public class RailServer : IDisposable, IStateMachine {
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
+
                         var children = _ds.GetChildren(request.Path, out var stat);
 
                         if (requestType == OpCode.GetChildren) {
                             await SendResponse(conn, token,
                                 new ReplyHeader(xid, _ds.LastZxid),
-                                new GetChildrenResponse { Children = children });
+                                new GetChildrenResponse {
+                                    Children = children
+                                });
                         } else {
                             await SendResponse(conn, token,
                                 new ReplyHeader(xid, _ds.LastZxid),
-                                new GetChildren2Response { Children = children, Stat = stat.ToStat() }
+                                new GetChildren2Response {
+                                    Children = children,
+                                    Stat = stat.ToStat()
+                                }
                             );
                         }
 
@@ -254,15 +295,17 @@ public class RailServer : IDisposable, IStateMachine {
                         if (string.IsNullOrEmpty(request.Path)) {
                             throw new RailException(ErrorCodes.BadArguments);
                         }
-                        await Broadcast(new Transaction { Sync = new SyncTransaction { Path = request.Path } });
+
+                        await Broadcast(new Transaction {
+                            Sync = new SyncTransaction {
+                                Path = request.Path
+                            }
+                        });
                         break;
                     }
 
                     case OpCode.Ping: {
-                        _logger.LogInformation("Client ping");
-                        var pingXid = -2;
-                        var lastZxid = _ds.LastZxid;
-                        await SendResponse(conn, token, new ReplyHeader(pingXid, lastZxid));
+                        await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
                         break;
                     }
 
@@ -315,11 +358,13 @@ public class RailServer : IDisposable, IStateMachine {
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
-            } catch (RailException ex) {
+            }
+            catch (RailException ex) {
                 var err = ex.Err;
                 await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid, err));
             }
         }
+
         _logger.LogInformation("Client connection closed");
         await Task.CompletedTask;
     }
@@ -396,10 +441,8 @@ public class RailServer : IDisposable, IStateMachine {
         var len = headerBuffer.Length;
         var lenBuffer = new byte[sizeof(int)];
         BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
-        _logger.LogInformation("Sending response");
         await stream.WriteAsync(lenBuffer, 0, lenBuffer.Length, token);
         await stream.WriteAsync(headerBuffer, 0, headerBuffer.Length, token);
-        _logger.LogInformation("Send response len={}", lenBuffer.Length);
     }
 
     public void Apply(List<Command> commands) {
@@ -464,12 +507,6 @@ public class RailServer : IDisposable, IStateMachine {
     }
 
     public void OnEvent(Event ev) {
-        ev.Switch(e => {
-            _logger.LogInformation("Role changed, id={} role={} ", e.ServerId, e.Role);
-        });
-    }
-
-    public void SetRaftServer(RaftServer raftServer) {
-        _raft = raftServer;
+        ev.Switch(e => { _logger.LogInformation("Role changed, id={} role={} ", e.ServerId, e.Role); });
     }
 }

@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging;
 namespace RaftNET.Services;
 
 public class RaftServer {
-    private Task? _runTask;
     private readonly WebApplication _app;
     private readonly RaftService _raftService;
 
@@ -19,9 +18,8 @@ public class RaftServer {
         builder.Logging.ClearProviders();
         builder.Logging.AddSimpleConsole(LoggerFactory.ConfigureAspNet());
         builder.WebHost.ConfigureKestrel((_, serverOptions) => {
-            serverOptions.Listen(config.Listen.Address, config.Listen.Port, options => {
-                options.Protocols = HttpProtocols.Http2;
-            });
+            serverOptions.Listen(config.Listen.Address, config.Listen.Port,
+                options => { options.Protocols = HttpProtocols.Http2; });
         });
         builder.Services.AddHostedService<RaftService>(_ => _raftService);
         builder.Services.AddSingleton<RaftService>(provider =>
@@ -31,8 +29,8 @@ public class RaftServer {
         _app.MapGrpcService<RaftService>();
     }
 
-    public void Start() {
-        _runTask = _app.RunAsync();
+    public Task Start() {
+        return Task.Run(() => _app.RunAsync());
     }
 
     public void Stop() {
