@@ -15,8 +15,10 @@ public class LogWatcher(ILogger<LogWatcher> logger) : Watcher {
 [TestFixture]
 [TestOf(typeof(Server.Server))]
 public class SingleServerTest : TestBase {
-    private Launcher _launcher;
     private ILogger<SingleServerTest> _logger;
+    private Launcher _launcher;
+    private Server.Server _server;
+    private RaftServer _raft;
 
     private const int MyId = 1;
     private const int Port = 15000;
@@ -36,6 +38,8 @@ public class SingleServerTest : TestBase {
             RaftListen = new IPEndPoint(IPAddress.Loopback, RaftPort),
             AddressBook = addressBook
         });
+        _server = _launcher.Server;
+        _raft = _launcher.Raft;
         _launcher.Launch();
     }
 
@@ -49,6 +53,7 @@ public class SingleServerTest : TestBase {
     public void TestRailServerCanAcceptConnections() {
         var client = new ZooKeeper($"127.0.0.1:{Port}", SessionTimeout,
             new LogWatcher(LoggerFactory.CreateLogger<LogWatcher>()));
-        Thread.Sleep(13000);
+        Thread.Sleep(4000);
+        Assert.That(_server.PingCount, Is.GreaterThan(0));
     }
 }

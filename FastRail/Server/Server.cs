@@ -25,6 +25,7 @@ public class Server : IDisposable, IStateMachine {
 
     private readonly Config _config;
     private readonly ILoggerFactory _loggerFactory;
+    public int PingCount { get; private set; }
 
     public Server(
         Config config,
@@ -188,6 +189,7 @@ public class Server : IDisposable, IStateMachine {
                     }
 
                     case OpCode.Ping: {
+                        PingCount++;
                         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), token);
                         break;
                     }

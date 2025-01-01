@@ -29,27 +29,27 @@ public class LaunchConfig {
 }
 
 public class Launcher : IDisposable {
-    private readonly Server.Server _server;
-    private readonly RaftServer _raft;
+    public Server.Server Server { get; }
+    public RaftServer Raft { get; }
 
     public Launcher(LaunchConfig config) {
-        _server = new Server.Server(config.ServerConfig, LoggerFactory.Instance);
-        _raft = new RaftServer(config.GetRaftConfig(_server));
-        _server.Raft = _raft;
+        Server = new Server.Server(config.ServerConfig, LoggerFactory.Instance);
+        Raft = new RaftServer(config.GetRaftConfig(Server));
+        Server.Raft = Raft;
     }
 
     public void Launch() {
-        _server.Start();
-        _raft.Start();
+        Server.Start();
+        Raft.Start();
     }
 
     public void Stop() {
-        _raft.Stop();
-        _server.Stop();
+        Raft.Stop();
+        Server.Stop();
     }
 
     public void Dispose() {
-        _server.Dispose();
+        Server.Dispose();
         GC.SuppressFinalize(this);
     }
 }
