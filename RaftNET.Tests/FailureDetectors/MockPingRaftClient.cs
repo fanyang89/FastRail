@@ -4,14 +4,16 @@ using RaftNET.Services;
 
 namespace RaftNET.Tests.FailureDetectors;
 
-class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger) : IRaftClient {
+internal class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger) : IRaftClient {
     private bool _injectedException;
 
     public Task Ping(DateTime deadline) {
         logger.LogInformation("Ping({})", myId);
+
         if (_injectedException) {
             throw new RpcException(new Status(StatusCode.Unavailable, "injected ping failure"));
         }
+
         return Task.CompletedTask;
     }
 

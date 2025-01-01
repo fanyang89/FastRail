@@ -36,6 +36,7 @@ public class RpcFailureDetector(
     public void Remove(ulong serverId) {
         lock (_workers) {
             _workers.Remove(serverId, out var worker);
+
             if (worker != null) {
                 worker.Stop();
             }
@@ -47,6 +48,7 @@ public class RpcFailureDetector(
             foreach (var (_, worker) in _workers) {
                 worker.Stop();
             }
+
             _workers.Clear();
         }
     }

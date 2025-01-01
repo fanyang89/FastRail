@@ -11,9 +11,8 @@ public class LogLimiter(int initialCount, int maxCount) {
         if (n > maxCount) {
             throw new ArgumentOutOfRangeException(nameof(n));
         }
-        for (var i = 0; i < n; i++) {
-            WaitOne();
-        }
+
+        for (var i = 0; i < n; i++) WaitOne();
     }
 
     public void Release(int n) {

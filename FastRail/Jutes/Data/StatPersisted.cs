@@ -64,7 +64,7 @@ public record StatPersisted : IJuteDeserializable, IJuteSerializable {
             Ctime = CTime,
             Mtime = MTime,
             Version = Version,
-            Cversion = CVersion,
+            Cversion = CVersion
         };
         return s;
     }

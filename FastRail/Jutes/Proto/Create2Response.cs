@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Proto;
 
-class Create2Response : IJuteDeserializable, IJuteSerializable {
+internal class Create2Response : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public Stat? Stat;
 

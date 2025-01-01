@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class CreateSessionTxn : IJuteDeserializable, IJuteSerializable {
+internal class CreateSessionTxn : IJuteDeserializable, IJuteSerializable {
     public int TimeOut;
 
     public void DeserializeFrom(Stream s) {

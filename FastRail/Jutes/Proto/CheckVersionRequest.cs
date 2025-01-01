@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class CheckVersionRequest : IJuteDeserializable, IJuteSerializable {
+internal class CheckVersionRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public int Version;
 

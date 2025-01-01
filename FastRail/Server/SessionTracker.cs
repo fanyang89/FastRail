@@ -41,6 +41,7 @@ public class SessionTracker : IDisposable, IAsyncDisposable {
             foreach (var id in _expired) {
                 _onExpired(id);
             }
+
             _expired.Clear();
         }
     }
@@ -65,6 +66,7 @@ public class SessionTracker : IDisposable, IAsyncDisposable {
         lock (_sessions) {
             _sessions.Add(sessionId, session);
         }
+
         return sessionId;
     }
 

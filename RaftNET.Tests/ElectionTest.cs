@@ -14,7 +14,9 @@ public class ElectionTest : FSMTestBase {
             EnablePreVote: enablePreVote
         );
         var cfg = Messages.ConfigFromIds(Id1);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new Log(new SnapshotDescriptor {
+            Config = cfg
+        });
         var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), fsmConfig, LoggerFactory.CreateLogger<FSM>());
 
         ElectionTimeout(fsm);
@@ -42,7 +44,9 @@ public class ElectionTest : FSMTestBase {
     [Test]
     public void SingleNodeQuiet() {
         var cfg = Messages.ConfigFromIds(Id1);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new Log(new SnapshotDescriptor {
+            Config = cfg
+        });
         var fsm = CreateFollower(Id1, log);
 
         // Immediately converts from leader to follower if quorum=1
@@ -61,7 +65,9 @@ public class ElectionTest : FSMTestBase {
     public void TwoNodes() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new Log(new SnapshotDescriptor {
+            Config = cfg
+        });
         var fsm = CreateFollower(Id1, log, fd);
         // Initial state is follower
         Assert.That(fsm.IsFollower);
@@ -123,18 +129,24 @@ public class ElectionTest : FSMTestBase {
     public void FourNodes() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new Log(new SnapshotDescriptor {
+            Config = cfg
+        });
         var fsm = CreateFollower(Id1, log, fd);
         Assert.That(fsm.IsFollower);
 
         fsm.Step(Id4, new AppendRequest {
-            CurrentTerm = 1, PrevLogIdx = 1, PrevLogTerm = 1
+            CurrentTerm = 1,
+            PrevLogIdx = 1,
+            PrevLogTerm = 1
         });
 
         fsm.GetOutput();
 
         fsm.Step(Id3, new VoteRequest {
-            CurrentTerm = 1, LastLogIdx = 1, LastLogTerm = 1
+            CurrentTerm = 1,
+            LastLogIdx = 1,
+            LastLogTerm = 1
         });
 
         var output = fsm.GetOutput();
@@ -148,9 +160,15 @@ public class ElectionTest : FSMTestBase {
         output = fsm.GetOutput();
         Assert.That(output.TermAndVote, Is.Not.Null);
         var currentTerm = output.TermAndVote.Term;
-        fsm.Step(Id2, new VoteResponse { CurrentTerm = currentTerm, VoteGranted = true });
+        fsm.Step(Id2, new VoteResponse {
+            CurrentTerm = currentTerm,
+            VoteGranted = true
+        });
         Assert.That(fsm.IsCandidate);
-        fsm.Step(Id3, new VoteResponse { CurrentTerm = currentTerm, VoteGranted = true });
+        fsm.Step(Id3, new VoteResponse {
+            CurrentTerm = currentTerm,
+            VoteGranted = true
+        });
         Assert.That(fsm.IsLeader);
     }
 }

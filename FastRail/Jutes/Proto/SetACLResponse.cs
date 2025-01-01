@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Proto;
 
-class SetACLResponse : IJuteDeserializable, IJuteSerializable {
+internal class SetACLResponse : IJuteDeserializable, IJuteSerializable {
     public Stat? Stat;
 
     public void DeserializeFrom(Stream s) {

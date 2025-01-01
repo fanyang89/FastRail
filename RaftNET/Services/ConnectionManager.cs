@@ -12,6 +12,7 @@ public class ConnectionManager(ulong myId, AddressBook addressBook, ILogger<Conn
             return connection;
         } else {
             var addr = addressBook.Find(id);
+
             if (addr == null) {
                 throw new NoAddressException(id);
             } else {
@@ -24,6 +25,7 @@ public class ConnectionManager(ulong myId, AddressBook addressBook, ILogger<Conn
 
     public async Task Send(ulong to, Message message) {
         var conn = EnsureConnection(to);
+
         if (message.IsVoteRequest) {
             logger.LogTrace("Send({}->{}) VoteRequest={}", myId, to, message.VoteRequest);
             await conn.VoteRequest(message.VoteRequest);

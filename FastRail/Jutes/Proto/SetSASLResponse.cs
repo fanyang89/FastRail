@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class SetSaslResponse : IJuteDeserializable, IJuteSerializable {
+internal class SetSaslResponse : IJuteDeserializable, IJuteSerializable {
     public byte[]? Token;
 
     public void DeserializeFrom(Stream s) {

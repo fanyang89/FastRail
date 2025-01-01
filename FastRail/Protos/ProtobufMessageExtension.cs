@@ -32,7 +32,7 @@ public static class ProtobufMessageExtension {
             EphemeralOwner = entry.EphemeralOwner,
             DataLength = entry.DataLength,
             NumChildren = entry.NumChildren,
-            Pzxid = entry.Pzxid,
+            Pzxid = entry.Pzxid
         };
     }
 }

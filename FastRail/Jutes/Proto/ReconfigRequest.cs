@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class ReconfigRequest : IJuteDeserializable, IJuteSerializable {
+internal class ReconfigRequest : IJuteDeserializable, IJuteSerializable {
     public string? JoiningServers;
     public string? LeavingServers;
     public string? NewMembers;

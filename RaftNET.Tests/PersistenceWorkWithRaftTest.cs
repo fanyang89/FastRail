@@ -14,12 +14,13 @@ public class PersistenceWorkWithRaftTest {
         _persistence = new RocksPersistence(tempDir.FullName);
 
         var entries = new List<LogEntry>();
-        for (var i = _startIdx; i < _startIdx + _count; ++i) {
+
+        for (var i = _startIdx; i < _startIdx + _count; ++i)
             entries.Add(new LogEntry {
                 Idx = i,
                 Term = i + _termOffset
             });
-        }
+
         _persistence.StoreLogEntries(entries);
     }
 
@@ -32,6 +33,7 @@ public class PersistenceWorkWithRaftTest {
     [Test]
     public void LoadLogs() {
         var logs = _persistence.LoadLog();
+
         for (ulong i = 0; i < (ulong)logs.Count; ++i) {
             var log = logs[(int)i];
             Assert.That(log.Idx, Is.EqualTo(i + _startIdx));
@@ -51,6 +53,7 @@ public class PersistenceWorkWithRaftTest {
         _persistence.TruncateLog(5);
         var logs = _persistence.LoadLog();
         Assert.That(logs.Count, Is.EqualTo(4));
+
         for (ulong i = 0; i < (ulong)logs.Count; i++) {
             var log = logs[(int)i];
             Assert.That(log.Idx, Is.EqualTo(i + _startIdx));

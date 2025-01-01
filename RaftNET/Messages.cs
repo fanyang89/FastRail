@@ -132,15 +132,18 @@ public static class Messages {
 
     public static int EntrySize(this LogEntry entry) {
         Debug.Assert(entry.Dummy != null || entry.Command != null || entry.Configuration != null);
+
         if (entry.Command != null) {
             return entry.Command.Buffer.Length;
         }
 
         if (entry.Configuration != null) {
             var size = 0;
+
             foreach (var member in entry.Configuration.Current) {
                 size += member.CalculateSize();
             }
+
             return size;
         }
 
@@ -149,12 +152,16 @@ public static class Messages {
 
     public static Configuration ConfigFromIds(Dictionary<ulong, bool> configInitialMembers) {
         var cfg = new Configuration();
+
         foreach (var (id, canVote) in configInitialMembers) {
             cfg.Current.Add(new ConfigMember {
-                ServerAddress = new ServerAddress { ServerId = id },
+                ServerAddress = new ServerAddress {
+                    ServerId = id
+                },
                 CanVote = canVote
             });
         }
+
         return cfg;
     }
 }

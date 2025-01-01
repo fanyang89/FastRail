@@ -7,6 +7,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         s.WriteByte(value.Value ? (byte)1 : (byte)0);
     }
 
@@ -14,6 +15,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         s.WriteByte(value.Value);
     }
 
@@ -21,6 +23,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         var buf = new byte[sizeof(int)];
         BinaryPrimitives.WriteInt32BigEndian(buf, value.Value);
         s.Write(buf, 0, buf.Length);
@@ -30,6 +33,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         var buf = new byte[sizeof(long)];
         BinaryPrimitives.WriteInt64BigEndian(buf, value.Value);
         s.Write(buf, 0, buf.Length);
@@ -39,6 +43,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         var buf = new byte[sizeof(float)];
         BinaryPrimitives.WriteSingleBigEndian(buf, value.Value);
         s.Write(buf, 0, buf.Length);
@@ -48,6 +53,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         var buf = new byte[sizeof(double)];
         BinaryPrimitives.WriteDoubleBigEndian(buf, value.Value);
         s.Write(buf, 0, buf.Length);
@@ -57,6 +63,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         SerializeTo(s, value.Length);
 
         foreach (var c in value) {
@@ -68,6 +75,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         SerializeTo(s, value.Length);
         s.Write(value, 0, value.Length);
     }
@@ -76,6 +84,7 @@ public static class JuteSerializer {
         if (values == null) {
             return;
         }
+
         SerializeTo(s, values.Count);
 
         foreach (var value in values) {
@@ -87,6 +96,7 @@ public static class JuteSerializer {
         if (values == null) {
             return;
         }
+
         SerializeTo(s, values.Count);
 
         foreach (var value in values) {
@@ -100,6 +110,7 @@ public static class JuteSerializer {
         if (values == null) {
             return;
         }
+
         SerializeTo(s, values.Count);
 
         foreach (var (key, value) in values) {
@@ -112,6 +123,7 @@ public static class JuteSerializer {
         if (value == null) {
             return;
         }
+
         value.SerializeTo(s);
     }
 
@@ -119,6 +131,7 @@ public static class JuteSerializer {
         if (value == null) {
             return [];
         }
+
         using var ms = new MemoryStream();
         SerializeTo(ms, value);
         return ms.ToArray();

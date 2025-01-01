@@ -23,6 +23,7 @@ public static class ByteArrayUtil {
         } else {
             BinaryPrimitives.WriteUInt64LittleEndian(buf, b);
         }
+
         return Concat(a, buf);
     }
 
@@ -31,11 +32,10 @@ public static class ByteArrayUtil {
             return false;
         }
 
-        for (var i = 0; i < prefix.Length; ++i) {
+        for (var i = 0; i < prefix.Length; ++i)
             if (prefix[i] != b[i]) {
                 return false;
             }
-        }
 
         return true;
     }
@@ -46,6 +46,7 @@ public static class ByteArrayUtil {
         if (bigEndian) {
             return BinaryPrimitives.ReadUInt64BigEndian(s);
         }
+
         return BinaryPrimitives.ReadUInt64LittleEndian(s);
     }
 }

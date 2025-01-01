@@ -11,22 +11,17 @@ public class FSMTestBase : RaftTestBase {
     protected const ulong Id5 = 5;
 
     protected void ElectionTimeout(FSM fsm) {
-        for (var i = 0; i <= 2 * FSM.ElectionTimeout; ++i) {
-            fsm.Tick();
-        }
+        for (var i = 0; i <= 2 * FSM.ElectionTimeout; ++i) fsm.Tick();
     }
 
     protected void ElectionThreshold(FSM fsm) {
-        for (var i = 0; i < FSM.ElectionTimeout; ++i) {
-            fsm.Tick();
-        }
+        for (var i = 0; i < FSM.ElectionTimeout; ++i) fsm.Tick();
     }
 
     protected void MakeCandidate(FSM fsm) {
         Assert.That(fsm.IsFollower, Is.True);
-        while (fsm.IsFollower) {
-            fsm.Tick();
-        }
+
+        while (fsm.IsFollower) fsm.Tick();
     }
 
     protected readonly FSM.Config FSMConfig = new(

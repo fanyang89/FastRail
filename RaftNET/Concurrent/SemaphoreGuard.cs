@@ -1,6 +1,6 @@
 ﻿namespace RaftNET.Concurrent;
 
-class SemaphoreGuard : IDisposable {
+internal class SemaphoreGuard : IDisposable {
     private readonly SemaphoreSlim _semaphore;
     private readonly int _n;
 
@@ -8,9 +8,7 @@ class SemaphoreGuard : IDisposable {
         _semaphore = semaphore;
         _n = n;
 
-        for (var i = 0; i < n; i++) {
-            _semaphore.Wait();
-        }
+        for (var i = 0; i < n; i++) _semaphore.Wait();
     }
 
 

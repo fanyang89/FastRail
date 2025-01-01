@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Data;
 
-class ClientInfo : IJuteDeserializable, IJuteSerializable {
+internal class ClientInfo : IJuteDeserializable, IJuteSerializable {
     public string? AuthScheme; // Authentication scheme
     public string? User; // username or any other id (for example ip)
 

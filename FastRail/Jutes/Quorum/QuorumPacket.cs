@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Quorum;
 
-class QuorumPacket : IJuteDeserializable, IJuteSerializable {
+internal class QuorumPacket : IJuteDeserializable, IJuteSerializable {
     public int Type; // Request, Ack, Commit, Ping
     public long Zxid;
     public byte[]? Data; // Only significant when type is request

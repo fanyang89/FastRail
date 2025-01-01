@@ -7,8 +7,7 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
     public Message(
         OneOf<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshot, SnapshotResponse, TimeoutNowRequest>
             input
-    ) : base(input) {
-    }
+    ) : base(input) {}
 
     public Message(VoteRequest request) : base(request) {}
     public Message(VoteResponse request) : base(request) {}

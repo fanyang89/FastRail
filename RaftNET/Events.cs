@@ -1,4 +1,3 @@
 ﻿namespace RaftNET;
 
-public class Events {
-}
+public class Events {}

@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Txn;
 
-class CreateTtlTxn : IJuteDeserializable, IJuteSerializable {
+internal class CreateTtlTxn : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public byte[]? Data;
     public IList<ACL>? ACL;

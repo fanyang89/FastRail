@@ -18,7 +18,7 @@ public class ErrorCodes {
     public static int APIError = -100;
     public static int NoNode = -101; // *
     public static int NoAuth = -102;
-    public static int BadVersion = -103;// *
+    public static int BadVersion = -103; // *
     public static int NoChildrenForEphemerals = -108;
     public static int NodeExists = -110; // *
     public static int NotEmpty = -111;

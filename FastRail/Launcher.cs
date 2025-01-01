@@ -23,7 +23,7 @@ public class LaunchConfig {
             LoggerFactory = LoggerFactory.Instance,
             StateMachine = server,
             AddressBook = AddressBook,
-            Listen = RaftListen,
+            Listen = RaftListen
         };
     }
 }

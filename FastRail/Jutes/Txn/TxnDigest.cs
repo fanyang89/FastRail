@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class TxnDigest : IJuteDeserializable, IJuteSerializable {
+internal class TxnDigest : IJuteDeserializable, IJuteSerializable {
     public int Version;
     public long TreeDigest;
 

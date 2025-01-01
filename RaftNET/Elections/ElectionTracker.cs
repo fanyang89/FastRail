@@ -9,10 +9,11 @@ public class ElectionTracker {
     private int _granted;
 
     public ElectionTracker(RepeatedField<ConfigMember> members) {
-        foreach (var member in members)
+        foreach (var member in members) {
             if (member.CanVote) {
                 _votingMembers.Add(member.ServerAddress.ServerId);
             }
+        }
     }
 
     public bool RegisterVote(ulong from, bool granted) {

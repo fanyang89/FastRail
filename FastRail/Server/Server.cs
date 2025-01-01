@@ -117,7 +117,7 @@ public class Server : IDisposable, IStateMachine {
                 ReadOnly = false
             }
         });
-        await SendConnectResponse(conn, token, connectResponse);
+        await SendConnectResponse(conn, connectResponse, token);
         _logger.LogInformation("New session created, id={} timeout={}", sessionId, connectResponse.Timeout);
 
         // we're good, handle client requests now
@@ -137,121 +137,31 @@ public class Server : IDisposable, IStateMachine {
                 switch (requestType) {
                     case OpCode.Create: {
                         var request = JuteDeserializer.Deserialize<CreateRequest>(requestBuffer);
-
-                        if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
-                            throw new RailException(ErrorCodes.BadArguments);
-                        }
-
-                        var mode = request.Flags.ParseCreateMode();
-                        var txn = new CreateNodeTransaction {
-                            Path = request.Path,
-                            Data = ByteString.CopyFrom(request.Data),
-                            Mode = mode,
-                            Ctime = Time.CurrentTimeMillis()
-                        };
-
-                        if (mode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
-                            txn.EphemeralOwner = sessionId;
-                        }
-
-                        await Broadcast(new Transaction {
-                            CreateNode = txn
-                        });
-                        await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid),
-                            new CreateResponse {
-                                Path = request.Path
-                            });
+                        await HandleCreateRequest(conn, request, sessionId, token, xid);
                         break;
                     }
 
                     case OpCode.Delete: {
                         var request = JuteDeserializer.Deserialize<DeleteRequest>(requestBuffer);
-
-                        if (string.IsNullOrEmpty(request.Path)) {
-                            throw new RailException(ErrorCodes.BadArguments);
-                        }
-
-                        await Broadcast(new Transaction {
-                            DeleteNode = new DeleteNodeTransaction {
-                                Path = request.Path
-                            }
-                        });
-                        await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
+                        await HandleDeleteRequest(conn, request, xid, token);
                         break;
                     }
 
                     case OpCode.Exists: {
                         var request = JuteDeserializer.Deserialize<ExistsRequest>(requestBuffer);
-
-                        if (string.IsNullOrEmpty(request.Path)) {
-                            throw new RailException(ErrorCodes.BadArguments);
-                        }
-
-                        var node = _ds.GetNode(request.Path);
-
-                        if (node == null) {
-                            throw new RailException(ErrorCodes.NoNode);
-                        }
-
-                        var children = _ds.CountNodeChildren(request.Path);
-                        var stat = node.Stat.ToStat(node.Data.Length, children);
-                        await SendResponse(conn,
-                            token, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse {
-                                Stat = stat
-                            });
+                        await HandleExistsRequest(conn, request, xid, token);
                         break;
                     }
 
                     case OpCode.GetData: {
                         var request = JuteDeserializer.Deserialize<GetDataRequest>(requestBuffer);
-
-                        if (string.IsNullOrEmpty(request.Path)) {
-                            throw new RailException(ErrorCodes.BadArguments);
-                        }
-
-                        var node = _ds.GetNode(request.Path);
-
-                        if (node == null) {
-                            throw new RailException(ErrorCodes.NoNode);
-                        }
-
-                        var children = _ds.CountNodeChildren(request.Path);
-                        var stat = node.Stat.ToStat(node.Data.Length, children);
-                        await SendResponse(conn, token,
-                            new ReplyHeader(xid, _ds.LastZxid),
-                            new GetDataResponse {
-                                Data = node.Data,
-                                Stat = stat
-                            });
+                        await HandleGetDataRequest(conn, request, xid, token);
                         break;
                     }
 
                     case OpCode.SetData: {
                         var request = JuteDeserializer.Deserialize<SetDataRequest>(requestBuffer);
-
-                        if (string.IsNullOrEmpty(request.Path)) {
-                            throw new RailException(ErrorCodes.BadArguments);
-                        }
-
-                        var node = _ds.GetNode(request.Path);
-
-                        if (node == null) {
-                            throw new RailException(ErrorCodes.NoNode);
-                        }
-
-                        var txn = new UpdateNodeTransaction {
-                            Path = request.Path,
-                            Mtime = Time.CurrentTimeMillis(),
-                            Version = node.Stat.Version + 1
-                        };
-
-                        if (request.Data != null) {
-                            txn.Data = ByteString.CopyFrom(request.Data);
-                        }
-
-                        await Broadcast(new Transaction {
-                            UpdateNode = txn
-                        });
+                        await HandleSetDataRequest(conn, request, xid, token);
                         break;
                     }
 
@@ -260,52 +170,25 @@ public class Server : IDisposable, IStateMachine {
                         throw new NotImplementedException();
                     }
 
-                    case OpCode.GetChildren:
-                    case OpCode.GetChildren2: {
+                    case OpCode.GetChildren: {
                         var request = JuteDeserializer.Deserialize<GetChildrenRequest>(requestBuffer);
-
-                        if (string.IsNullOrEmpty(request.Path)) {
-                            throw new RailException(ErrorCodes.BadArguments);
-                        }
-
-                        var children = _ds.GetChildren(request.Path, out var stat);
-
-                        if (requestType == OpCode.GetChildren) {
-                            await SendResponse(conn, token,
-                                new ReplyHeader(xid, _ds.LastZxid),
-                                new GetChildrenResponse {
-                                    Children = children
-                                });
-                        } else {
-                            await SendResponse(conn, token,
-                                new ReplyHeader(xid, _ds.LastZxid),
-                                new GetChildren2Response {
-                                    Children = children,
-                                    Stat = stat.ToStat()
-                                }
-                            );
-                        }
-
+                        await HandleGetChildrenRequest(conn, request, xid, token);
+                        break;
+                    }
+                    case OpCode.GetChildren2: {
+                        var request = JuteDeserializer.Deserialize<GetChildren2Request>(requestBuffer);
+                        await HandleGetChildren2Request(conn, request, xid, token);
                         break;
                     }
 
                     case OpCode.Sync: {
                         var request = JuteDeserializer.Deserialize<SyncRequest>(requestBuffer);
-
-                        if (string.IsNullOrEmpty(request.Path)) {
-                            throw new RailException(ErrorCodes.BadArguments);
-                        }
-
-                        await Broadcast(new Transaction {
-                            Sync = new SyncTransaction {
-                                Path = request.Path
-                            }
-                        });
+                        await HandleSyncRequest(conn, request, xid, token);
                         break;
                     }
 
                     case OpCode.Ping: {
-                        await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid));
+                        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), token);
                         break;
                     }
 
@@ -361,12 +244,167 @@ public class Server : IDisposable, IStateMachine {
             }
             catch (RailException ex) {
                 var err = ex.Err;
-                await SendResponse(conn, token, new ReplyHeader(xid, _ds.LastZxid, err));
+                await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid, err), token);
             }
         }
 
         _logger.LogInformation("Client connection closed");
         await Task.CompletedTask;
+    }
+
+    private async Task HandleSetDataRequest(NetworkStream conn, SetDataRequest request, int xid, CancellationToken token) {
+        if (string.IsNullOrEmpty(request.Path)) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+
+        var node = _ds.GetNode(request.Path);
+        if (node == null) {
+            throw new RailException(ErrorCodes.NoNode);
+        }
+
+        var txn = new UpdateNodeTransaction {
+            Path = request.Path,
+            Mtime = Time.CurrentTimeMillis(),
+            Version = node.Stat.Version + 1
+        };
+        if (request.Data != null) {
+            txn.Data = ByteString.CopyFrom(request.Data);
+        }
+
+        await Broadcast(new Transaction {
+            UpdateNode = txn
+        });
+
+        node = _ds.GetNode(request.Path);
+        if (node == null) {
+            throw new RailException(ErrorCodes.InvalidState);
+        }
+
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SetDataResponse {
+            Stat = node.Stat.ToStat(node.Data.Length, _ds.CountNodeChildren(request.Path))
+        }, token);
+    }
+
+    private async Task HandleSyncRequest(NetworkStream conn, SyncRequest request, int xid, CancellationToken token) {
+        if (string.IsNullOrEmpty(request.Path)) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+        await Broadcast(new Transaction {
+            Sync = new SyncTransaction {
+                Path = request.Path
+            }
+        });
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SyncResponse {
+            Path = request.Path
+        }, token);
+    }
+
+    private async Task HandleGetChildren2Request(
+        NetworkStream conn, GetChildren2Request request, int xid, CancellationToken token
+    ) {
+        if (string.IsNullOrEmpty(request.Path)) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+        var children = _ds.GetChildren(request.Path, out var stat);
+        await SendResponse(conn,
+            new ReplyHeader(xid, _ds.LastZxid),
+            new GetChildren2Response {
+                Children = children,
+                Stat = stat.ToStat()
+            }, token);
+    }
+
+    private async Task HandleGetChildrenRequest(NetworkStream conn, GetChildrenRequest request,
+        int xid, CancellationToken token) {
+        if (string.IsNullOrEmpty(request.Path)) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+        var children = _ds.GetChildren(request.Path, out _);
+        await SendResponse(conn,
+            new ReplyHeader(xid, _ds.LastZxid),
+            new GetChildrenResponse {
+                Children = children
+            }, token);
+    }
+
+    private async Task HandleGetDataRequest(NetworkStream conn, GetDataRequest request, int xid, CancellationToken token) {
+        if (string.IsNullOrEmpty(request.Path)) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+
+        var node = _ds.GetNode(request.Path);
+
+        if (node == null) {
+            throw new RailException(ErrorCodes.NoNode);
+        }
+
+        var children = _ds.CountNodeChildren(request.Path);
+        var stat = node.Stat.ToStat(node.Data.Length, children);
+        await SendResponse(conn,
+            new ReplyHeader(xid, _ds.LastZxid),
+            new GetDataResponse {
+                Data = node.Data,
+                Stat = stat
+            }, token);
+    }
+
+    private async Task HandleExistsRequest(NetworkStream conn, ExistsRequest request, int xid, CancellationToken token) {
+        if (string.IsNullOrEmpty(request.Path)) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+
+        var node = _ds.GetNode(request.Path);
+
+        if (node == null) {
+            throw new RailException(ErrorCodes.NoNode);
+        }
+
+        var children = _ds.CountNodeChildren(request.Path);
+        var stat = node.Stat.ToStat(node.Data.Length, children);
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse {
+            Stat = stat
+        }, token);
+    }
+
+    private async Task HandleDeleteRequest(NetworkStream conn, DeleteRequest request, int xid, CancellationToken token) {
+        if (string.IsNullOrEmpty(request.Path)) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+
+        await Broadcast(new Transaction {
+            DeleteNode = new DeleteNodeTransaction {
+                Path = request.Path
+            }
+        });
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), token);
+    }
+
+    private async Task HandleCreateRequest(
+        NetworkStream conn, CreateRequest request, long sessionId, CancellationToken token, int xid
+    ) {
+        if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+
+        var mode = request.Flags.ParseCreateMode();
+        var txn = new CreateNodeTransaction {
+            Path = request.Path,
+            Data = ByteString.CopyFrom(request.Data),
+            Mode = mode,
+            Ctime = Time.CurrentTimeMillis()
+        };
+
+        if (mode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
+            txn.EphemeralOwner = sessionId;
+        }
+
+        await Broadcast(new Transaction {
+            CreateNode = txn
+        });
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
+            new CreateResponse {
+                Path = request.Path
+            }, token);
     }
 
     private ConnectResponse CreateSession(ConnectRequest request) {
@@ -403,46 +441,42 @@ public class Server : IDisposable, IStateMachine {
         return await Task.FromResult((header, bodyBuffer));
     }
 
-    private async Task<ConnectRequest> ReceiveConnectRequest(NetworkStream stream, CancellationToken token) {
-        // len
+    private static async Task<ConnectRequest> ReceiveConnectRequest(NetworkStream stream, CancellationToken token) {
         var lengthBuffer = new byte[sizeof(int)];
         await stream.ReadExactlyAsync(lengthBuffer, 0, lengthBuffer.Length, token);
         var packetLength = BinaryPrimitives.ReadInt32BigEndian(lengthBuffer);
-        // connect request body
         var bodyBuffer = new byte[packetLength];
         await stream.ReadExactlyAsync(bodyBuffer, 0, bodyBuffer.Length, token);
         return JuteDeserializer.Deserialize<ConnectRequest>(bodyBuffer);
     }
 
-    private async Task SendConnectResponse(NetworkStream stream, CancellationToken token, ConnectResponse response) {
+    private static async Task SendConnectResponse(NetworkStream stream, ConnectResponse response, CancellationToken token) {
         var buffer = JuteSerializer.Serialize(response);
         var lengthBuffer = new byte[sizeof(int)];
         BinaryPrimitives.WriteInt32BigEndian(lengthBuffer, buffer.Length);
-        // len
-        await stream.WriteAsync(lengthBuffer, 0, lengthBuffer.Length, token);
-        // connect response
-        await stream.WriteAsync(buffer, 0, buffer.Length, token);
+        await stream.WriteAsync(lengthBuffer, token);
+        await stream.WriteAsync(buffer, token);
     }
 
-    private async Task SendResponse<T>(NetworkStream stream, CancellationToken token, ReplyHeader header, T response)
+    private static async Task SendResponse<T>(NetworkStream stream, ReplyHeader header, T response, CancellationToken token)
         where T : IJuteSerializable {
         var headerBuffer = JuteSerializer.Serialize(header);
         var bodyBuffer = JuteSerializer.Serialize(response);
         var len = headerBuffer.Length + bodyBuffer.Length;
         var lenBuffer = new byte[sizeof(int)];
         BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
-        await stream.WriteAsync(lenBuffer, 0, lenBuffer.Length, token);
-        await stream.WriteAsync(headerBuffer, 0, headerBuffer.Length, token);
-        await stream.WriteAsync(bodyBuffer, 0, bodyBuffer.Length, token);
+        await stream.WriteAsync(lenBuffer, token);
+        await stream.WriteAsync(headerBuffer, token);
+        await stream.WriteAsync(bodyBuffer, token);
     }
 
-    private async Task SendResponse(NetworkStream stream, CancellationToken token, ReplyHeader header) {
+    private static async Task SendResponse(NetworkStream stream, ReplyHeader header, CancellationToken token) {
         var headerBuffer = JuteSerializer.Serialize(header);
         var len = headerBuffer.Length;
         var lenBuffer = new byte[sizeof(int)];
         BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
-        await stream.WriteAsync(lenBuffer, 0, lenBuffer.Length, token);
-        await stream.WriteAsync(headerBuffer, 0, headerBuffer.Length, token);
+        await stream.WriteAsync(lenBuffer, token);
+        await stream.WriteAsync(headerBuffer, token);
     }
 
     public void Apply(List<Command> commands) {
@@ -489,7 +523,7 @@ public class Server : IDisposable, IStateMachine {
                 }
                 case Transaction.TxnOneofCase.None:
                 default:
-                    throw new ArgumentOutOfRangeException();
+                    throw new InvalidDataException();
             }
         }
     }

@@ -63,7 +63,9 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         }
     }
 
-    public ulong TakeSnapshot() { return 0; }
+    public ulong TakeSnapshot() {
+        return 0;
+    }
 
     public void DropSnapshot(ulong snapshot) {}
 

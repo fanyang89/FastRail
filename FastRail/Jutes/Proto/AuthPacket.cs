@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class AuthPacket : IJuteDeserializable, IJuteSerializable {
+internal class AuthPacket : IJuteDeserializable, IJuteSerializable {
     public int Type;
     public string? Scheme;
     public byte[]? Auth;

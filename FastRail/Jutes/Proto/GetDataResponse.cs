@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Proto;
 
-class GetDataResponse : IJuteDeserializable, IJuteSerializable {
+internal class GetDataResponse : IJuteDeserializable, IJuteSerializable {
     public byte[]? Data;
     public Stat? Stat;
 

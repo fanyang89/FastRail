@@ -45,6 +45,7 @@ public class PingWorker : IPingWorker {
 
     public void Stop() {
         _cts.Cancel();
+
         if (_pingTask != null) {
             _pingTask.Wait();
         }
@@ -53,12 +54,15 @@ public class PingWorker : IPingWorker {
     private void Work(CancellationToken cancellationToken) {
         using var guard = new SemaphoreGuard(_waitExit);
         IRaftClient? client = null;
+
         while (!cancellationToken.IsCancellationRequested) {
             client ??= GetClient(_myId, _address);
+
             if (client == null) {
                 _logger.LogWarning("PingWorker({}) can't ping {} and we don't have the address", _myId, _serverId);
                 continue;
             }
+
             Ping(cancellationToken, client);
             _logger.LogInformation("Sleeping for {}", _interval);
             _clock.SleepFor(_interval);
@@ -67,18 +71,22 @@ public class PingWorker : IPingWorker {
 
     public void Ping(CancellationToken cancellationToken, IRaftClient client) {
         var ok = true;
+
         try {
             client.Ping(DeadLine).Wait(cancellationToken);
-        } catch (RpcException ex) {
+        }
+        catch (RpcException ex) {
             _logger.LogTrace("PingWorker({}) ping to {} failed, ex: {}", _myId, _serverId, ex);
             ok = false;
         }
 
         lock (_lastAliveLock) {
             var now = _clock.Now;
+
             if (ok) {
                 _lastAlive = now;
             }
+
             if (now - _lastAlive >= _timeout) {
                 _listener.MarkDead(_serverId);
             } else {
@@ -91,6 +99,7 @@ public class PingWorker : IPingWorker {
         if (address != null) {
             return new RaftClient(myId, address);
         }
+
         return null;
     }
 

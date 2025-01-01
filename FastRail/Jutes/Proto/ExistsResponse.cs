@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Proto;
 
-class ExistsResponse : IJuteDeserializable, IJuteSerializable {
+internal class ExistsResponse : IJuteDeserializable, IJuteSerializable {
     public Stat? Stat;
 
     public void DeserializeFrom(Stream s) {

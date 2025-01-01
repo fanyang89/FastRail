@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Proto;
 
-class WhoAmIResponse : IJuteDeserializable, IJuteSerializable {
+internal class WhoAmIResponse : IJuteDeserializable, IJuteSerializable {
     public IList<ClientInfo>? ClientInfo;
 
     public void DeserializeFrom(Stream s) {

@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class ReplyHeader(int xid, long zxid, int err = 0) : IJuteDeserializable, IJuteSerializable {
+internal class ReplyHeader(int xid, long zxid, int err = 0) : IJuteDeserializable, IJuteSerializable {
     public int Xid = xid;
     public long Zxid = zxid;
     public int Err = err;

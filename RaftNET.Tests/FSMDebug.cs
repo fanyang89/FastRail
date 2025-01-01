@@ -16,7 +16,7 @@ public class FSMDebug(
     ILogger<FSM>? logger = null
 )
     : FSM(id, currentTerm, votedFor, log, 0, failureDetector, config, Notifier, logger) {
-    private readonly static Notifier Notifier = new();
+    private static readonly Notifier Notifier = new();
 
     public FollowerProgress? GetProgress(ulong id) {
         return LeaderState.Tracker.Find(id);

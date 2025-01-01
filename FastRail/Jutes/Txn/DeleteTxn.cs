@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class DeleteTxn : IJuteDeserializable, IJuteSerializable {
+internal class DeleteTxn : IJuteDeserializable, IJuteSerializable {
     public string? Path;
 
     public void DeserializeFrom(Stream s) {

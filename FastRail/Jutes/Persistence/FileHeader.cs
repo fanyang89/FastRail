@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Persistence;
 
-class FileHeader : IJuteDeserializable, IJuteSerializable {
+internal class FileHeader : IJuteDeserializable, IJuteSerializable {
     public int Magic;
     public int Version;
     public long Dbid;

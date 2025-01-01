@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class MultiTxn : IJuteDeserializable, IJuteSerializable {
+internal class MultiTxn : IJuteDeserializable, IJuteSerializable {
     public IList<Txn>? Txns;
 
     public void DeserializeFrom(Stream s) {

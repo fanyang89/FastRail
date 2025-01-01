@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class ErrorResponse : IJuteDeserializable, IJuteSerializable {
+internal class ErrorResponse : IJuteDeserializable, IJuteSerializable {
     public int Err;
 
     public void DeserializeFrom(Stream s) {

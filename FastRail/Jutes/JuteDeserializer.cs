@@ -61,20 +61,22 @@ public static class JuteDeserializer {
     public static IList<T> DeserializeList<T>(Stream s) where T : IJuteDeserializable, new() {
         var len = DeserializeInt(s);
         var values = new List<T>();
+
         for (var i = 0; i < len; i++) {
             var value = new T();
             value.DeserializeFrom(s);
             values.Add(value);
         }
+
         return values;
     }
 
     public static IList<string> DeserializeStringList(Stream s) {
         var len = DeserializeInt(s);
         var values = new List<string>();
-        for (var i = 0; i < len; i++) {
-            values.Add(DeserializeString(s));
-        }
+
+        for (var i = 0; i < len; i++) values.Add(DeserializeString(s));
+
         return values;
     }
 
@@ -83,6 +85,7 @@ public static class JuteDeserializer {
         where TValue : IJuteDeserializable, new() {
         var len = DeserializeInt(s);
         var dict = new Dictionary<TKey, TValue>();
+
         for (var i = 0; i < len; i++) {
             var key = new TKey();
             key.DeserializeFrom(s);
@@ -90,6 +93,7 @@ public static class JuteDeserializer {
             value.DeserializeFrom(s);
             dict.Add(key, value);
         }
+
         return dict;
     }
 

@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Txn;
 
-class SetACLTxn : IJuteDeserializable, IJuteSerializable {
+internal class SetACLTxn : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public IList<ACL>? ACL;
     public int Version;

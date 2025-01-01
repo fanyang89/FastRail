@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class CloseSessionTxn : IJuteDeserializable, IJuteSerializable {
+internal class CloseSessionTxn : IJuteDeserializable, IJuteSerializable {
     public IList<string>? Paths2Delete;
 
     public void DeserializeFrom(Stream s) {

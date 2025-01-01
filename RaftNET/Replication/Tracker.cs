@@ -118,10 +118,11 @@ public class Tracker {
             return ulong.Min(current.CommitIdx(), previous.CommitIdx());
         }
 
-        foreach (var (id, progress) in _followerProgressList)
+        foreach (var (id, progress) in _followerProgressList) {
             if (_currentVoters.Contains(id)) {
                 current.Add(progress.MatchIdx);
             }
+        }
 
         if (!current.Committed()) {
             return prevCommitIdx;

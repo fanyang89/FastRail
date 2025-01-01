@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class MultiHeader : IJuteDeserializable, IJuteSerializable {
+internal class MultiHeader : IJuteDeserializable, IJuteSerializable {
     public int Type;
     public bool Done;
     public int Err;

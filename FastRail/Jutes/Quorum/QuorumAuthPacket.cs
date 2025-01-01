@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Quorum;
 
-class QuorumAuthPacket : IJuteDeserializable, IJuteSerializable {
+internal class QuorumAuthPacket : IJuteDeserializable, IJuteSerializable {
     public long Magic;
     public int Status;
     public byte[]? Token;

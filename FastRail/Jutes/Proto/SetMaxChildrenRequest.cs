@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class SetMaxChildrenRequest : IJuteDeserializable, IJuteSerializable {
+internal class SetMaxChildrenRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public int Max;
 

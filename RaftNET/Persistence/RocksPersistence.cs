@@ -27,7 +27,10 @@ public class RocksPersistence : IPersistence, IDisposable {
 
     public void StoreTermVote(ulong term, ulong vote) {
         lock (_keyTermVote) {
-            var tv = new TermVote { Term = term, VotedFor = vote };
+            var tv = new TermVote {
+                Term = term,
+                VotedFor = vote
+            };
             var buf = tv.ToByteArray();
             var options = new WriteOptions();
             options.SetSync(true);
@@ -38,9 +41,11 @@ public class RocksPersistence : IPersistence, IDisposable {
     public TermVote? LoadTermVote() {
         lock (_keyTermVote) {
             var buf = _db.Get(_keyTermVote);
+
             if (buf == null) {
                 return null;
             }
+
             return TermVote.Parser.ParseFrom(buf);
         }
     }
@@ -55,9 +60,11 @@ public class RocksPersistence : IPersistence, IDisposable {
     public ulong LoadCommitIdx() {
         lock (_keyCommitIdx) {
             var buf = _db.Get(_keyCommitIdx);
+
             if (buf == null) {
                 return 0;
             }
+
             return BitConverter.ToUInt64(buf);
         }
     }
@@ -65,12 +72,15 @@ public class RocksPersistence : IPersistence, IDisposable {
     private int CountLogsUnlocked() {
         var count = 0;
         using var iter = _db.NewIterator();
+
         for (iter.Seek(_keyLogEntryPrefix); iter.Valid(); iter.Next()) {
             if (!iter.Key().StartsWith(_keyLogEntryPrefix)) {
                 break;
             }
+
             ++count;
         }
+
         return count;
     }
 
@@ -80,21 +90,27 @@ public class RocksPersistence : IPersistence, IDisposable {
             _db.Put(_keySnapshot, buf, writeOptions: _syncWriteOption);
             // preserve log entries
             var total = CountLogsUnlocked();
+
             if (preserveLogEntries >= (ulong)total) {
                 return;
             }
+
             var batch = new WriteBatch();
             var rest = preserveLogEntries > 0 ? preserveLogEntries : ulong.MaxValue;
             {
                 using var iter = _db.NewIterator();
+
                 for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
                     if (!iter.Key().StartsWith(_keyLogEntryPrefix)) {
                         continue;
                     }
+
                     var logIdx = ByteArrayUtil.GetIdx(iter.Key(), _keyLogEntryPrefix);
+
                     if (logIdx > snapshot.Idx) {
                         break;
                     }
+
                     if (rest > 0) {
                         batch.Delete(iter.Key());
                         --rest;
@@ -108,9 +124,11 @@ public class RocksPersistence : IPersistence, IDisposable {
     public SnapshotDescriptor? LoadSnapshotDescriptor() {
         lock (_keySnapshot) {
             var buf = _db.Get(_keySnapshot);
+
             if (buf == null) {
                 return null;
             }
+
             var snapshot = SnapshotDescriptor.Parser.ParseFrom(buf);
             return snapshot;
         }
@@ -119,23 +137,28 @@ public class RocksPersistence : IPersistence, IDisposable {
     public void StoreLogEntries(IEnumerable<LogEntry> entries) {
         lock (_keyLogEntryPrefix) {
             var batch = new WriteBatch();
+
             foreach (var entry in entries) {
                 var key = ByteArrayUtil.Concat(_keyLogEntryPrefix, entry.Idx);
                 batch.Put(key, entry.ToByteArray());
             }
+
             _db.Write(batch, _syncWriteOption);
         }
     }
 
     public List<LogEntry> LoadLog() {
         var entries = new List<LogEntry>();
+
         lock (_keyLogEntryPrefix) {
             using var iter = _db.NewIterator();
+
             for (iter.Seek(_keyLogEntryPrefix); iter.Valid(); iter.Next()) {
                 var entry = LogEntry.Parser.ParseFrom(iter.Value());
                 entries.Add(entry);
             }
         }
+
         return entries;
     }
 
@@ -145,6 +168,7 @@ public class RocksPersistence : IPersistence, IDisposable {
             {
                 using var iter = _db.NewIterator();
                 var beginKey = ByteArrayUtil.Concat(_keyLogEntryPrefix, idx);
+
                 for (iter.Seek(beginKey); iter.Valid(); iter.Next()) {
                     var key = iter.Key();
                     batch.Delete(iter.Key());

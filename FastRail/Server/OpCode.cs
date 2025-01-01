@@ -34,5 +34,5 @@ public enum OpCode {
     WhoAmI = 107,
     CreateSession = -10,
     CloseSession = -11,
-    Error = -1,
+    Error = -1
 }

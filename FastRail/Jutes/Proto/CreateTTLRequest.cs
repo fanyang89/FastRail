@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Proto;
 
-class CreateTtlRequest : IJuteDeserializable, IJuteSerializable {
+internal class CreateTtlRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public byte[]? Data;
     public IList<ACL>? ACL;

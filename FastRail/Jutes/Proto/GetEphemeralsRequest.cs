@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class GetEphemeralsRequest : IJuteDeserializable, IJuteSerializable {
+internal class GetEphemeralsRequest : IJuteDeserializable, IJuteSerializable {
     public string? PrefixPath;
 
     public void DeserializeFrom(Stream s) {

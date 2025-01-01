@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class TxnHeader : IJuteDeserializable, IJuteSerializable {
+internal class TxnHeader : IJuteDeserializable, IJuteSerializable {
     public long ClientId;
     public int CXid;
     public long ZXid;

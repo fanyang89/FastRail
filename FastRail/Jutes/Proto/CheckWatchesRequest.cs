@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class CheckWatchesRequest : IJuteDeserializable, IJuteSerializable {
+internal class CheckWatchesRequest : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public int Type;
 

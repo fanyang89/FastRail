@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Proto;
 
-class GetACLResponse : IJuteDeserializable, IJuteSerializable {
+internal class GetACLResponse : IJuteDeserializable, IJuteSerializable {
     public IList<ACL>? ACL;
     public Stat? Stat;
 

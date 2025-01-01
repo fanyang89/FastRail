@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class CheckVersionTxn : IJuteDeserializable, IJuteSerializable {
+internal class CheckVersionTxn : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public int Version;
 

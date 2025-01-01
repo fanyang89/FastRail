@@ -62,13 +62,17 @@ public class Log {
         } else {
             var entriesToRemove = _log.Count - (int)(LastIdx() - idx);
             var trailingBytes = 0;
+
             for (var i = 0; i < maxTrailingEntries && entriesToRemove > 0; ++i) {
                 trailingBytes += MemoryUsageOf(_log[entriesToRemove - 1]);
+
                 if (trailingBytes > maxTrailingBytes) {
                     break;
                 }
+
                 --entriesToRemove;
             }
+
             var releasedMemory = MemoryUsageOf(0, entriesToRemove);
             _log.RemoveRange(0, entriesToRemove);
             _memoryUsage -= releasedMemory;
@@ -152,6 +156,7 @@ public class Log {
     public void Add(LogEntry entry) {
         _log.Add(entry);
         _memoryUsage += MemoryUsageOf(entry);
+
         if (_log.Last().Configuration != null) {
             _prevConfIdx = _lastConfIdx;
             _lastConfIdx = LastIdx();
@@ -168,6 +173,7 @@ public class Log {
             case LogEntry.DataOneofCase.Dummy:
                 break;
         }
+
         return 0;
     }
 
@@ -201,9 +207,9 @@ public class Log {
 
     private int MemoryUsageOf(int first, int last) {
         var usage = 0;
-        for (var i = first; i < last; i++) {
-            usage += MemoryUsageOf(_log[i]);
-        }
+
+        for (var i = first; i < last; i++) usage += MemoryUsageOf(_log[i]);
+
         return usage;
     }
 
@@ -241,9 +247,11 @@ public class Log {
             var cfg = _log[(int)(_lastConfIdx - _firstIdx)].Configuration;
             return new Configuration(cfg);
         }
+
         if (_snapshot.Config == null) {
             return new Configuration();
         }
+
         return new Configuration(_snapshot.Config);
     }
 
@@ -272,11 +280,10 @@ public class Log {
             return GetEntry(_prevConfIdx).Configuration;
         }
 
-        for (; idx > _snapshot.Idx; --idx) {
+        for (; idx > _snapshot.Idx; --idx)
             if (this[idx].Configuration != null) {
                 return GetEntry(idx).Configuration;
             }
-        }
 
         return _snapshot.Config;
     }
@@ -284,9 +291,11 @@ public class Log {
 
     public Configuration? GetPreviousConfiguration() {
         var cfg = DoGetPreviousConfiguration();
+
         if (cfg == null) {
             return cfg;
         }
+
         return new Configuration(cfg);
     }
 

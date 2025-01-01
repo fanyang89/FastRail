@@ -13,19 +13,21 @@ public class Votes {
         _logger = logger ?? new NullLogger<Votes>();
         _current = new ElectionTracker(configuration.Current);
 
-        foreach (var member in configuration.Previous)
+        foreach (var member in configuration.Previous) {
             if (member.CanVote) {
                 if (!_voters.ContainsKey(member.ServerAddress.ServerId)) {
                     _voters.Add(member.ServerAddress.ServerId, member.ServerAddress);
                 }
             }
+        }
 
-        foreach (var member in configuration.Current)
+        foreach (var member in configuration.Current) {
             if (member.CanVote) {
                 if (!_voters.ContainsKey(member.ServerAddress.ServerId)) {
                     _voters.Add(member.ServerAddress.ServerId, member.ServerAddress);
                 }
             }
+        }
 
         if (configuration.IsJoint()) {
             _previous = new ElectionTracker(configuration.Previous);

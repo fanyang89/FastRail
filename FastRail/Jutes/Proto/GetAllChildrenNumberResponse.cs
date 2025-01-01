@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class GetAllChildrenNumberResponse : IJuteDeserializable, IJuteSerializable {
+internal class GetAllChildrenNumberResponse : IJuteDeserializable, IJuteSerializable {
     public int TotalNumber;
 
     public void DeserializeFrom(Stream s) {

@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class SetMaxChildrenTxn : IJuteDeserializable, IJuteSerializable {
+internal class SetMaxChildrenTxn : IJuteDeserializable, IJuteSerializable {
     public string? Path;
     public int Max;
 

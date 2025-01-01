@@ -2,7 +2,7 @@
 
 namespace FastRail.Jutes.Proto;
 
-class GetChildren2Response : IJuteDeserializable, IJuteSerializable {
+internal class GetChildren2Response : IJuteDeserializable, IJuteSerializable {
     public IList<string>? Children;
     public Stat? Stat;
 

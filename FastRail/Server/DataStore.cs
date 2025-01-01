@@ -12,10 +12,10 @@ namespace FastRail.Server;
 public class DataStore : IDisposable {
     private readonly RocksDb _db;
     private readonly Dictionary<long, SessionEntry> _sessions = new();
-    private readonly static byte[] KeyACLPrefix = "/acls"u8.ToArray();
-    private readonly static byte[] KeySessionPrefix = "/sess/"u8.ToArray();
-    private readonly static byte[] KeyDataNodePrefix = "/zdat"u8.ToArray();
-    private readonly static byte[] KeyZxid = "/zxid"u8.ToArray();
+    private static readonly byte[] KeyACLPrefix = "/acls"u8.ToArray();
+    private static readonly byte[] KeySessionPrefix = "/sess/"u8.ToArray();
+    private static readonly byte[] KeyDataNodePrefix = "/zdat"u8.ToArray();
+    private static readonly byte[] KeyZxid = "/zxid"u8.ToArray();
 
     public DataStore(string dataDir) {
         var options = new DbOptions().SetCreateIfMissing();
@@ -93,6 +93,7 @@ public class DataStore : IDisposable {
             if (!it.Key().StartsWith(keyBytes)) {
                 break;
             }
+
             var keyDepth = it.Key().Count(x => x == '/');
 
             if (keyDepth > depth + 1) {
@@ -103,6 +104,7 @@ public class DataStore : IDisposable {
                 ++acc;
             }
         }
+
         return acc;
     }
 
@@ -113,6 +115,7 @@ public class DataStore : IDisposable {
         if (buffer == null) {
             throw new RailException(ErrorCodes.NoNode);
         }
+
         var node = DataNodeEntry.Parser.ParseFrom(buffer);
 
         if (data != null) {
@@ -146,12 +149,14 @@ public class DataStore : IDisposable {
             if (!it.Key().StartsWith(KeyDataNodePrefix)) {
                 break;
             }
+
             var node = DataNodeEntry.Parser.ParseFrom(it.Value());
 
             if (node.Stat.EphemeralOwner != 0) {
                 acc++;
             }
         }
+
         return acc;
     }
 
@@ -196,6 +201,7 @@ public class DataStore : IDisposable {
             if (!it.Key().StartsWith(prefix)) {
                 break;
             }
+
             var nodeDepth = PathDepth(it.Key());
 
             if (nodeDepth == depth + 1) {
@@ -217,6 +223,7 @@ public class DataStore : IDisposable {
         if (path.Length == 1 && path[0] == '/') {
             return 0;
         }
+
         return path.Count(x => x == '/');
     }
 }

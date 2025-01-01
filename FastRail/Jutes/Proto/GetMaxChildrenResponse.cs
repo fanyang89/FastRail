@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Proto;
 
-class GetMaxChildrenResponse : IJuteDeserializable, IJuteSerializable {
+internal class GetMaxChildrenResponse : IJuteDeserializable, IJuteSerializable {
     public int Max;
 
     public void DeserializeFrom(Stream s) {

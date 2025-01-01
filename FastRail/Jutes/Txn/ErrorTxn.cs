@@ -1,6 +1,6 @@
 ﻿namespace FastRail.Jutes.Txn;
 
-class ErrorTxn : IJuteDeserializable, IJuteSerializable {
+internal class ErrorTxn : IJuteDeserializable, IJuteSerializable {
     public int Err;
 
     public void DeserializeFrom(Stream s) {
