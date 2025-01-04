@@ -10,24 +10,23 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     private RaftServer _server;
     private AddressBook _addressBook;
     private string _listenAddress;
-
-    private readonly int _port = 15000;
-    private readonly ulong _myId = 1;
+    private const int Port = 15000;
+    private const ulong MyId = 1;
 
     [SetUp]
     public new void Setup() {
         _logger = LoggerFactory.CreateLogger<RaftServerTest>();
-        _listenAddress = $"https://127.0.0.1:{_port}";
+        _listenAddress = $"http://127.0.0.1:{Port}";
         _addressBook = new AddressBook();
-        _addressBook.Add(_myId, _listenAddress);
+        _addressBook.Add(MyId, _listenAddress);
         var tmpDir = Directory.CreateTempSubdirectory();
         _server = new RaftServer(new RaftService.Config {
-            MyId = _myId,
+            MyId = MyId,
             DataDir = tmpDir.FullName,
             LoggerFactory = LoggerFactory,
             StateMachine = this,
             AddressBook = _addressBook,
-            Listen = new IPEndPoint(IPAddress.Loopback, _port)
+            Listen = new IPEndPoint(IPAddress.Loopback, Port)
         });
         _server.Start();
         _logger.LogInformation("Raft server started at {}", _listenAddress);

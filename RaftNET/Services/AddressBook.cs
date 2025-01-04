@@ -33,15 +33,15 @@ public class AddressBook : IAddressBook {
     }
 
     public void Add(ulong id, string address, int port) {
-        Add(id, $"https://{address}:{port}");
+        Add(id, $"http://{address}:{port}");
     }
 
     public void Add(ulong id, IPAddress address, int port) {
-        Add(id, $"https://{address}:{port}");
+        Add(id, $"http://{address}:{port}");
     }
 
     public void Add(ulong id, int port) {
-        Add(id, $"https://127.0.0.1:{port}");
+        Add(id, $"http://127.0.0.1:{port}");
     }
 
     public string? Find(ulong id) {
