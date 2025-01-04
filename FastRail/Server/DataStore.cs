@@ -79,7 +79,8 @@ public class DataStore : IDisposable {
         _db.Put(keyBytes, node.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
     }
 
-    public void RemoveNode(string key) {
+    public void RemoveNode(string path) {
+        var key = ByteArrayUtil.Concat(KeyDataNodePrefix, path);
         _db.Remove(key);
     }
 

@@ -145,7 +145,6 @@ public class Server : IDisposable, IStateMachine {
 
                     case OpCode.CreateTtl: {
                         throw new NotImplementedException();
-                        break;
                     }
 
                     case OpCode.Delete: {
