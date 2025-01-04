@@ -1,9 +1,9 @@
 ﻿using System.Buffers.Binary;
 using System.Text;
 using FastRail.Exceptions;
-using FastRail.Jutes;
 using FastRail.Protos;
 using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 using RaftNET;
 using RocksDbSharp;
 
@@ -11,43 +11,69 @@ namespace FastRail.Server;
 
 public class DataStore : IDisposable {
     private readonly RocksDb _db;
+    private readonly ILogger<DataStore> _logger;
+    private readonly TimeSpan _scanTickInterval;
+    private Task? _backgroundScanTask;
+    private readonly CancellationTokenSource _cts = new();
     private readonly Dictionary<long, SessionEntry> _sessions = new();
     private static readonly byte[] KeyACLPrefix = "/acls"u8.ToArray();
     private static readonly byte[] KeySessionPrefix = "/sess/"u8.ToArray();
     private static readonly byte[] KeyDataNodePrefix = "/zdat"u8.ToArray();
     private static readonly byte[] KeyZxid = "/zxid"u8.ToArray();
+    private long _nextSessionId;
 
-    public DataStore(string dataDir) {
+    public DataStore(string dataDir, TimeSpan scanTickInterval, ILogger<DataStore> logger) {
+        _logger = logger;
         var options = new DbOptions().SetCreateIfMissing();
         _db = RocksDb.Open(options, dataDir);
+        _scanTickInterval = scanTickInterval;
     }
 
     public void Dispose() {
         _db.Dispose();
+        GC.SuppressFinalize(this);
     }
 
-    public void Load() {
-        var zxidBuffer = _db.Get(KeyZxid);
 
+    public void Stop() {
+        _cts.Cancel();
+        _backgroundScanTask?.Wait();
+    }
+
+    private Func<Task> BackgroundScan(CancellationToken token) {
+        return async () => {
+            _logger.LogInformation("Data store background task started");
+            while (!token.IsCancellationRequested) {
+                await Task.Delay(_scanTickInterval, token);
+            }
+            _logger.LogInformation("Data store background task exited");
+        };
+    }
+
+    public void Start() {
+        // read zxid buffer or initialize
+        var zxidBuffer = _db.Get(KeyZxid);
         if (zxidBuffer == null) {
             zxidBuffer = new byte[sizeof(long)];
             BinaryPrimitives.WriteInt64BigEndian(zxidBuffer, 0);
             _db.Put(KeyZxid, zxidBuffer);
         }
 
+        // load sessions
         using var it = _db.NewIterator();
-
         for (it.SeekToFirst(); it.Valid(); it.Next()) {
             var buffer = it.Value();
-
-            if (it.Key().StartsWith(KeySessionPrefix)) {
-                var session = SessionEntry.Parser.ParseFrom(buffer);
-
-                lock (_sessions) {
-                    _sessions[session.Id] = session;
-                }
+            if (!it.Key().StartsWith(KeySessionPrefix)) {
+                continue;
+            }
+            var session = SessionEntry.Parser.ParseFrom(buffer);
+            lock (_sessions) {
+                _sessions[session.Id] = session;
             }
         }
+
+        // start background scan task
+        _backgroundScanTask = Task.Run(BackgroundScan(_cts.Token));
     }
 
     public long NextZxid => LastZxid + 1;
@@ -57,14 +83,15 @@ public class DataStore : IDisposable {
             var buffer = _db.Get(KeyZxid);
             return BinaryPrimitives.ReadInt64BigEndian(buffer);
         }
-        private set {
-            var buffer = new byte[sizeof(long)];
-            BinaryPrimitives.WriteInt64BigEndian(buffer, value);
-            _db.Put(KeyZxid, buffer, writeOptions: new WriteOptions().SetSync(true));
-        }
     }
 
-    public void CreateNode(string key, byte[] data, StatEntry stat) {
+    private static byte[] CreateBufferForLong(long value) {
+        var buffer = new byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64BigEndian(buffer, value);
+        return buffer;
+    }
+
+    public void CreateNode(string key, byte[] data, StatEntry stat, long zxid) {
         var keyBytes = ByteArrayUtil.Concat(KeyDataNodePrefix, key);
         var buffer = _db.Get(keyBytes);
 
@@ -74,9 +101,15 @@ public class DataStore : IDisposable {
 
         var node = new DataNodeEntry {
             Data = ByteString.CopyFrom(data),
-            Stat = stat
+            Stat = stat,
+            Mode = CreateMode.Persistent, // TODO
+            TTL = 0
         };
-        _db.Put(keyBytes, node.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
+
+        var batch = new WriteBatch();
+        batch.Put(keyBytes, node.ToByteArray());
+        batch.Put(KeyZxid, CreateBufferForLong(zxid));
+        _db.Write(batch, writeOptions: new WriteOptions().SetSync(true));
     }
 
     public void RemoveNode(string path) {
@@ -166,15 +199,35 @@ public class DataStore : IDisposable {
         return acc;
     }
 
-    public void CreateSession(SessionEntry session) {
-        var idBuffer = new byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64BigEndian(idBuffer, session.Id);
-        var key = ByteArrayUtil.Concat(KeySessionPrefix, idBuffer);
+    private byte[] CreateSessionKey(long sessionId) {
+        var buffer = new byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64BigEndian(buffer, sessionId);
+        return ByteArrayUtil.Concat(KeySessionPrefix, buffer);
+    }
 
+    public void PutSession(SessionEntry session) {
+        var key = CreateSessionKey(session.Id);
         lock (_sessions) {
             _db.Put(key, session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
             _sessions.Add(session.Id, session);
         }
+    }
+
+    public long CreateSession(TimeSpan sessionTimeout) {
+        var sessionId = _nextSessionId++;
+        var idBuffer = new byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64BigEndian(idBuffer, sessionId);
+        var key = ByteArrayUtil.Concat(KeySessionPrefix, idBuffer);
+        var session = new SessionEntry {
+            Id = sessionId,
+            Timeout = sessionTimeout.Milliseconds,
+            LastLive = Time.CurrentTimeMillis()
+        };
+        lock (_sessions) {
+            _db.Put(key, session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
+            _sessions.Add(session.Id, session);
+        }
+        return sessionId;
     }
 
     public void RemoveSession(long sessionId) {
@@ -185,6 +238,19 @@ public class DataStore : IDisposable {
         lock (_sessions) {
             _db.Remove(key, writeOptions: new WriteOptions().SetSync(true));
             _sessions.Remove(sessionId);
+        }
+    }
+
+    public void TouchSession(long sessionId) {
+        var idBuffer = new byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64BigEndian(idBuffer, sessionId);
+        var key = ByteArrayUtil.Concat(KeySessionPrefix, idBuffer);
+
+        lock (_sessions) {
+            var session = _sessions[sessionId];
+            session.LastLive = Time.CurrentTimeMillis();
+            _db.Put(key, session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
+            _sessions[sessionId] = session;
         }
     }
 
@@ -280,5 +346,18 @@ public class DataStore : IDisposable {
             }
         }
         return acc;
+    }
+
+    public string LastPrefixPath(string requestPathPrefix) {
+        var prefix = ByteArrayUtil.Concat(KeyDataNodePrefix, requestPathPrefix);
+        using var it = _db.NewIterator();
+        byte[]? lastKey = null;
+        for (it.Seek(prefix); it.Valid(); it.Next()) {
+            if (!prefix.StartsWith(prefix)) {
+                break;
+            }
+            lastKey = it.Key();
+        }
+        return lastKey == null ? "" : Encoding.UTF8.GetString(lastKey);
     }
 }

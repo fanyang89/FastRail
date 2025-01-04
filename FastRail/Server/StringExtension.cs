@@ -27,4 +27,8 @@ public static class StringExtension {
         }
         return !prefix.Where((c, i) => c != buffer[i]).Any();
     }
+
+    public static string TrimPrefix(this string str, string prefix) {
+        return str.StartsWith(prefix) ? str[prefix.Length..] : str;
+    }
 }

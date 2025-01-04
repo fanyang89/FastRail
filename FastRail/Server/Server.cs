@@ -14,18 +14,15 @@ using RaftNET.StateMachines;
 namespace FastRail.Server;
 
 public class Server : IDisposable, IStateMachine {
-    public RaftServer? Raft { get; set; }
-
     private readonly ILogger<Server> _logger;
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly DataStore _ds;
-    private const long SuperSecret = 0XB3415C00L;
-
-    private readonly SessionTracker _sessionTracker;
-
     private readonly Config _config;
     private readonly ILoggerFactory _loggerFactory;
+    private const long SuperSecret = 0XB3415C00L;
+
+    public RaftServer? Raft { get; set; }
     public int PingCount { get; private set; }
 
     public Server(
@@ -36,11 +33,9 @@ public class Server : IDisposable, IStateMachine {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<Server>();
         _listener = new TcpListener(config.EndPoint);
-        _ds = new DataStore(config.DataDir);
-        _sessionTracker = new SessionTracker(
+        _ds = new DataStore(config.DataDir,
             TimeSpan.FromMilliseconds(config.Tick),
-            sessionId => { _ds.RemoveSession(sessionId); },
-            loggerFactory.CreateLogger<SessionTracker>());
+            _loggerFactory.CreateLogger<DataStore>());
     }
 
     public record Config {
@@ -52,12 +47,11 @@ public class Server : IDisposable, IStateMachine {
         public readonly int Tick = 1000;
     }
 
-    public Task Start() {
-        _ds.Load();
+    public void Start() {
+        _ds.Start();
         _listener.Start();
-        return Task.Run(async () => {
+        Task.Run(async () => {
             _logger.LogInformation("Rail server started at {}", _listener.LocalEndpoint);
-
             while (!_cts.Token.IsCancellationRequested) {
                 var conn = await _listener.AcceptTcpClientAsync();
                 _ = Task.Run(async () => {
@@ -68,11 +62,10 @@ public class Server : IDisposable, IStateMachine {
                         // ignored
                     }
                     catch (Exception e) {
-                        _logger.LogError(e, "handling connection failed");
+                        _logger.LogError(e, "Handle connection failed");
                     }
                 });
             }
-
             _logger.LogInformation("Rail server exited");
         }, _cts.Token);
     }
@@ -80,12 +73,12 @@ public class Server : IDisposable, IStateMachine {
     public void Stop() {
         _cts.Cancel();
         _listener.Stop();
+        _ds.Stop();
     }
 
     public void Dispose() {
         _cts.Dispose();
         _listener.Dispose();
-        _sessionTracker.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -94,12 +87,12 @@ public class Server : IDisposable, IStateMachine {
             _logger.LogWarning("Raft server is not running, can't broadcast TXNs");
             return;
         }
-
+        transaction.Zxid = _ds.NextZxid;
         var buffer = transaction.ToByteArray();
         await Task.Run(() => { Raft.AddEntryApplied(buffer); });
     }
 
-    public async Task HandleConnection(TcpClient client, CancellationToken token) {
+    private async Task HandleConnection(TcpClient client, CancellationToken token) {
         // by now, only leader can handle connections
         _logger.LogInformation("Incoming client connection");
         await using var conn = client.GetStream();
@@ -112,10 +105,13 @@ public class Server : IDisposable, IStateMachine {
         var sessionId = connectResponse.SessionId;
         await Broadcast(new Transaction {
             CreateSession = new CreateSession {
-                SessionId = sessionId,
-                Password = ByteString.CopyFrom(connectResponse.Passwd),
-                Timeout = connectResponse.Timeout,
-                ReadOnly = false
+                Session = new SessionEntry {
+                    Id = sessionId,
+                    Password = ByteString.CopyFrom(connectResponse.Passwd),
+                    Timeout = connectResponse.Timeout,
+                    ReadOnly = false,
+                    LastLive = Time.CurrentTimeMillis()
+                }
             }
         });
         await SendConnectResponse(conn, connectResponse, token);
@@ -127,7 +123,6 @@ public class Server : IDisposable, IStateMachine {
             var (requestHeader, requestBuffer) = await ReceiveRequest(conn, token);
             var requestType = requestHeader.Type.ToEnum();
             var xid = requestHeader.Xid;
-            _sessionTracker.Touch(sessionId);
 
             if (requestType == null) {
                 _logger.LogError("Invalid request, type is null");
@@ -137,17 +132,16 @@ public class Server : IDisposable, IStateMachine {
             try {
                 switch (requestType) {
                     case OpCode.Create:
-                    case OpCode.Create2: {
+                    case OpCode.Create2:
+                    case OpCode.CreateTTL:
+                    case OpCode.CreateContainer: {
                         var request = JuteDeserializer.Deserialize<CreateRequest>(requestBuffer);
                         await HandleCreateRequest(conn, request, sessionId, xid, requestType.Value, token);
                         break;
                     }
 
-                    case OpCode.CreateTtl: {
-                        throw new NotImplementedException();
-                    }
-
-                    case OpCode.Delete: {
+                    case OpCode.Delete:
+                    case OpCode.DeleteContainer: {
                         var request = JuteDeserializer.Deserialize<DeleteRequest>(requestBuffer);
                         await HandleDeleteRequest(conn, request, xid, token);
                         break;
@@ -216,7 +210,7 @@ public class Server : IDisposable, IStateMachine {
                         throw new NotImplementedException();
 
                     case OpCode.CloseSession: {
-                        _sessionTracker.Remove(sessionId);
+                        _ds.RemoveSession(sessionId);
                         closing = true;
                         break;
                     }
@@ -226,7 +220,6 @@ public class Server : IDisposable, IStateMachine {
                             ClientInfo = null
                         }, token);
                         throw new NotImplementedException();
-                        break;
                     }
 
                     case OpCode.Reconfig:
@@ -244,11 +237,8 @@ public class Server : IDisposable, IStateMachine {
                     case OpCode.CheckWatches:
                     case OpCode.RemoveWatches:
 
-                    case OpCode.CreateContainer:
-                    case OpCode.DeleteContainer:
-
                     case OpCode.Auth:
-                    case OpCode.Sasl:
+                    case OpCode.SASL:
                         throw new NotImplementedException();
 
                     default:
@@ -282,7 +272,7 @@ public class Server : IDisposable, IStateMachine {
             token);
     }
 
-    private async Task HandleCheckVersionRequest(NetworkStream conn, CheckVersionRequest request, int xid,
+    private Task HandleCheckVersionRequest(NetworkStream conn, CheckVersionRequest request, int xid,
         CancellationToken token) {
         if (request.Path == null) {
             throw new RailException(ErrorCodes.BadArguments);
@@ -375,7 +365,6 @@ public class Server : IDisposable, IStateMachine {
             throw new RailException(ErrorCodes.NoNode);
         }
 
-        var children = _ds.CountNodeChildren(request.Path);
         var stat = node.Stat.ToStat();
         await SendResponse(conn,
             new ReplyHeader(xid, _ds.LastZxid),
@@ -422,15 +411,38 @@ public class Server : IDisposable, IStateMachine {
             throw new RailException(ErrorCodes.BadArguments);
         }
 
-        var mode = request.Flags.ParseCreateMode();
+        var createMode = request.Flags.ParseCreateMode();
+        var isTTL = opCode == OpCode.CreateTTL;
+        var isContainer = opCode == OpCode.CreateContainer;
+
+        switch (createMode) {
+            case CreateMode.Ttl or CreateMode.PersistentSequentialWithTtl when !isTTL:
+            case CreateMode.Container when !isContainer:
+                throw new RailException(ErrorCodes.BadArguments);
+        }
+
+        long? sequence = null;
+        if (createMode is CreateMode.Sequence or CreateMode.PersistentSequentialWithTtl) {
+            var lastPrefixPath = _ds.LastPrefixPath(request.Path);
+            var sequenceStr = lastPrefixPath.TrimPrefix(request.Path);
+            sequence = long.Parse(sequenceStr) + 1;
+        }
+
+        string path;
+        if (sequence != null) {
+            path = request.Path + $"{sequence:08d}";
+        } else {
+            path = request.Path;
+        }
+
         var txn = new CreateNodeTransaction {
-            Path = request.Path,
+            Path = path,
             Data = ByteString.CopyFrom(request.Data),
-            Mode = mode,
+            Mode = createMode,
             Ctime = Time.CurrentTimeMillis()
         };
 
-        if (mode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
+        if (createMode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
             txn.EphemeralOwner = sessionId;
         }
 
@@ -467,7 +479,7 @@ public class Server : IDisposable, IStateMachine {
     private ConnectResponse CreateSession(ConnectRequest request) {
         _logger.LogInformation("Client attempting to establish new session");
         var sessionTimeout = int.Min(int.Max(request.Timeout, _config.MinSessionTimeout), _config.MaxSessionTimeout);
-        var sessionId = _sessionTracker.Add(TimeSpan.FromMilliseconds(sessionTimeout));
+        var sessionId = _ds.CreateSession(TimeSpan.FromMilliseconds(sessionTimeout));
         var passwd = request.Passwd ?? [];
         var rnd = new Random((int)(sessionId ^ SuperSecret));
         rnd.NextBytes(passwd);
@@ -537,23 +549,23 @@ public class Server : IDisposable, IStateMachine {
     }
 
     public void Apply(List<Command> commands) {
-        foreach (var command in commands) {
-            var transaction = Transaction.Parser.ParseFrom(command.Buffer);
-
+        foreach (var transaction in commands
+                     .Select(command => Transaction.Parser.ParseFrom(command.Buffer))) {
             switch (transaction.TxnCase) {
                 case Transaction.TxnOneofCase.CreateNode: {
                     var txn = transaction.CreateNode;
-                    _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), new StatEntry {
+                    var stat = new StatEntry {
                         Czxid = txn.Zxid,
-                        Mzxid = 0,
+                        Mzxid = txn.Zxid,
                         Ctime = txn.Ctime,
-                        Mtime = 0,
+                        Mtime = txn.Ctime,
                         Version = 0,
                         Cversion = 0,
                         Aversion = 0,
                         EphemeralOwner = txn.EphemeralOwner,
                         Pzxid = 0
-                    });
+                    };
+                    _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), stat, transaction.Zxid);
                     break;
                 }
                 case Transaction.TxnOneofCase.DeleteNode: {
@@ -571,6 +583,7 @@ public class Server : IDisposable, IStateMachine {
                 }
                 case Transaction.TxnOneofCase.CreateSession: {
                     var txn = transaction.CreateSession;
+                    _ds.PutSession(txn.Session);
                     break;
                 }
                 case Transaction.TxnOneofCase.RemoveSession: {

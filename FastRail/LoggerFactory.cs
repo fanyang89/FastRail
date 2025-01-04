@@ -6,7 +6,7 @@ public static class LoggerFactory {
     public static ILoggerFactory Instance { get; } =
         Microsoft.Extensions.Logging.LoggerFactory.Create(Configure());
 
-    public static Action<ILoggingBuilder> Configure() {
+    private static Action<ILoggingBuilder> Configure() {
         return builder => builder.AddSimpleConsole(
             options => {
                 options.IncludeScopes = false;
