@@ -2,7 +2,7 @@ using FastRail.Jutes.Data;
 
 namespace FastRail.Protos;
 
-public static class ProtobufMessageExtension {
+public static class MessageExtension {
     public static bool IsValidCreateMode(this int flags) {
         return flags is >= 0 and <= 6;
     }
