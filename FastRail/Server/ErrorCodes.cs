@@ -1,6 +1,6 @@
 namespace FastRail.Server;
 
-public class ErrorCodes {
+public static class ErrorCodes {
     public static int Ok = 0;
 
     // System and server-side errors
