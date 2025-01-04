@@ -1,4 +1,5 @@
 ﻿using System.Buffers.Binary;
+using System.ComponentModel;
 using System.Net;
 using System.Net.Sockets;
 using FastRail.Jutes;
@@ -98,7 +99,7 @@ public class Server : IDisposable, IStateMachine {
         await Task.Run(() => { Raft.AddEntryApplied(buffer); });
     }
 
-    private async Task HandleConnection(TcpClient client, CancellationToken token) {
+    public async Task HandleConnection(TcpClient client, CancellationToken token) {
         // by now, only leader can handle connections
         _logger.LogInformation("Incoming client connection");
         await using var conn = client.GetStream();
@@ -122,7 +123,6 @@ public class Server : IDisposable, IStateMachine {
 
         // we're good, handle client requests now
         var closing = false;
-
         while (!closing) {
             var (requestHeader, requestBuffer) = await ReceiveRequest(conn, token);
             var requestType = requestHeader.Type.ToEnum();
@@ -130,14 +130,21 @@ public class Server : IDisposable, IStateMachine {
             _sessionTracker.Touch(sessionId);
 
             if (requestType == null) {
-                throw new Exception($"Invalid request type: {requestHeader.Type}");
+                _logger.LogError("Invalid request, type is null");
+                throw new RailException(ErrorCodes.BadArguments);
             }
 
             try {
                 switch (requestType) {
-                    case OpCode.Create: {
+                    case OpCode.Create:
+                    case OpCode.Create2: {
                         var request = JuteDeserializer.Deserialize<CreateRequest>(requestBuffer);
-                        await HandleCreateRequest(conn, request, sessionId, token, xid);
+                        await HandleCreateRequest(conn, request, sessionId, xid, requestType.Value, token);
+                        break;
+                    }
+
+                    case OpCode.CreateTtl: {
+                        throw new NotImplementedException();
                         break;
                     }
 
@@ -165,11 +172,6 @@ public class Server : IDisposable, IStateMachine {
                         break;
                     }
 
-                    case OpCode.GetACL:
-                    case OpCode.SetACL: {
-                        throw new NotImplementedException();
-                    }
-
                     case OpCode.GetChildren: {
                         var request = JuteDeserializer.Deserialize<GetChildrenRequest>(requestBuffer);
                         await HandleGetChildrenRequest(conn, request, xid, token);
@@ -193,24 +195,24 @@ public class Server : IDisposable, IStateMachine {
                         break;
                     }
 
-                    case OpCode.Check:
-                    case OpCode.Multi:
-                    case OpCode.Create2:
-                    case OpCode.Reconfig:
-                    case OpCode.CheckWatches:
-                    case OpCode.RemoveWatches:
-                    case OpCode.CreateContainer:
-                    case OpCode.DeleteContainer:
-                    case OpCode.CreateTtl:
-                    case OpCode.MultiRead:
-                    case OpCode.Auth:
-                    case OpCode.SetWatches:
-                    case OpCode.Sasl:
-                    case OpCode.GetEphemerals:
-                    case OpCode.GetAllChildrenNumber:
-                    case OpCode.SetWatches2:
-                    case OpCode.AddWatch:
-                    case OpCode.WhoAmI:
+                    case OpCode.Check: {
+                        var request = JuteDeserializer.Deserialize<CheckVersionRequest>(requestBuffer);
+                        await HandleCheckVersionRequest(conn, request, xid, token);
+                        break;
+                    }
+
+                    case OpCode.GetEphemerals: {
+                        var request = JuteDeserializer.Deserialize<GetEphemeralsRequest>(requestBuffer);
+                        await HandleGetEphemeralsRequest(conn, request, xid, token);
+                        break;
+                    }
+
+                    case OpCode.GetAllChildrenNumber: {
+                        var request = JuteDeserializer.Deserialize<GetAllChildrenNumberRequest>(requestBuffer);
+                        await HandleGetAllChildrenNumberRequest(conn, request, xid, token);
+                        break;
+                    }
+
                     case OpCode.CreateSession:
                         throw new NotImplementedException();
 
@@ -219,10 +221,39 @@ public class Server : IDisposable, IStateMachine {
                         closing = true;
                         break;
                     }
-                    case OpCode.Error:
+
+                    case OpCode.WhoAmI: {
+                        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new WhoAmIResponse {
+                            ClientInfo = null
+                        }, token);
+                        throw new NotImplementedException();
                         break;
+                    }
+
+                    case OpCode.Reconfig:
+
+                    case OpCode.GetACL:
+                    case OpCode.SetACL:
+
+                    case OpCode.Multi:
+                    case OpCode.MultiRead:
+                    case OpCode.Error:
+
+                    case OpCode.AddWatch:
+                    case OpCode.SetWatches:
+                    case OpCode.SetWatches2:
+                    case OpCode.CheckWatches:
+                    case OpCode.RemoveWatches:
+
+                    case OpCode.CreateContainer:
+                    case OpCode.DeleteContainer:
+
+                    case OpCode.Auth:
+                    case OpCode.Sasl:
+                        throw new NotImplementedException();
+
                     default:
-                        throw new ArgumentOutOfRangeException();
+                        throw new InvalidEnumArgumentException(nameof(requestType));
                 }
             }
             catch (RailException ex) {
@@ -230,9 +261,34 @@ public class Server : IDisposable, IStateMachine {
                 await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid, err), token);
             }
         }
+        _logger.LogInformation("Client connection closed, sessionId={}", sessionId);
+        client.Close();
+    }
 
-        _logger.LogInformation("Client connection closed");
-        await Task.CompletedTask;
+    private async Task HandleGetAllChildrenNumberRequest(NetworkStream conn, GetAllChildrenNumberRequest request, int xid,
+        CancellationToken token) {
+        var count = request.Path == null ? _ds.CountAllChildren() : _ds.CountAllChildren(request.Path);
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new GetAllChildrenNumberResponse {
+            TotalNumber = count
+        }, token);
+    }
+
+    private async Task HandleGetEphemeralsRequest(NetworkStream conn, GetEphemeralsRequest request, int xid,
+        CancellationToken token) {
+        var nodes = _ds.ListEphemeral(request.PrefixPath);
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
+            new GetEphemeralsResponse {
+                Ephemerals = nodes
+            },
+            token);
+    }
+
+    private async Task HandleCheckVersionRequest(NetworkStream conn, CheckVersionRequest request, int xid,
+        CancellationToken token) {
+        if (request.Path == null) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+        throw new NotImplementedException();
     }
 
     private async Task HandleSetDataRequest(NetworkStream conn, SetDataRequest request, int xid, CancellationToken token) {
@@ -361,7 +417,7 @@ public class Server : IDisposable, IStateMachine {
     }
 
     private async Task HandleCreateRequest(
-        NetworkStream conn, CreateRequest request, long sessionId, CancellationToken token, int xid
+        NetworkStream conn, CreateRequest request, long sessionId, int xid, OpCode opCode, CancellationToken token
     ) {
         if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
             throw new RailException(ErrorCodes.BadArguments);
@@ -382,10 +438,31 @@ public class Server : IDisposable, IStateMachine {
         await Broadcast(new Transaction {
             CreateNode = txn
         });
-        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
-            new CreateResponse {
-                Path = request.Path
-            }, token);
+
+        switch (opCode) {
+            case OpCode.Create: {
+                await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
+                    new CreateResponse {
+                        Path = request.Path
+                    }, token);
+                break;
+            }
+            case OpCode.Create2: {
+                var node = _ds.GetNode(request.Path);
+                if (node == null) {
+                    _logger.LogError("Node created just now but not found");
+                    throw new RailException(ErrorCodes.SystemError);
+                }
+                await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
+                    new Create2Response {
+                        Path = request.Path,
+                        Stat = node.Stat.ToStat()
+                    }, token);
+                break;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(opCode));
+        }
     }
 
     private ConnectResponse CreateSession(ConnectRequest request) {

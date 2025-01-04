@@ -231,4 +231,53 @@ public class DataStore : IDisposable {
 
         return path.Count(x => x == '/');
     }
+
+    public List<string> ListEphemeral(string? prefix) {
+        var results = new List<string>();
+        using var it = _db.NewIterator();
+        for (it.Seek(KeyDataNodePrefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(KeyDataNodePrefix)) {
+                break;
+            }
+            var path = new ArraySegment<byte>(it.Key(), KeyDataNodePrefix.Length,
+                it.Key().Length - KeyDataNodePrefix.Length);
+            if (prefix != null && !path.StartsWith(prefix)) {
+                continue;
+            }
+            var node = DataNodeEntry.Parser.ParseFrom(it.Value());
+            if (node.Stat.EphemeralOwner != 0) {
+                results.Add(Encoding.UTF8.GetString(it.Key()));
+            }
+        }
+        return results;
+    }
+
+    public int CountAllChildren() {
+        var acc = 0;
+        using var it = _db.NewIterator();
+        for (it.Seek(KeyDataNodePrefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(KeyDataNodePrefix)) {
+                break;
+            }
+            acc++;
+        }
+        return acc;
+    }
+
+    public int CountAllChildren(string requestPath) {
+        var acc = 0;
+        var prefix = ByteArrayUtil.Concat(KeyDataNodePrefix, requestPath);
+        using var it = _db.NewIterator();
+        for (it.Seek(prefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(prefix)) {
+                break;
+            }
+            var path = new ArraySegment<byte>(it.Key(), KeyDataNodePrefix.Length,
+                it.Key().Length - KeyDataNodePrefix.Length);
+            if (requestPath != null && path.StartsWith(requestPath) && path.Count > requestPath.Length) {
+                acc++;
+            }
+        }
+        return acc;
+    }
 }

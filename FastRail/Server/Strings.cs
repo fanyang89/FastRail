@@ -11,7 +11,6 @@ public static class Strings {
         if (prefix.Length > buffer.Length) {
             return false;
         }
-
         return !prefix.Where((c, i) => c != buffer[i]).Any();
     }
 
@@ -19,7 +18,13 @@ public static class Strings {
         if (prefix.Length > buffer.Length) {
             return false;
         }
+        return !prefix.Where((c, i) => c != buffer[i]).Any();
+    }
 
+    public static bool StartsWith(this ArraySegment<byte> buffer, string prefix) {
+        if (prefix.Length > buffer.Count) {
+            return false;
+        }
         return !prefix.Where((c, i) => c != buffer[i]).Any();
     }
 }

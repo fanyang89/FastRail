@@ -27,12 +27,6 @@ public class SingleServerTest : TestBase {
     private const int RaftPort = 15001;
     private const int SessionTimeout = 6000;
 
-    private string CreateTempDirectory() {
-        var dir = Directory.CreateTempSubdirectory().FullName;
-        _logger.LogInformation("Create temp directory: {}", dir);
-        return dir;
-    }
-
     [SetUp]
     public new void Setup() {
         _logger = LoggerFactory.CreateLogger<SingleServerTest>();
@@ -58,14 +52,16 @@ public class SingleServerTest : TestBase {
     }
 
     private ZooKeeper CreateClient() {
-        return new ZooKeeper($"127.0.0.1:{Port}", SessionTimeout, new LogWatcher(LoggerFactory.CreateLogger<LogWatcher>()));
+        return new ZooKeeper($"127.0.0.1:{Port}", SessionTimeout,
+            new LogWatcher(LoggerFactory.CreateLogger<LogWatcher>()));
     }
 
     [Test]
-    public void TestSingleServerCanAcceptConnections() {
-        _ = CreateClient();
+    public async Task TestSingleServerCanAcceptConnections() {
+        var client = CreateClient();
         Thread.Sleep(4000);
         Assert.That(_server.PingCount, Is.GreaterThan(0));
+        await client.closeAsync();
     }
 
     [Test]
@@ -79,6 +75,7 @@ public class SingleServerTest : TestBase {
         Assert.That(realPath, Is.EqualTo(path));
         var stat = await client.existsAsync(path);
         Assert.That(stat, Is.Not.Null);
+        await client.closeAsync();
     }
 
     [Test]
@@ -94,5 +91,15 @@ public class SingleServerTest : TestBase {
         Assert.That(stat, Is.Not.Null);
         var result = await client.getDataAsync(path);
         Assert.That(result.Data, Is.EqualTo(expected.ToBytes()));
+        await client.closeAsync();
+    }
+
+    [Test]
+    public async Task TestSingleServerCanDelete() {}
+
+    [Test]
+    public async Task TestSingleServerCanCheck() {
+        var client = CreateClient();
+        await client.closeAsync();
     }
 }
