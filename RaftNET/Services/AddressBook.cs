@@ -8,15 +8,17 @@ public class AddressBook : IAddressBook {
     public AddressBook() {}
 
     public AddressBook(List<string> initialMembers) {
-        foreach (var memberString in initialMembers) {
-            // format: <id>=<address>
-            var parts = memberString.Split('=');
-
+        foreach (var parts in initialMembers.Select(memberString => memberString.Split('='))) {
             if (parts.Length != 2) {
-                throw new ArgumentException(nameof(initialMembers));
+                throw new ArgumentException("Invalid member format", nameof(initialMembers));
             }
 
-            _addresses.Add(ulong.Parse(parts[0]), parts[1]);
+            var id = ulong.Parse(parts[0]);
+            var endpoint = parts[1];
+            if (!endpoint.StartsWith("http://")) {
+                endpoint = "http://" + endpoint;
+            }
+            _addresses.Add(id, endpoint);
         }
     }
 

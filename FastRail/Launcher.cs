@@ -38,7 +38,7 @@ public class Launcher : IDisposable {
         Server.Raft = Raft;
     }
 
-    public void Launch() {
+    public void Start() {
         Server.Start();
         Raft.Start();
     }

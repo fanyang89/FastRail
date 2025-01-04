@@ -30,7 +30,7 @@ public class SingleServerTestBase : TestBase {
         });
         _server = _launcher.Server;
         _raft = _launcher.Raft;
-        _launcher.Launch();
+        _launcher.Start();
         _client = CreateClient();
     }
 
