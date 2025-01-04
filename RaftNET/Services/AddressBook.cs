@@ -22,15 +22,27 @@ public class AddressBook : IAddressBook {
         }
     }
 
-    public Dictionary<ulong, bool> GetMembers() {
-        lock (_addresses) {
-            return _addresses.Select(x => (x.Key, true)).ToDictionary();
-        }
-    }
-
     public void Add(ulong id, string address) {
         lock (_addresses) {
             _addresses.Add(id, address);
+        }
+    }
+
+    public string? Find(ulong id) {
+        lock (_addresses) {
+            return _addresses.GetValueOrDefault(id);
+        }
+    }
+
+    public void Remove(ulong id) {
+        lock (_addresses) {
+            _addresses.Remove(id);
+        }
+    }
+
+    public Dictionary<ulong, bool> GetMembers() {
+        lock (_addresses) {
+            return _addresses.Select(x => (x.Key, true)).ToDictionary();
         }
     }
 
@@ -44,17 +56,5 @@ public class AddressBook : IAddressBook {
 
     public void Add(ulong id, int port) {
         Add(id, $"http://127.0.0.1:{port}");
-    }
-
-    public string? Find(ulong id) {
-        lock (_addresses) {
-            return _addresses.GetValueOrDefault(id);
-        }
-    }
-
-    public void Remove(ulong id) {
-        lock (_addresses) {
-            _addresses.Remove(id);
-        }
     }
 }

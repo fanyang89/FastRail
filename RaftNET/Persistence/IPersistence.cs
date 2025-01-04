@@ -10,4 +10,4 @@ public interface IPersistence {
     void StoreLogEntries(IEnumerable<LogEntry> entries);
     List<LogEntry> LoadLog();
     void TruncateLog(ulong idx);
-};
+}

@@ -4,8 +4,6 @@ namespace FastRail.Tests;
 
 [TestFixture]
 public class TestBase {
-    protected ILoggerFactory LoggerFactory;
-
     [SetUp]
     public void Setup() {
         Console.SetOut(TestContext.Progress);
@@ -14,6 +12,8 @@ public class TestBase {
 
     [TearDown]
     public void TearDown() {}
+
+    protected ILoggerFactory LoggerFactory;
 
     protected static string CreateTempDirectory() {
         return Directory.CreateTempSubdirectory().FullName;

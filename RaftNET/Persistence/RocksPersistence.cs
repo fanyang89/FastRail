@@ -27,10 +27,7 @@ public class RocksPersistence : IPersistence, IDisposable {
 
     public void StoreTermVote(ulong term, ulong vote) {
         lock (_keyTermVote) {
-            var tv = new TermVote {
-                Term = term,
-                VotedFor = vote
-            };
+            var tv = new TermVote { Term = term, VotedFor = vote };
             var buf = tv.ToByteArray();
             var options = new WriteOptions();
             options.SetSync(true);
@@ -67,21 +64,6 @@ public class RocksPersistence : IPersistence, IDisposable {
 
             return BitConverter.ToUInt64(buf);
         }
-    }
-
-    private int CountLogsUnlocked() {
-        var count = 0;
-        using var iter = _db.NewIterator();
-
-        for (iter.Seek(_keyLogEntryPrefix); iter.Valid(); iter.Next()) {
-            if (!iter.Key().StartsWith(_keyLogEntryPrefix)) {
-                break;
-            }
-
-            ++count;
-        }
-
-        return count;
     }
 
     public void StoreSnapshotDescriptor(SnapshotDescriptor snapshot, ulong preserveLogEntries) {
@@ -176,5 +158,20 @@ public class RocksPersistence : IPersistence, IDisposable {
             }
             _db.Write(batch, _syncWriteOption);
         }
+    }
+
+    private int CountLogsUnlocked() {
+        var count = 0;
+        using var iter = _db.NewIterator();
+
+        for (iter.Seek(_keyLogEntryPrefix); iter.Valid(); iter.Next()) {
+            if (!iter.Key().StartsWith(_keyLogEntryPrefix)) {
+                break;
+            }
+
+            ++count;
+        }
+
+        return count;
     }
 }

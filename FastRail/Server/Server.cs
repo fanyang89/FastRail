@@ -14,16 +14,22 @@ using RaftNET.StateMachines;
 namespace FastRail.Server;
 
 public class Server : IDisposable, IStateMachine {
+    public record Config {
+        public readonly TimeSpan ReceiveTimeout = TimeSpan.FromSeconds(6);
+        public readonly int MinSessionTimeout = 1000;
+        public readonly int MaxSessionTimeout = 10 * 1000;
+        public readonly int Tick = 1000;
+        public required string DataDir;
+        public required IPEndPoint EndPoint;
+    }
+
+    private const long SuperSecret = 0XB3415C00L;
     private readonly ILogger<Server> _logger;
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly DataStore _ds;
     private readonly Config _config;
     private readonly ILoggerFactory _loggerFactory;
-    private const long SuperSecret = 0XB3415C00L;
-
-    public RaftServer? Raft { get; set; }
-    public int PingCount { get; private set; }
 
     public Server(
         Config config,
@@ -38,13 +44,87 @@ public class Server : IDisposable, IStateMachine {
             _loggerFactory.CreateLogger<DataStore>());
     }
 
-    public record Config {
-        public required string DataDir;
-        public required IPEndPoint EndPoint;
-        public readonly TimeSpan ReceiveTimeout = TimeSpan.FromSeconds(6);
-        public readonly int MinSessionTimeout = 1000;
-        public readonly int MaxSessionTimeout = 10 * 1000;
-        public readonly int Tick = 1000;
+    public RaftServer? Raft { get; set; }
+    public int PingCount { get; private set; }
+
+    public void Dispose() {
+        _cts.Dispose();
+        _listener.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    public void Apply(List<Command> commands) {
+        foreach (var transaction in commands
+                     .Select(command => Transaction.Parser.ParseFrom(command.Buffer))) {
+            switch (transaction.TxnCase) {
+                case Transaction.TxnOneofCase.CreateNode: {
+                    var txn = transaction.CreateNode;
+
+                    var stat = new StatEntry {
+                        Czxid = txn.Zxid,
+                        Mzxid = txn.Zxid,
+                        Ctime = txn.Ctime,
+                        Mtime = txn.Ctime,
+                        Version = 0,
+                        Cversion = 0,
+                        Aversion = 0,
+                        EphemeralOwner = txn.EphemeralOwner,
+                        Pzxid = 0
+                    };
+
+                    if (txn.IsContainer) {
+                        _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), transaction.Zxid, stat, null, true);
+                    } else if (txn.Ttl > 0) {
+                        _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), txn.Ttl, stat, txn.Ttl);
+                    } else {
+                        _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), transaction.Zxid, stat);
+                    }
+                    break;
+                }
+                case Transaction.TxnOneofCase.DeleteNode: {
+                    var txn = transaction.DeleteNode;
+                    _ds.RemoveNode(txn.Path);
+                    break;
+                }
+                case Transaction.TxnOneofCase.UpdateNode: {
+                    var txn = transaction.UpdateNode;
+                    break;
+                }
+                case Transaction.TxnOneofCase.Sync: {
+                    // do nothing, we're already synced
+                    break;
+                }
+                case Transaction.TxnOneofCase.CreateSession: {
+                    var txn = transaction.CreateSession;
+                    _ds.PutSession(txn.Session);
+                    break;
+                }
+                case Transaction.TxnOneofCase.RemoveSession: {
+                    var txn = transaction.RemoveSession;
+                    _ds.RemoveSession(txn.SessionId);
+                    break;
+                }
+                case Transaction.TxnOneofCase.None:
+                default:
+                    throw new InvalidDataException();
+            }
+        }
+    }
+
+    public ulong TakeSnapshot() {
+        throw new NotImplementedException();
+    }
+
+    public void DropSnapshot(ulong snapshot) {
+        throw new NotImplementedException();
+    }
+
+    public void LoadSnapshot(ulong snapshot) {
+        throw new NotImplementedException();
+    }
+
+    public void OnEvent(Event ev) {
+        ev.Switch(e => { _logger.LogInformation("Role changed, id={} role={} ", e.ServerId, e.Role); });
     }
 
     public void Start() {
@@ -74,12 +154,6 @@ public class Server : IDisposable, IStateMachine {
         _cts.Cancel();
         _listener.Stop();
         _ds.Stop();
-    }
-
-    public void Dispose() {
-        _cts.Dispose();
-        _listener.Dispose();
-        GC.SuppressFinalize(this);
     }
 
     private async Task Broadcast(Transaction transaction) {
@@ -133,10 +207,15 @@ public class Server : IDisposable, IStateMachine {
                 switch (requestType) {
                     case OpCode.Create:
                     case OpCode.Create2:
-                    case OpCode.CreateTTL:
                     case OpCode.CreateContainer: {
                         var request = JuteDeserializer.Deserialize<CreateRequest>(requestBuffer);
                         await HandleCreateRequest(conn, request, sessionId, xid, requestType.Value, token);
+                        break;
+                    }
+
+                    case OpCode.CreateTTL: {
+                        var request = JuteDeserializer.Deserialize<CreateTtlRequest>(requestBuffer);
+                        await HandleCreateTTLRequest(conn, request, sessionId, xid, token);
                         break;
                     }
 
@@ -216,9 +295,8 @@ public class Server : IDisposable, IStateMachine {
                     }
 
                     case OpCode.WhoAmI: {
-                        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new WhoAmIResponse {
-                            ClientInfo = null
-                        }, token);
+                        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new WhoAmIResponse { ClientInfo = null },
+                            token);
                         throw new NotImplementedException();
                     }
 
@@ -254,21 +332,43 @@ public class Server : IDisposable, IStateMachine {
         client.Close();
     }
 
+    private async Task HandleCreateTTLRequest(NetworkStream conn, CreateTtlRequest request, long sessionId, int xid,
+        CancellationToken token) {
+        var createMode = request.Flags.ParseCreateMode();
+        if (createMode != CreateMode.Ttl && createMode != CreateMode.PersistentSequentialWithTtl) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+        if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+
+        var txn = new CreateNodeTransaction {
+            Path = request.Path,
+            Data = ByteString.CopyFrom(request.Data),
+            Ctime = Time.CurrentTimeMillis(),
+            EphemeralOwner = 0,
+            Ttl = request.Ttl,
+            IsContainer = false,
+            IsSequential = false,
+            Zxid = _ds.NextZxid
+        };
+        await Broadcast(new Transaction { CreateNode = txn });
+
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new CreateResponse { Path = request.Path }, token);
+    }
+
     private async Task HandleGetAllChildrenNumberRequest(NetworkStream conn, GetAllChildrenNumberRequest request, int xid,
         CancellationToken token) {
         var count = request.Path == null ? _ds.CountAllChildren() : _ds.CountAllChildren(request.Path);
-        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new GetAllChildrenNumberResponse {
-            TotalNumber = count
-        }, token);
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new GetAllChildrenNumberResponse { TotalNumber = count },
+            token);
     }
 
     private async Task HandleGetEphemeralsRequest(NetworkStream conn, GetEphemeralsRequest request, int xid,
         CancellationToken token) {
         var nodes = _ds.ListEphemeral(request.PrefixPath);
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
-            new GetEphemeralsResponse {
-                Ephemerals = nodes
-            },
+            new GetEphemeralsResponse { Ephemerals = nodes },
             token);
     }
 
@@ -290,40 +390,28 @@ public class Server : IDisposable, IStateMachine {
             throw new RailException(ErrorCodes.NoNode);
         }
         var txn = new UpdateNodeTransaction {
-            Path = request.Path,
-            Mtime = Time.CurrentTimeMillis(),
-            Version = node.Stat.Version + 1
+            Path = request.Path, Mtime = Time.CurrentTimeMillis(), Version = node.Stat.Version + 1
         };
         if (request.Data != null) {
             txn.Data = ByteString.CopyFrom(request.Data);
         }
 
-        await Broadcast(new Transaction {
-            UpdateNode = txn
-        });
+        await Broadcast(new Transaction { UpdateNode = txn });
 
         node = _ds.GetNode(request.Path);
         if (node == null) {
             throw new RailException(ErrorCodes.SystemError);
         }
 
-        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SetDataResponse {
-            Stat = node.Stat.ToStat()
-        }, token);
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SetDataResponse { Stat = node.Stat.ToStat() }, token);
     }
 
     private async Task HandleSyncRequest(NetworkStream conn, SyncRequest request, int xid, CancellationToken token) {
         if (string.IsNullOrEmpty(request.Path)) {
             throw new RailException(ErrorCodes.BadArguments);
         }
-        await Broadcast(new Transaction {
-            Sync = new SyncTransaction {
-                Path = request.Path
-            }
-        });
-        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SyncResponse {
-            Path = request.Path
-        }, token);
+        await Broadcast(new Transaction { Sync = new SyncTransaction { Path = request.Path } });
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SyncResponse { Path = request.Path }, token);
     }
 
     private async Task HandleGetChildren2Request(
@@ -335,10 +423,7 @@ public class Server : IDisposable, IStateMachine {
         var children = _ds.GetChildren(request.Path, out var stat);
         await SendResponse(conn,
             new ReplyHeader(xid, _ds.LastZxid),
-            new GetChildren2Response {
-                Children = children,
-                Stat = stat.ToStat()
-            }, token);
+            new GetChildren2Response { Children = children, Stat = stat.ToStat() }, token);
     }
 
     private async Task HandleGetChildrenRequest(NetworkStream conn, GetChildrenRequest request,
@@ -349,9 +434,7 @@ public class Server : IDisposable, IStateMachine {
         var children = _ds.GetChildren(request.Path, out _);
         await SendResponse(conn,
             new ReplyHeader(xid, _ds.LastZxid),
-            new GetChildrenResponse {
-                Children = children
-            }, token);
+            new GetChildrenResponse { Children = children }, token);
     }
 
     private async Task HandleGetDataRequest(NetworkStream conn, GetDataRequest request, int xid, CancellationToken token) {
@@ -368,10 +451,7 @@ public class Server : IDisposable, IStateMachine {
         var stat = node.Stat.ToStat();
         await SendResponse(conn,
             new ReplyHeader(xid, _ds.LastZxid),
-            new GetDataResponse {
-                Data = node.Data.ToArray(),
-                Stat = stat
-            }, token);
+            new GetDataResponse { Data = node.Data.ToArray(), Stat = stat }, token);
     }
 
     private async Task HandleExistsRequest(NetworkStream conn, ExistsRequest request, int xid, CancellationToken token) {
@@ -386,9 +466,7 @@ public class Server : IDisposable, IStateMachine {
         }
 
         var stat = node.Stat.ToStat();
-        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse {
-            Stat = stat
-        }, token);
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse { Stat = stat }, token);
     }
 
     private async Task HandleDeleteRequest(NetworkStream conn, DeleteRequest request, int xid, CancellationToken token) {
@@ -396,33 +474,24 @@ public class Server : IDisposable, IStateMachine {
             throw new RailException(ErrorCodes.BadArguments);
         }
 
-        await Broadcast(new Transaction {
-            DeleteNode = new DeleteNodeTransaction {
-                Path = request.Path
-            }
-        });
+        await Broadcast(new Transaction { DeleteNode = new DeleteNodeTransaction { Path = request.Path } });
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), token);
     }
 
     private async Task HandleCreateRequest(
         NetworkStream conn, CreateRequest request, long sessionId, int xid, OpCode opCode, CancellationToken token
     ) {
+        var createMode = request.Flags.ParseCreateMode();
+        var isContainer = opCode == OpCode.CreateContainer;
+        if (createMode == CreateMode.Container && !isContainer) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
         if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
             throw new RailException(ErrorCodes.BadArguments);
         }
 
-        var createMode = request.Flags.ParseCreateMode();
-        var isTTL = opCode == OpCode.CreateTTL;
-        var isContainer = opCode == OpCode.CreateContainer;
-
-        switch (createMode) {
-            case CreateMode.Ttl or CreateMode.PersistentSequentialWithTtl when !isTTL:
-            case CreateMode.Container when !isContainer:
-                throw new RailException(ErrorCodes.BadArguments);
-        }
-
         long? sequence = null;
-        if (createMode is CreateMode.Sequence or CreateMode.PersistentSequentialWithTtl) {
+        if (createMode is CreateMode.Sequence) {
             var lastPrefixPath = _ds.LastPrefixPath(request.Path);
             var sequenceStr = lastPrefixPath.TrimPrefix(request.Path);
             sequence = long.Parse(sequenceStr) + 1;
@@ -438,26 +507,24 @@ public class Server : IDisposable, IStateMachine {
         var txn = new CreateNodeTransaction {
             Path = path,
             Data = ByteString.CopyFrom(request.Data),
-            Mode = createMode,
-            Ctime = Time.CurrentTimeMillis()
+            Ctime = Time.CurrentTimeMillis(),
+            IsContainer = isContainer,
+            IsSequential = sequence != null,
+            Zxid = _ds.NextZxid,
+            Ttl = 0
         };
-
         if (createMode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
             txn.EphemeralOwner = sessionId;
         }
 
-        await Broadcast(new Transaction {
-            CreateNode = txn
-        });
+        await Broadcast(new Transaction { CreateNode = txn });
 
         switch (opCode) {
-            case OpCode.Create: {
+            case OpCode.Create:
+            case OpCode.CreateContainer:
                 await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
-                    new CreateResponse {
-                        Path = request.Path
-                    }, token);
+                    new CreateResponse { Path = request.Path }, token);
                 break;
-            }
             case OpCode.Create2: {
                 var node = _ds.GetNode(request.Path);
                 if (node == null) {
@@ -465,14 +532,11 @@ public class Server : IDisposable, IStateMachine {
                     throw new RailException(ErrorCodes.SystemError);
                 }
                 await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
-                    new Create2Response {
-                        Path = request.Path,
-                        Stat = node.Stat.ToStat()
-                    }, token);
+                    new Create2Response { Path = request.Path, Stat = node.Stat.ToStat() }, token);
                 break;
             }
             default:
-                throw new ArgumentOutOfRangeException(nameof(opCode));
+                throw new InvalidEnumArgumentException(nameof(opCode));
         }
     }
 
@@ -480,7 +544,8 @@ public class Server : IDisposable, IStateMachine {
         _logger.LogInformation("Client attempting to establish new session");
         var sessionTimeout = int.Min(int.Max(request.Timeout, _config.MinSessionTimeout), _config.MaxSessionTimeout);
         var sessionId = _ds.CreateSession(TimeSpan.FromMilliseconds(sessionTimeout));
-        var passwd = request.Passwd ?? [];
+        var passwd = request.Passwd ??
+                     [];
         var rnd = new Random((int)(sessionId ^ SuperSecret));
         rnd.NextBytes(passwd);
         return new ConnectResponse {
@@ -546,71 +611,5 @@ public class Server : IDisposable, IStateMachine {
         BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
         await stream.WriteAsync(lenBuffer, token);
         await stream.WriteAsync(headerBuffer, token);
-    }
-
-    public void Apply(List<Command> commands) {
-        foreach (var transaction in commands
-                     .Select(command => Transaction.Parser.ParseFrom(command.Buffer))) {
-            switch (transaction.TxnCase) {
-                case Transaction.TxnOneofCase.CreateNode: {
-                    var txn = transaction.CreateNode;
-                    var stat = new StatEntry {
-                        Czxid = txn.Zxid,
-                        Mzxid = txn.Zxid,
-                        Ctime = txn.Ctime,
-                        Mtime = txn.Ctime,
-                        Version = 0,
-                        Cversion = 0,
-                        Aversion = 0,
-                        EphemeralOwner = txn.EphemeralOwner,
-                        Pzxid = 0
-                    };
-                    _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), stat, transaction.Zxid);
-                    break;
-                }
-                case Transaction.TxnOneofCase.DeleteNode: {
-                    var txn = transaction.DeleteNode;
-                    _ds.RemoveNode(txn.Path);
-                    break;
-                }
-                case Transaction.TxnOneofCase.UpdateNode: {
-                    var txn = transaction.UpdateNode;
-                    break;
-                }
-                case Transaction.TxnOneofCase.Sync: {
-                    // do nothing, we're already synced
-                    break;
-                }
-                case Transaction.TxnOneofCase.CreateSession: {
-                    var txn = transaction.CreateSession;
-                    _ds.PutSession(txn.Session);
-                    break;
-                }
-                case Transaction.TxnOneofCase.RemoveSession: {
-                    var txn = transaction.RemoveSession;
-                    _ds.RemoveSession(txn.SessionId);
-                    break;
-                }
-                case Transaction.TxnOneofCase.None:
-                default:
-                    throw new InvalidDataException();
-            }
-        }
-    }
-
-    public ulong TakeSnapshot() {
-        throw new NotImplementedException();
-    }
-
-    public void DropSnapshot(ulong snapshot) {
-        throw new NotImplementedException();
-    }
-
-    public void LoadSnapshot(ulong snapshot) {
-        throw new NotImplementedException();
-    }
-
-    public void OnEvent(Event ev) {
-        ev.Switch(e => { _logger.LogInformation("Role changed, id={} role={} ", e.ServerId, e.Role); });
     }
 }

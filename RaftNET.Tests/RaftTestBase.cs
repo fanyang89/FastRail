@@ -4,8 +4,6 @@ namespace RaftNET.Tests;
 
 [TestFixture]
 public class RaftTestBase {
-    protected ILoggerFactory LoggerFactory;
-
     [SetUp]
     public void Setup() {
         Console.SetOut(TestContext.Progress);
@@ -14,4 +12,6 @@ public class RaftTestBase {
 
     [TearDown]
     public void TearDown() {}
+
+    protected ILoggerFactory LoggerFactory;
 }

@@ -11,10 +11,7 @@ public class LaunchConfig {
     public required string RaftDataDir;
     public required AddressBook AddressBook;
 
-    public Server.Server.Config ServerConfig => new() {
-        DataDir = DataDir,
-        EndPoint = Listen
-    };
+    public Server.Server.Config ServerConfig => new() { DataDir = DataDir, EndPoint = Listen };
 
     public RaftService.Config GetRaftConfig(Server.Server server) {
         return new RaftService.Config {
@@ -29,13 +26,18 @@ public class LaunchConfig {
 }
 
 public class Launcher : IDisposable {
-    public Server.Server Server { get; }
-    public RaftServer Raft { get; }
-
     public Launcher(LaunchConfig config) {
         Server = new Server.Server(config.ServerConfig, LoggerFactory.Instance);
         Raft = new RaftServer(config.GetRaftConfig(Server));
         Server.Raft = Raft;
+    }
+
+    public Server.Server Server { get; }
+    public RaftServer Raft { get; }
+
+    public void Dispose() {
+        Server.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     public void Start() {
@@ -46,10 +48,5 @@ public class Launcher : IDisposable {
     public void Stop() {
         Raft.Stop();
         Server.Stop();
-    }
-
-    public void Dispose() {
-        Server.Dispose();
-        GC.SuppressFinalize(this);
     }
 }

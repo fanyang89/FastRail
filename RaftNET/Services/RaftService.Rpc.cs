@@ -6,12 +6,6 @@ namespace RaftNET.Services;
 public partial class RaftService {
     public static readonly string KeyFromId = "raftnet-from-id";
 
-    private ulong GetFromServerId(Metadata metadata) {
-        Debug.Assert(metadata.Any(x => x.Key == KeyFromId));
-        var entry = metadata.First(x => x.Key == KeyFromId);
-        return Convert.ToUInt64(entry.Value);
-    }
-
     public override Task<Void> Vote(VoteRequest request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
 
@@ -84,5 +78,11 @@ public partial class RaftService {
 
     public override Task<PingResponse> Ping(PingRequest request, ServerCallContext context) {
         return Task.FromResult(new PingResponse());
+    }
+
+    private ulong GetFromServerId(Metadata metadata) {
+        Debug.Assert(metadata.Any(x => x.Key == KeyFromId));
+        var entry = metadata.First(x => x.Key == KeyFromId);
+        return Convert.ToUInt64(entry.Value);
     }
 }

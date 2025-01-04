@@ -4,8 +4,8 @@ namespace RaftNET.Replication;
 
 internal class MatchVector<T>(T prevCommitIdx, int reserveSize)
     where T : INumber<T> {
-    private int _count;
     private readonly List<T> _match = new(reserveSize);
+    private int _count;
 
     public void Add(T matchIdx) {
         if (matchIdx > prevCommitIdx) {

@@ -10,12 +10,7 @@ public static class Messages {
         var cfg = new Configuration();
 
         foreach (var id in ids) {
-            cfg.Current.Add(new ConfigMember {
-                ServerAddress = new ServerAddress {
-                    ServerId = id
-                },
-                CanVote = true
-            });
+            cfg.Current.Add(new ConfigMember { ServerAddress = new ServerAddress { ServerId = id }, CanVote = true });
         }
 
         return cfg;
@@ -25,46 +20,26 @@ public static class Messages {
         var cfg = new Configuration();
 
         foreach (var id in current) {
-            cfg.Current.Add(new ConfigMember {
-                ServerAddress = new ServerAddress {
-                    ServerId = id
-                },
-                CanVote = true
-            });
+            cfg.Current.Add(new ConfigMember { ServerAddress = new ServerAddress { ServerId = id }, CanVote = true });
         }
 
         foreach (var id in previous) {
-            cfg.Previous.Add(new ConfigMember {
-                ServerAddress = new ServerAddress {
-                    ServerId = id
-                },
-                CanVote = true
-            });
+            cfg.Previous.Add(new ConfigMember { ServerAddress = new ServerAddress { ServerId = id }, CanVote = true });
         }
 
         return cfg;
     }
 
     public static LogEntry CreateDummy(ulong idx = 0, ulong term = 0) {
-        return new LogEntry {
-            Idx = idx,
-            Term = term,
-            Dummy = new Void()
-        };
+        return new LogEntry { Idx = idx, Term = term, Dummy = new Void() };
     }
 
     public static LogEntry CreateCommand(string cmd) {
-        return new LogEntry {
-            Command = new Command {
-                Buffer = ByteString.CopyFrom(cmd, Encoding.UTF8)
-            }
-        };
+        return new LogEntry { Command = new Command { Buffer = ByteString.CopyFrom(cmd, Encoding.UTF8) } };
     }
 
     public static LogEntry CreateConfiguration(Configuration cfg) {
-        return new LogEntry {
-            Configuration = cfg
-        };
+        return new LogEntry { Configuration = cfg };
     }
 
 
@@ -102,12 +77,7 @@ public static class Messages {
     }
 
     public static ConfigMember CreateConfigMember(ulong id, bool canVote = true) {
-        return new ConfigMember {
-            ServerAddress = new ServerAddress {
-                ServerId = id
-            },
-            CanVote = canVote
-        };
+        return new ConfigMember { ServerAddress = new ServerAddress { ServerId = id }, CanVote = canVote };
     }
 
     public static ISet<ConfigMember> CreateConfigMembers(params ulong[] memberIds) {
@@ -154,12 +124,7 @@ public static class Messages {
         var cfg = new Configuration();
 
         foreach (var (id, canVote) in configInitialMembers) {
-            cfg.Current.Add(new ConfigMember {
-                ServerAddress = new ServerAddress {
-                    ServerId = id
-                },
-                CanVote = canVote
-            });
+            cfg.Current.Add(new ConfigMember { ServerAddress = new ServerAddress { ServerId = id }, CanVote = canVote });
         }
 
         return cfg;

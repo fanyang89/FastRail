@@ -7,22 +7,6 @@ namespace RaftNET.Services;
 public class ConnectionManager(ulong myId, AddressBook addressBook, ILogger<ConnectionManager> logger) {
     private readonly Dictionary<ulong, RaftClient> _channels = new();
 
-    private RaftClient EnsureConnection(ulong id) {
-        if (_channels.TryGetValue(id, out var connection)) {
-            return connection;
-        } else {
-            var addr = addressBook.Find(id);
-
-            if (addr == null) {
-                throw new NoAddressException(id);
-            } else {
-                var client = new RaftClient(myId, addr);
-                _channels.Add(id, client);
-                return client;
-            }
-        }
-    }
-
     public async Task Send(ulong to, Message message) {
         var conn = EnsureConnection(to);
 
@@ -50,5 +34,19 @@ public class ConnectionManager(ulong myId, AddressBook addressBook, ILogger<Conn
         } else {
             Debug.Assert(false);
         }
+    }
+
+    private RaftClient EnsureConnection(ulong id) {
+        if (_channels.TryGetValue(id, out var connection)) {
+            return connection;
+        }
+        var addr = addressBook.Find(id);
+
+        if (addr == null) {
+            throw new NoAddressException(id);
+        }
+        var client = new RaftClient(myId, addr);
+        _channels.Add(id, client);
+        return client;
     }
 }

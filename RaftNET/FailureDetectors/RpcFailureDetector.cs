@@ -14,9 +14,25 @@ public class RpcFailureDetector(
     private readonly Dictionary<ulong, IPingWorker> _workers = new();
     private readonly Dictionary<ulong, bool> _alive = new();
 
+    public void Dispose() {
+        RemoveAll();
+    }
+
     public bool IsAlive(ulong server) {
         lock (_alive) {
             return _alive.GetValueOrDefault(server, false);
+        }
+    }
+
+    public void MarkAlive(ulong server) {
+        lock (_alive) {
+            _alive[server] = true;
+        }
+    }
+
+    public void MarkDead(ulong server) {
+        lock (_alive) {
+            _alive[server] = false;
         }
     }
 
@@ -53,27 +69,11 @@ public class RpcFailureDetector(
         }
     }
 
-    public void MarkAlive(ulong server) {
-        lock (_alive) {
-            _alive[server] = true;
-        }
-    }
-
-    public void MarkDead(ulong server) {
-        lock (_alive) {
-            _alive[server] = false;
-        }
-    }
-
     public void UpdateAddress() {
         lock (_workers) {
             foreach (var (_, worker) in _workers) {
                 worker.UpdateAddress();
             }
         }
-    }
-
-    public void Dispose() {
-        RemoveAll();
     }
 }

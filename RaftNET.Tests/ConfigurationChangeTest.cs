@@ -6,10 +6,7 @@ public class ConfigurationChangeTest : FSMTestBase {
     [Test]
     public void AddNode() {
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor {
-            Idx = 100,
-            Config = cfg
-        });
+        var log = new Log(new SnapshotDescriptor { Idx = 100, Config = cfg });
         var fsm = CreateFollower(Id1, log);
         Assert.That(fsm.IsFollower, Is.True);
 
@@ -17,10 +14,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(fsm.IsCandidate, Is.True);
         var output = fsm.GetOutput();
         Assert.That(output.TermAndVote, Is.Not.Null);
-        fsm.Step(Id2, new VoteResponse {
-            CurrentTerm = output.TermAndVote.Term,
-            VoteGranted = true
-        });
+        fsm.Step(Id2, new VoteResponse { CurrentTerm = output.TermAndVote.Term, VoteGranted = true });
         Assert.That(fsm.IsLeader, Is.True);
 
         // A new leader applies one fake entry
@@ -32,13 +26,10 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(output.Messages.Count, Is.EqualTo(1));
         var msg = output.Messages.Last().Message.AppendRequest;
         var idx = msg.Entries.Last().Idx;
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
 
         var newConfig = Messages.ConfigFromIds(Id1, Id2, Id3);
         fsm.AddEntry(newConfig);
@@ -52,13 +43,10 @@ public class ConfigurationChangeTest : FSMTestBase {
         msg = output.Messages.Last().Message.AppendRequest;
         idx = msg.Entries.Last().Idx;
 
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
         Assert.That(fsm.GetConfiguration().IsJoint, Is.False);
         Assert.Throws<ConfigurationChangeInProgressException>(() => fsm.AddEntry(newConfig));
         output = fsm.GetOutput();
@@ -67,21 +55,15 @@ public class ConfigurationChangeTest : FSMTestBase {
 
         msg = output.Messages.Last().Message.AppendRequest;
         idx = msg.Entries.Last().Idx;
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
         Assert.That(fsm.GetConfiguration().Current.Count, Is.EqualTo(3));
-        fsm.Step(Id3, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id3,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
 
         // Check that we can start a new confchange
         fsm.AddEntry(Messages.ConfigFromIds(Id1, Id2));
@@ -90,10 +72,7 @@ public class ConfigurationChangeTest : FSMTestBase {
     [Test]
     public void RemoveNode() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log = new Log(new SnapshotDescriptor {
-            Idx = 100,
-            Config = cfg
-        });
+        var log = new Log(new SnapshotDescriptor { Idx = 100, Config = cfg });
         var fsm = CreateFollower(Id1, log);
         Assert.That(fsm.IsFollower, Is.True);
         ElectionTimeout(fsm);
@@ -110,10 +89,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         }
 
         Assert.That(output.TermAndVote, Is.Not.Null);
-        fsm.Step(Id2, new VoteResponse {
-            CurrentTerm = output.TermAndVote.Term,
-            VoteGranted = true
-        });
+        fsm.Step(Id2, new VoteResponse { CurrentTerm = output.TermAndVote.Term, VoteGranted = true });
         Assert.That(fsm.IsLeader, Is.True);
         output = fsm.GetOutput();
         Assert.That(output.LogEntries.Count, Is.EqualTo(1));
@@ -121,20 +97,14 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(output.Messages.Count, Is.EqualTo(2));
         var msg = output.Messages.Last().Message.AppendRequest;
         var idx = msg.Entries.Last().Idx;
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
-        fsm.Step(Id3, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
+        fsm.Step(Id3,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
 
         var newConfig = Messages.ConfigFromIds(Id1, Id2);
         fsm.AddEntry(newConfig);
@@ -151,13 +121,10 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(msg.Entries.First().DataCase, Is.EqualTo(LogEntry.DataOneofCase.Configuration));
         idx = msg.Entries.Last().Idx;
         Assert.That(idx, Is.EqualTo(102));
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
         output = fsm.GetOutput();
         Assert.That(output.Messages.Count, Is.EqualTo(1));
         msg = output.Messages.First().Message.AppendRequest;
@@ -166,13 +133,10 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(idx, Is.EqualTo(103));
         Assert.That(fsm.GetConfiguration().Current.Count, Is.EqualTo(2));
         Assert.That(fsm.GetConfiguration().IsJoint, Is.False);
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
         var newConfig2 = Messages.ConfigFromIds(Id1, Id2, Id3);
         fsm.AddEntry(newConfig2);
         Assert.That(fsm.GetConfiguration().Current.Count, Is.EqualTo(3));
@@ -181,20 +145,14 @@ public class ConfigurationChangeTest : FSMTestBase {
     [Test]
     public void ReplaceNode() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log = new Log(new SnapshotDescriptor {
-            Idx = 100,
-            Config = cfg
-        });
+        var log = new Log(new SnapshotDescriptor { Idx = 100, Config = cfg });
         var fsm = CreateFollower(Id1, log);
         Assert.That(fsm.IsFollower, Is.True);
         ElectionTimeout(fsm);
         Assert.That(fsm.IsCandidate, Is.True);
         var output = fsm.GetOutput();
         Assert.That(output.TermAndVote, Is.Not.Null);
-        fsm.Step(Id2, new VoteResponse {
-            CurrentTerm = output.TermAndVote.Term,
-            VoteGranted = true
-        });
+        fsm.Step(Id2, new VoteResponse { CurrentTerm = output.TermAndVote.Term, VoteGranted = true });
         Assert.That(fsm.IsLeader, Is.True);
         output = fsm.GetOutput();
         Assert.That(output.LogEntries.Count, Is.EqualTo(1));
@@ -203,20 +161,14 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(output.Messages.Count, Is.EqualTo(2));
         var msg = output.Messages.Last().Message.AppendRequest;
         var idx = msg.Entries.Last().Idx;
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
-        fsm.Step(Id3, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
+        fsm.Step(Id3,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
 
         var newConfig = Messages.ConfigFromIds(Id1, Id2, Id4);
         fsm.AddEntry(newConfig);
@@ -227,13 +179,10 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(output.Messages.First().Message.IsAppendRequest, Is.True);
         msg = output.Messages.First().Message.AppendRequest;
         idx = msg.Entries.Last().Idx;
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
         Assert.That(fsm.GetConfiguration().IsJoint, Is.False);
         output = fsm.GetOutput();
         Assert.That(output.LogEntries.Count, Is.EqualTo(1));
@@ -241,13 +190,10 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(output.Messages.Count, Is.GreaterThanOrEqualTo(1));
         msg = output.Messages.Last().Message.AppendRequest;
         idx = msg.Entries.Last().Idx;
-        fsm.Step(Id2, new AppendResponse {
-            CurrentTerm = msg.CurrentTerm,
-            CommitIdx = idx,
-            Accepted = new AppendAccepted {
-                LastNewIdx = idx
-            }
-        });
+        fsm.Step(Id2,
+            new AppendResponse {
+                CurrentTerm = msg.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+            });
         Assert.That(fsm.GetConfiguration().Current.Count, Is.EqualTo(3));
         Assert.That(fsm.GetConfiguration().IsJoint, Is.False);
     }

@@ -4,9 +4,9 @@ using RaftNET.Services;
 namespace RaftNET.Tests;
 
 public class RaftClusterTest : RaftTestBase {
+    private readonly ulong _serverCount = 3;
     private ILogger<RaftServerTest> _logger;
     private RaftCluster _cluster;
-    private readonly ulong _serverCount = 3;
 
     [SetUp]
     public new void Setup() {

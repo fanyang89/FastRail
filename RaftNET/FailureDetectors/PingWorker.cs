@@ -10,15 +10,15 @@ public class PingWorker : IPingWorker {
     private readonly ulong _serverId;
     private readonly AddressBook _addressBook;
     private readonly CancellationTokenSource _cts = new();
-    private string? _address;
     private readonly SemaphoreSlim _waitExit = new(1, 1);
-    private DateTime _lastAlive;
     private readonly Lock _lastAliveLock = new();
     private readonly TimeSpan _timeout;
     private readonly ILogger<PingWorker> _logger;
     private readonly IListener _listener;
     private readonly IClock _clock;
     private readonly TimeSpan _interval;
+    private string? _address;
+    private DateTime _lastAlive;
     private Task? _pingTask;
 
     public PingWorker(
@@ -38,6 +38,16 @@ public class PingWorker : IPingWorker {
         UpdateAddress();
     }
 
+    public bool IsAlive => _clock.Now < DeadLine;
+
+    private DateTime DeadLine {
+        get {
+            lock (_lastAliveLock) {
+                return _lastAlive + _timeout;
+            }
+        }
+    }
+
     public void Start() {
         var cancellationToken = _cts.Token;
         _pingTask = Task.Run(() => { Work(cancellationToken); }, cancellationToken);
@@ -51,22 +61,8 @@ public class PingWorker : IPingWorker {
         }
     }
 
-    private void Work(CancellationToken cancellationToken) {
-        using var guard = new SemaphoreGuard(_waitExit);
-        IRaftClient? client = null;
-
-        while (!cancellationToken.IsCancellationRequested) {
-            client ??= GetClient(_myId, _address);
-
-            if (client == null) {
-                _logger.LogWarning("PingWorker({}) can't ping {} and we don't have the address", _myId, _serverId);
-                continue;
-            }
-
-            Ping(cancellationToken, client);
-            _logger.LogInformation("Sleeping for {}", _interval);
-            _clock.SleepFor(_interval);
-        }
+    public void UpdateAddress() {
+        _address = _addressBook.Find(_serverId);
     }
 
     public void Ping(CancellationToken cancellationToken, IRaftClient client) {
@@ -103,17 +99,21 @@ public class PingWorker : IPingWorker {
         return null;
     }
 
-    public bool IsAlive => _clock.Now < DeadLine;
+    private void Work(CancellationToken cancellationToken) {
+        using var guard = new SemaphoreGuard(_waitExit);
+        IRaftClient? client = null;
 
-    private DateTime DeadLine {
-        get {
-            lock (_lastAliveLock) {
-                return _lastAlive + _timeout;
+        while (!cancellationToken.IsCancellationRequested) {
+            client ??= GetClient(_myId, _address);
+
+            if (client == null) {
+                _logger.LogWarning("PingWorker({}) can't ping {} and we don't have the address", _myId, _serverId);
+                continue;
             }
-        }
-    }
 
-    public void UpdateAddress() {
-        _address = _addressBook.Find(_serverId);
+            Ping(cancellationToken, client);
+            _logger.LogInformation("Sleeping for {}", _interval);
+            _clock.SleepFor(_interval);
+        }
     }
 }

@@ -4,9 +4,7 @@ public class LogTest {
     [Test]
     public void TestAppendRaftLogs() {
         var cfg = Messages.ConfigFromIds(1);
-        var snp = new SnapshotDescriptor {
-            Config = cfg
-        };
+        var snp = new SnapshotDescriptor { Config = cfg };
         var log = new Log(snp);
 
         Assert.Multiple(() => {

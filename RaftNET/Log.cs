@@ -38,10 +38,6 @@ public class Log {
         }
     }
 
-    private LogEntry GetEntry(ulong idx) {
-        return _log[(int)(idx - _firstIdx)];
-    }
-
     public bool Empty() {
         return _log.Count == 0;
     }
@@ -163,20 +159,6 @@ public class Log {
         }
     }
 
-    private int MemoryUsageOf(LogEntry entry) {
-        switch (entry.DataCase) {
-            case LogEntry.DataOneofCase.Command:
-                return entry.Command.CalculateSize();
-            case LogEntry.DataOneofCase.Configuration:
-                return entry.Configuration.CalculateSize();
-            case LogEntry.DataOneofCase.None:
-            case LogEntry.DataOneofCase.Dummy:
-                break;
-        }
-
-        return 0;
-    }
-
     public ulong LastIdx() {
         return (ulong)_log.Count + _firstIdx - 1;
     }
@@ -187,30 +169,6 @@ public class Log {
 
     public ulong StableIdx() {
         return _stableIdx;
-    }
-
-    private void TruncateUncommitted(ulong idx) {
-        Debug.Assert(idx >= _firstIdx);
-        var it = (int)(idx - _firstIdx);
-        var last = _log.Count - it;
-        var releasedMemory = MemoryUsageOf(it, _log.Count);
-        _log.RemoveRange(it, last);
-        _memoryUsage -= releasedMemory;
-        StableTo(ulong.Min(_stableIdx, LastIdx()));
-
-        if (_lastConfIdx > LastIdx()) {
-            Debug.Assert(_prevConfIdx < _lastConfIdx);
-            _lastConfIdx = _prevConfIdx;
-            _prevConfIdx = 0;
-        }
-    }
-
-    private int MemoryUsageOf(int first, int last) {
-        var usage = 0;
-
-        for (var i = first; i < last; i++) usage += MemoryUsageOf(_log[i]);
-
-        return usage;
     }
 
     public void StableTo(ulong idx) {
@@ -259,6 +217,63 @@ public class Log {
         return new Configuration(DoLastConfFor(idx));
     }
 
+
+    public Configuration? GetPreviousConfiguration() {
+        var cfg = DoGetPreviousConfiguration();
+
+        if (cfg == null) {
+            return cfg;
+        }
+
+        return new Configuration(cfg);
+    }
+
+    public int MemoryUsage() {
+        return _memoryUsage;
+    }
+
+    private LogEntry GetEntry(ulong idx) {
+        return _log[(int)(idx - _firstIdx)];
+    }
+
+    private int MemoryUsageOf(LogEntry entry) {
+        switch (entry.DataCase) {
+            case LogEntry.DataOneofCase.Command:
+                return entry.Command.CalculateSize();
+            case LogEntry.DataOneofCase.Configuration:
+                return entry.Configuration.CalculateSize();
+            case LogEntry.DataOneofCase.None:
+            case LogEntry.DataOneofCase.Dummy:
+                break;
+        }
+
+        return 0;
+    }
+
+    private void TruncateUncommitted(ulong idx) {
+        Debug.Assert(idx >= _firstIdx);
+        var it = (int)(idx - _firstIdx);
+        var last = _log.Count - it;
+        var releasedMemory = MemoryUsageOf(it, _log.Count);
+        _log.RemoveRange(it, last);
+        _memoryUsage -= releasedMemory;
+        StableTo(ulong.Min(_stableIdx, LastIdx()));
+
+        if (_lastConfIdx > LastIdx()) {
+            Debug.Assert(_prevConfIdx < _lastConfIdx);
+            _lastConfIdx = _prevConfIdx;
+            _prevConfIdx = 0;
+        }
+    }
+
+    private int MemoryUsageOf(int first, int last) {
+        var usage = 0;
+
+        for (var i = first; i < last; i++) usage += MemoryUsageOf(_log[i]);
+
+        return usage;
+    }
+
     private Configuration DoLastConfFor(ulong idx) {
         Debug.Assert(LastIdx() >= idx);
         Debug.Assert(idx >= _snapshot.Idx);
@@ -288,17 +303,6 @@ public class Log {
         return _snapshot.Config;
     }
 
-
-    public Configuration? GetPreviousConfiguration() {
-        var cfg = DoGetPreviousConfiguration();
-
-        if (cfg == null) {
-            return cfg;
-        }
-
-        return new Configuration(cfg);
-    }
-
     private Configuration? DoGetPreviousConfiguration() {
         if (_prevConfIdx > 0) {
             return this[_prevConfIdx].Configuration;
@@ -320,9 +324,5 @@ public class Log {
                 break;
             }
         }
-    }
-
-    public int MemoryUsage() {
-        return _memoryUsage;
     }
 }

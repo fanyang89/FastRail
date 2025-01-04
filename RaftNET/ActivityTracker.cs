@@ -20,4 +20,4 @@ public class ActivityTracker(Tracker tracker) {
 
         return active;
     }
-};
+}

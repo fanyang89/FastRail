@@ -1,6 +1,5 @@
 using FastRail.Server;
 using org.apache.zookeeper;
-using org.apache.zookeeper.data;
 
 namespace FastRail.Tests;
 

@@ -31,4 +31,8 @@ public static class StringExtension {
     public static string TrimPrefix(this string str, string prefix) {
         return str.StartsWith(prefix) ? str[prefix.Length..] : str;
     }
+
+    public static byte[] TrimPrefix(this byte[] buffer, byte[] prefix) {
+        return buffer.StartsWith(prefix) ? buffer[prefix.Length..] : buffer;
+    }
 }

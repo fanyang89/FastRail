@@ -5,13 +5,20 @@ using RaftNET.Services;
 namespace RaftNET.Tests.FailureDetectors;
 
 public class PingWorkerTest : RaftTestBase, IListener {
+    private const ulong Id1 = 1;
+    private const ulong Id2 = 2;
+    private readonly Dictionary<ulong, bool> _alive = new();
     private AddressBook _addressBook;
     private ManualClock _clock;
     private MockPingRaftClient _client;
-    private readonly Dictionary<ulong, bool> _alive = new();
 
-    private const ulong Id1 = 1;
-    private const ulong Id2 = 2;
+    public void MarkAlive(ulong server) {
+        _alive[server] = true;
+    }
+
+    public void MarkDead(ulong server) {
+        _alive[server] = false;
+    }
 
     [SetUp]
     public new void Setup() {
@@ -35,13 +42,5 @@ public class PingWorkerTest : RaftTestBase, IListener {
         _client.InjectPingException();
         worker.Ping(cts.Token, _client);
         Assert.That(_alive[Id2], Is.False);
-    }
-
-    public void MarkAlive(ulong server) {
-        _alive[server] = true;
-    }
-
-    public void MarkDead(ulong server) {
-        _alive[server] = false;
     }
 }

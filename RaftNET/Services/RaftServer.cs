@@ -29,6 +29,10 @@ public class RaftServer {
         _app.MapGrpcService<RaftService>();
     }
 
+    public bool IsLeader => _raftService.AcquireFSMLock(fsm => fsm.IsLeader);
+
+    public Role Role => _raftService.AcquireFSMLock(fsm => fsm.Role);
+
     public Task Start() {
         return Task.Run(() => _app.RunAsync());
     }
@@ -36,10 +40,6 @@ public class RaftServer {
     public void Stop() {
         _app.Lifetime.StopApplication();
     }
-
-    public bool IsLeader => _raftService.AcquireFSMLock(fsm => fsm.IsLeader);
-
-    public Role Role => _raftService.AcquireFSMLock(fsm => fsm.Role);
 
     public void AddEntry(byte[] buffer) {
         _raftService.AddEntry(buffer);

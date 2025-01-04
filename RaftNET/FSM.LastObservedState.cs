@@ -14,7 +14,7 @@ public partial class FSM {
                 return false;
             }
 
-            return CurrentTerm == other._currentTerm &&
+            return CurrentTerm == other.CurrentTerm &&
                    VotedFor == other._votedFor &&
                    CommitIdx == other._commitIdx &&
                    LastConfIdx == other._log.LastConfIdx() &&
@@ -23,7 +23,7 @@ public partial class FSM {
         }
 
         public void Advance(FSM fsm) {
-            CurrentTerm = fsm._currentTerm;
+            CurrentTerm = fsm.CurrentTerm;
             VotedFor = fsm._votedFor;
             CommitIdx = fsm._commitIdx;
             LastConfIdx = fsm._log.LastConfIdx();

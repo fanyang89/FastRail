@@ -3,16 +3,15 @@
 namespace RaftNET.Tests.FailureDetectors;
 
 public class ManualClock(DateTime now) : IClock {
-    private DateTime _now = now;
-    public DateTime Now => _now;
+    public DateTime Now { get; private set; } = now;
 
     public void SleepFor(TimeSpan duration) {}
 
     public void Advance(TimeSpan duration) {
-        _now += duration;
+        Now += duration;
     }
 
     public void Set(DateTime dateTime) {
-        _now = dateTime;
+        Now = dateTime;
     }
 }

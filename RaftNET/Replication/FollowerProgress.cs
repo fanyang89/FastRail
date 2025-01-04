@@ -3,20 +3,6 @@ namespace RaftNET.Replication;
 public class FollowerProgress {
     public const ulong MaxInFlight = 10;
 
-    // Index that we know to be committed by the follower.
-    public ulong CommitIdx { get; set; }
-
-    // Number of in-flight still unACKed append entries requests.
-    public ulong InFlight { get; set; }
-
-    // True if a packet was sent already in probe mode.
-
-    private FollowerProgressState _state = FollowerProgressState.Probe;
-
-    public FollowerProgressState State => _state;
-
-    public bool ProbeSent { get; set; }
-
     // True if the follower is a voting one.
     public bool CanVote = true;
 
@@ -36,6 +22,18 @@ public class FollowerProgress {
     // Invariant: next_idx > match_idx.
     public ulong NextIdx;
 
+    // True if a packet was sent already in probe mode.
+
+    // Index that we know to be committed by the follower.
+    public ulong CommitIdx { get; set; }
+
+    // Number of in-flight still unACKed append entries requests.
+    public ulong InFlight { get; set; }
+
+    public FollowerProgressState State { get; private set; } = FollowerProgressState.Probe;
+
+    public bool ProbeSent { get; set; }
+
     public bool IsStrayReject(AppendRejected rejected) {
         if (rejected.NonMatchingIdx <= MatchIdx) {
             return true;
@@ -45,7 +43,7 @@ public class FollowerProgress {
             return true;
         }
 
-        switch (_state) {
+        switch (State) {
             case FollowerProgressState.Pipeline:
                 break;
             case FollowerProgressState.Probe:
@@ -64,24 +62,24 @@ public class FollowerProgress {
     }
 
     public void BecomeProbe() {
-        _state = FollowerProgressState.Probe;
+        State = FollowerProgressState.Probe;
         ProbeSent = false;
     }
 
     public void BecomePipeline() {
-        if (_state != FollowerProgressState.Pipeline) {
-            _state = FollowerProgressState.Pipeline;
+        if (State != FollowerProgressState.Pipeline) {
+            State = FollowerProgressState.Pipeline;
             InFlight = 0;
         }
     }
 
     public void BecomeSnapshot(ulong snp_idx) {
-        _state = FollowerProgressState.Snapshot;
+        State = FollowerProgressState.Snapshot;
         NextIdx = snp_idx + 1;
     }
 
     public bool CanSendTo() {
-        return _state switch {
+        return State switch {
             FollowerProgressState.Probe => !ProbeSent,
             FollowerProgressState.Pipeline =>
                 // allow `max_in_flight` outstanding indexes

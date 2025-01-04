@@ -17,16 +17,11 @@ public class PersistenceBasicTest {
             p.StoreTermVote(term, votedFor);
             p.StoreCommitIdx(commitIdx);
 
-            var snapshot = new SnapshotDescriptor {
-                Idx = 1
-            };
+            var snapshot = new SnapshotDescriptor { Idx = 1 };
             p.StoreSnapshotDescriptor(snapshot, 0);
 
             for (ulong i = 2; i < 12; ++i)
-                entries.Add(new LogEntry {
-                    Idx = i,
-                    Term = i + 100
-                });
+                entries.Add(new LogEntry { Idx = i, Term = i + 100 });
 
             p.StoreLogEntries(entries);
         }

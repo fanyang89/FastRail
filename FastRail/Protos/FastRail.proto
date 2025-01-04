@@ -17,13 +17,13 @@ message Transaction {
 }
 
 enum CreateMode {
-  Persistent = 0;
-  Ephemeral = 1;
-  Sequence = 2;
-  EphemeralSequential = 3;
-  Container = 4;
+  PERSISTENT = 0;
+  EPHEMERAL = 1;
+  SEQUENCE = 2;
+  EPHEMERAL_SEQUENTIAL = 3;
+  CONTAINER = 4;
   TTL = 5;
-  PersistentSequentialWithTTL = 6;
+  PERSISTENT_SEQUENTIAL_WITH_TTL = 6;
 }
 
 message CreateSession {
@@ -35,12 +35,14 @@ message RemoveSession {
 }
 
 message CreateNodeTransaction {
-  string path = 1;
-  bytes data = 2;
-  CreateMode mode = 4;
-  int64 ctime = 5;
-  int64 ephemeral_owner = 6;
-  int64 zxid = 7;
+  int64 zxid = 1;
+  string path = 2;
+  bytes data = 3;
+  int64 ctime = 4;
+  int64 ephemeral_owner = 5;
+  int64 ttl = 6;
+  bool is_container = 7;
+  bool is_sequential = 8;
 }
 
 message DeleteNodeTransaction {
@@ -100,8 +102,15 @@ message StatEntry {
 }
 
 message DataNodeEntry {
+  // the data of this node
   bytes data = 1;
+  // stat data
   StatEntry stat = 2;
-  CreateMode mode = 3;
-  int32 TTL = 4;
+}
+
+message DataNodeMetadata {
+  // is container node
+  bool is_container = 1;
+  // time to live
+  int64 ttl = 2;
 }

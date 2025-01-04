@@ -3,10 +3,10 @@
 namespace RaftNET.Tests;
 
 public class PersistenceWorkWithRaftTest {
-    private RocksPersistence _persistence;
     private readonly ulong _startIdx = 1;
     private readonly ulong _count = 10;
     private readonly ulong _termOffset = 100;
+    private RocksPersistence _persistence;
 
     [SetUp]
     public void Setup() {
@@ -16,10 +16,7 @@ public class PersistenceWorkWithRaftTest {
         var entries = new List<LogEntry>();
 
         for (var i = _startIdx; i < _startIdx + _count; ++i)
-            entries.Add(new LogEntry {
-                Idx = i,
-                Term = i + _termOffset
-            });
+            entries.Add(new LogEntry { Idx = i, Term = i + _termOffset });
 
         _persistence.StoreLogEntries(entries);
     }

@@ -6,12 +6,28 @@ using RaftNET.StateMachines;
 namespace RaftNET.Tests;
 
 public class RaftServerTest : RaftTestBase, IStateMachine {
+    private const int Port = 15000;
+    private const ulong MyId = 1;
     private ILogger<RaftServerTest> _logger;
     private RaftServer _server;
     private AddressBook _addressBook;
     private string _listenAddress;
-    private const int Port = 15000;
-    private const ulong MyId = 1;
+
+    public void Apply(List<Command> commands) {
+        foreach (var command in commands) {
+            _logger.LogInformation("Applying command: {command}", command);
+        }
+    }
+
+    public ulong TakeSnapshot() {
+        return 0;
+    }
+
+    public void DropSnapshot(ulong snapshot) {}
+
+    public void LoadSnapshot(ulong snapshot) {}
+
+    public void OnEvent(Event e) {}
 
     [SetUp]
     public new void Setup() {
@@ -55,20 +71,4 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     public void TestSingleServerIsLeader() {
         Assert.That(_server.IsLeader, Is.True);
     }
-
-    public void Apply(List<Command> commands) {
-        foreach (var command in commands) {
-            _logger.LogInformation("Applying command: {command}", command);
-        }
-    }
-
-    public ulong TakeSnapshot() {
-        return 0;
-    }
-
-    public void DropSnapshot(ulong snapshot) {}
-
-    public void LoadSnapshot(ulong snapshot) {}
-
-    public void OnEvent(Event e) {}
 }

@@ -110,13 +110,9 @@ public class VotesTest {
         // Joint configuration with non-voting members
         var votes = new Votes(
             new Configuration {
-                Current = {
-                    Messages.CreateConfigMember(Id1)
-                },
+                Current = { Messages.CreateConfigMember(Id1) },
                 Previous = {
-                    Messages.CreateConfigMember(Id2),
-                    Messages.CreateConfigMember(Id3),
-                    Messages.CreateConfigMember(Id4, false)
+                    Messages.CreateConfigMember(Id2), Messages.CreateConfigMember(Id3), Messages.CreateConfigMember(Id4, false)
                 }
             }
         );
@@ -136,14 +132,9 @@ public class VotesTest {
         // Same node is voting in one config and non-voting in another
         var votes = new Votes(
             new Configuration {
-                Current = {
-                    Messages.CreateConfigMember(Id1),
-                    Messages.CreateConfigMember(Id4)
-                },
+                Current = { Messages.CreateConfigMember(Id1), Messages.CreateConfigMember(Id4) },
                 Previous = {
-                    Messages.CreateConfigMember(Id2),
-                    Messages.CreateConfigMember(Id3),
-                    Messages.CreateConfigMember(Id4, false)
+                    Messages.CreateConfigMember(Id2), Messages.CreateConfigMember(Id3), Messages.CreateConfigMember(Id4, false)
                 }
             }
         );

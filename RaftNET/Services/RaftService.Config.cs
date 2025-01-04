@@ -32,5 +32,5 @@ public partial class RaftService {
         // this ensures that trailing log entries won't block incoming commands and at least
         // one command can fit in the log
         public int MaxCommandSize = 100 * 1024;
-    };
+    }
 }

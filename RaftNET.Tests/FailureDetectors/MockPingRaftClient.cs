@@ -17,10 +17,6 @@ internal class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger
         return Task.CompletedTask;
     }
 
-    public void InjectPingException() {
-        _injectedException = true;
-    }
-
     public Task VoteRequest(VoteRequest request) {
         return Task.CompletedTask;
     }
@@ -47,5 +43,9 @@ internal class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger
 
     public Task TimeoutNowRequest(TimeoutNowRequest request) {
         return Task.CompletedTask;
+    }
+
+    public void InjectPingException() {
+        _injectedException = true;
     }
 }

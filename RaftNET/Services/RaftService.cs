@@ -12,6 +12,8 @@ using RaftNET.StateMachines;
 namespace RaftNET.Services;
 
 public partial class RaftService : Raft.RaftBase, IHostedService {
+    private record TermIdx(ulong Idx, ulong Term);
+
     private readonly FSM _fsm;
     private readonly Notifier _fsmEventNotify;
     private readonly ILogger<RaftService> _logger;
@@ -23,6 +25,9 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
     private readonly ulong _myId;
     private readonly ILoggerFactory _loggerFactory;
     private readonly Config _config;
+
+    private readonly OrderedDictionary<TermIdx, Notifier> _applyNotifiers = new();
+    private readonly OrderedDictionary<TermIdx, Notifier> _commitNotifiers = new();
     private ulong _appliedIdx;
     private ulong _snapshotDescIdx;
 
@@ -58,9 +63,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         if (snapshot == null) {
             var members = _addressBook.GetMembers();
             _logger.LogInformation("Load empty snapshot, get {} initial members from current address book", members.Count);
-            snapshot = new SnapshotDescriptor {
-                Config = Messages.ConfigFromIds(members)
-            };
+            snapshot = new SnapshotDescriptor { Config = Messages.ConfigFromIds(members) };
         }
 
         var logEntries = _persistence.LoadLog();
@@ -107,6 +110,50 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         }
 
         _logger.LogInformation("RaftService{{{}}} stopped", _myId);
+    }
+
+    public T AcquireFSMLock<T>(Func<FSM, T> fn) {
+        lock (_fsm) {
+            return fn(_fsm);
+        }
+    }
+
+    public void AddEntry(OneOf<byte[], Configuration> command, WaitType waitType) {
+        var commandLength = command.Match(
+            buffer => buffer.Length,
+            configuration => configuration.CalculateSize());
+
+        if (commandLength >= _config.MaxCommandSize) {
+            throw new CommandTooLargeException(commandLength, _config.MaxCommandSize);
+        }
+
+        LogEntry entry;
+
+        lock (_fsm) {
+            if (!_fsm.IsLeader) {
+                throw new NotLeaderException();
+            }
+
+            if (command.IsT0) {
+                entry = _fsm.AddEntry(command.AsT0);
+            } else {
+                entry = _fsm.AddEntry(command.AsT1);
+            }
+        }
+
+        WaitForEntry(entry, waitType);
+    }
+
+    public void AddEntry(byte[] buffer) {
+        AddEntry(buffer, WaitType.Committed);
+    }
+
+    public void AddEntryApplied(byte[] buffer) {
+        AddEntry(buffer, WaitType.Applied);
+    }
+
+    public void AddEntry(Configuration configuration) {
+        AddEntry(configuration, WaitType.Committed);
     }
 
     private Action DoApply(CancellationToken cancellationToken) {
@@ -185,9 +232,8 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
 
             if (waiter.Key.Term < commitTerm) {
                 throw new DroppedEntryException();
-            } else {
-                break;
             }
+            break;
         }
     }
 
@@ -270,55 +316,6 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
             _fsm.Tick();
         }
     }
-
-    public T AcquireFSMLock<T>(Func<FSM, T> fn) {
-        lock (_fsm) {
-            return fn(_fsm);
-        }
-    }
-
-    public void AddEntry(OneOf<byte[], Configuration> command, WaitType waitType) {
-        var commandLength = command.Match(
-            buffer => buffer.Length,
-            configuration => configuration.CalculateSize());
-
-        if (commandLength >= _config.MaxCommandSize) {
-            throw new CommandTooLargeException(commandLength, _config.MaxCommandSize);
-        }
-
-        LogEntry entry;
-
-        lock (_fsm) {
-            if (!_fsm.IsLeader) {
-                throw new NotLeaderException();
-            }
-
-            if (command.IsT0) {
-                entry = _fsm.AddEntry(command.AsT0);
-            } else {
-                entry = _fsm.AddEntry(command.AsT1);
-            }
-        }
-
-        WaitForEntry(entry, waitType);
-    }
-
-    public void AddEntry(byte[] buffer) {
-        AddEntry(buffer, WaitType.Committed);
-    }
-
-    public void AddEntryApplied(byte[] buffer) {
-        AddEntry(buffer, WaitType.Applied);
-    }
-
-    public void AddEntry(Configuration configuration) {
-        AddEntry(configuration, WaitType.Committed);
-    }
-
-    private record TermIdx(ulong Idx, ulong Term);
-
-    private readonly OrderedDictionary<TermIdx, Notifier> _applyNotifiers = new();
-    private readonly OrderedDictionary<TermIdx, Notifier> _commitNotifiers = new();
 
     private void WaitForEntry(LogEntry entry, WaitType waitType) {
         var termIndex = new TermIdx(entry.Idx, entry.Term);

@@ -10,12 +10,6 @@ public class TrackerTest {
         _tracker = new Tracker();
     }
 
-    private FollowerProgress Find(ulong id) {
-        var p = _tracker.Find(id);
-        Assert.That(p, Is.Not.Null);
-        return p;
-    }
-
     [Test]
     public void TrackerBasic() {
         const ulong id1 = 1;
@@ -117,9 +111,7 @@ public class TrackerTest {
 
         // Check that non-voting member is not counted for the quorum in simple config
         cfg.EnterJoint(new HashSet<ConfigMember> {
-            Messages.CreateConfigMember(id1),
-            Messages.CreateConfigMember(id2),
-            Messages.CreateConfigMember(id3, false)
+            Messages.CreateConfigMember(id1), Messages.CreateConfigMember(id2), Messages.CreateConfigMember(id3, false)
         });
         cfg.LeaveJoint();
         _tracker.SetConfiguration(cfg, 1);
@@ -129,10 +121,7 @@ public class TrackerTest {
         Assert.That(_tracker.Committed(0), Is.EqualTo(25));
 
         // Check that non-voting member is not counted for the quorum in joint config
-        cfg.EnterJoint(new HashSet<ConfigMember> {
-            Messages.CreateConfigMember(id4),
-            Messages.CreateConfigMember(id5)
-        });
+        cfg.EnterJoint(new HashSet<ConfigMember> { Messages.CreateConfigMember(id4), Messages.CreateConfigMember(id5) });
         _tracker.SetConfiguration(cfg, 1);
         Find(id4).Accepted(30);
         Find(id5).Accepted(30);
@@ -141,10 +130,14 @@ public class TrackerTest {
         // Check the case where the same node is in both config but different voting rights
         cfg.LeaveJoint();
         cfg.EnterJoint(new HashSet<ConfigMember> {
-            Messages.CreateConfigMember(id1),
-            Messages.CreateConfigMember(id2),
-            Messages.CreateConfigMember(id5, false)
+            Messages.CreateConfigMember(id1), Messages.CreateConfigMember(id2), Messages.CreateConfigMember(id5, false)
         });
         Assert.That(_tracker.Committed(0), Is.EqualTo(25));
+    }
+
+    private FollowerProgress Find(ulong id) {
+        var p = _tracker.Find(id);
+        Assert.That(p, Is.Not.Null);
+        return p;
     }
 }

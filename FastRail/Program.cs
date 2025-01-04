@@ -9,26 +9,13 @@ internal class Program {
         var rootCommand = new RootCommand(
             "A distributed key-value store compatible with the ZooKeeper protocol");
 
-        var myIdOption = new Option<ulong>("--id", "The id of this instance") {
-            IsRequired = true
-        };
-        var listenOption = new Option<IPEndPoint>("--listen", "The listen address") {
-            IsRequired = true
-        };
-        var dataDirOption = new Option<DirectoryInfo>("--data-dir", "Data directory") {
-            IsRequired = true
-        };
-        var raftListenOption = new Option<IPEndPoint>("--raft-listen", "The raft listen address") {
-            IsRequired = true
-        };
-        var raftDataDirOption = new Option<DirectoryInfo>("--raft-data-dir", "Raft data directory") {
-            IsRequired = true
-        };
+        var myIdOption = new Option<ulong>("--id", "The id of this instance") { IsRequired = true };
+        var listenOption = new Option<IPEndPoint>("--listen", "The listen address") { IsRequired = true };
+        var dataDirOption = new Option<DirectoryInfo>("--data-dir", "Data directory") { IsRequired = true };
+        var raftListenOption = new Option<IPEndPoint>("--raft-listen", "The raft listen address") { IsRequired = true };
+        var raftDataDirOption = new Option<DirectoryInfo>("--raft-data-dir", "Raft data directory") { IsRequired = true };
         var initialMembersOption = new Option<List<string>>("--initial-members",
-            "Initial members list. eg. `1=127.0.0.1:15000`") {
-            IsRequired = true,
-            AllowMultipleArgumentsPerToken = true
-        };
+            "Initial members list. eg. `1=127.0.0.1:15000`") { IsRequired = true, AllowMultipleArgumentsPerToken = true };
 
         rootCommand.AddOption(myIdOption);
         rootCommand.AddOption(listenOption);
