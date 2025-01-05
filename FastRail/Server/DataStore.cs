@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RaftNET;
 using RocksDbSharp;
+using SystemException = FastRail.Exceptions.SystemException;
 
 namespace FastRail.Server;
 

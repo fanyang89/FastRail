@@ -26,6 +26,28 @@ enum CreateMode {
   PERSISTENT_SEQUENTIAL_WITH_TTL = 6;
 }
 
+enum WatcherEventType {
+  EMPTY = 0; // protobuf enum must starts with 0
+  NONE = -1;
+  NODE_CREATED = 1;
+  NODE_DELETED = 2;
+  NODE_DATA_CHANGED = 3;
+  NODE_CHILDREN_CHANGED = 4;
+  DATA_WATCHER_MOVED = 5;
+  CHILD_WATCHER_MOVED = 6;
+  PERSISTENT_WATCHER_MOVED = 7;
+}
+
+enum KeeperState {
+  DISCONNECTED = 0;
+  SYNC_CONNECTED = 3;
+  AUTH_FAILED = 4;
+  CONNECTED_READONLY = 5;
+  SASL_AUTHENTICATED = 6;
+  EXPIRED = -112;
+  CLOSED = 7;
+}
+
 message CreateSessionTransaction {
   SessionEntry session = 1;
 }

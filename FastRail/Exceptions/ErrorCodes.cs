@@ -1,4 +1,4 @@
-namespace FastRail.Server;
+namespace FastRail.Exceptions;
 
 public static class ErrorCodes {
     public static int Ok = 0;

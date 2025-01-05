@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Net;
 using System.Net.Sockets;
+using FastRail.Exceptions;
 using FastRail.Jutes;
 using FastRail.Jutes.Proto;
 using FastRail.Protos;
@@ -10,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using RaftNET;
 using RaftNET.Services;
 using RaftNET.StateMachines;
+using WatcherEvent = FastRail.Jutes.Proto.WatcherEvent;
 
 namespace FastRail.Server;
 
@@ -283,6 +285,31 @@ public class Server : IDisposable, IStateMachine {
                         throw new NotImplementedException();
                     }
 
+                    case OpCode.AddWatch: {
+                        var request = JuteDeserializer.Deserialize<AddWatchRequest>(requestBuffer);
+                        break;
+                    }
+
+                    case OpCode.SetWatches: {
+                        var request = JuteDeserializer.Deserialize<SetWatches>(requestBuffer);
+                        break;
+                    }
+
+                    case OpCode.SetWatches2: {
+                        var request = JuteDeserializer.Deserialize<SetWatches2>(requestBuffer);
+                        break;
+                    }
+
+                    case OpCode.CheckWatches: {
+                        var request = JuteDeserializer.Deserialize<CheckWatchesRequest>(requestBuffer);
+                        break;
+                    }
+
+                    case OpCode.RemoveWatches: {
+                        var request = JuteDeserializer.Deserialize<RemoveWatchesRequest>(requestBuffer);
+                        break;
+                    }
+
                     case OpCode.Reconfig:
 
                     case OpCode.GetACL:
@@ -291,12 +318,6 @@ public class Server : IDisposable, IStateMachine {
                     case OpCode.Multi:
                     case OpCode.MultiRead:
                     case OpCode.Error:
-
-                    case OpCode.AddWatch:
-                    case OpCode.SetWatches:
-                    case OpCode.SetWatches2:
-                    case OpCode.CheckWatches:
-                    case OpCode.RemoveWatches:
 
                     case OpCode.Auth:
                     case OpCode.SASL:
@@ -596,5 +617,16 @@ public class Server : IDisposable, IStateMachine {
         BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
         await stream.WriteAsync(lenBuffer, token);
         await stream.WriteAsync(headerBuffer, token);
+    }
+
+    private static async Task SendWatchEvent(NetworkStream stream, long zxid, WatcherEvent e, CancellationToken token) {
+        var headerBuffer = JuteSerializer.Serialize(new ReplyHeader(-1, zxid));
+        var bodyBuffer = JuteSerializer.Serialize(e);
+        var len = headerBuffer.Length + bodyBuffer.Length;
+        var lenBuffer = new byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32BigEndian(lenBuffer, len);
+        await stream.WriteAsync(lenBuffer, token);
+        await stream.WriteAsync(headerBuffer, token);
+        await stream.WriteAsync(bodyBuffer, token);
     }
 }

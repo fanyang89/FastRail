@@ -1,4 +1,4 @@
-namespace FastRail.Server;
+namespace FastRail.Exceptions;
 
 public class RailException(int errorCode) : Exception {
     public int Err => errorCode;
