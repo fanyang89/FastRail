@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using RaftNET;
 using RaftNET.Services;
 using RaftNET.StateMachines;
+using SystemException = FastRail.Exceptions.SystemException;
 using WatcherEvent = FastRail.Jutes.Proto.WatcherEvent;
 
 namespace FastRail.Server;
@@ -413,18 +414,22 @@ public class Server : IDisposable, IStateMachine {
         if (stat == null) {
             throw new RailException(ErrorCodes.NoNode);
         }
-        var txn = new UpdateNodeTransaction {
-            Path = request.Path, Mtime = Time.CurrentTimeMillis(), Version = stat.Version + 1
-        };
-        if (request.Data != null) {
-            txn.Data = ByteString.CopyFrom(request.Data);
+        if (request.Version != -1 && stat.Version != request.Version) {
+            throw new RailException(ErrorCodes.BadVersion);
         }
 
-        await Broadcast(new Transaction { UpdateNode = txn });
+        var txn = new UpdateNodeTransaction {
+            Path = request.Path,
+            Mtime = Time.CurrentTimeMillis(),
+            Version = stat.Version + 1,
+            Data = ByteString.CopyFrom(request.Data)
+        };
+
+        await Broadcast(new Transaction { Zxid = _ds.NextZxid, UpdateNode = txn });
 
         stat = _ds.GetNodeStat(request.Path);
         if (stat == null) {
-            throw new RailException(ErrorCodes.SystemError);
+            throw new SystemException("Get stat failed after node updated");
         }
 
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SetDataResponse { Stat = stat.ToJuteStat() }, token);

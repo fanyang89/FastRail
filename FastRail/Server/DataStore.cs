@@ -322,7 +322,40 @@ public class DataStore : IDisposable {
     }
 
     public void UpdateNode(long zxid, UpdateNodeTransaction txn) {
+        var statBuffer = _db.Get(MakeStatKey(txn.Path));
+        if (statBuffer == null) {
+            throw new RailException(ErrorCodes.NoNode);
+        }
 
+        var stat = StatEntry.Parser.ParseFrom(statBuffer);
+        var statUpdated = txn.Mtime != 0 || txn.Version != 0 ||
+                          txn.Cversion != 0 || txn.Aversion != 0 || txn.Pzxid != 0;
+        if (txn.Mtime != 0) {
+            stat.Mtime = txn.Mtime;
+        }
+        if (txn.Version != 0) {
+            stat.Version = txn.Version;
+        }
+        if (txn.Cversion != 0) {
+            stat.Cversion = txn.Cversion;
+        }
+        if (txn.Aversion != 0) {
+            stat.Aversion = txn.Aversion;
+        }
+        if (txn.Pzxid != 0) {
+            stat.Pzxid = txn.Pzxid;
+        }
+
+        var batch = new WriteBatch();
+        if (statUpdated) {
+            batch.Put(MakeStatKey(txn.Path), stat.ToByteArray());
+        }
+        if (txn.Data != null) {
+            batch.Put(MakeDataKey(txn.Path), txn.Data.Span);
+        }
+        _db.Write(batch, new WriteOptions().SetSync(true));
+
+        _watcherManager.Trigger(txn.Path, WatcherEventType.EventNodeDataChanged);
     }
 
     // create root node if not exists, zxid=0
