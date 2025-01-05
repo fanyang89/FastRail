@@ -1,5 +1,3 @@
-using FastRail.Server;
-
 namespace FastRail.Exceptions;
 
 public class NodeExistsException(string key) : RailException(ErrorCodes.NodeExists) {

@@ -26,6 +26,7 @@ public class DataStore : IDisposable {
     private readonly ILogger<DataStore> _logger;
     private readonly Lock _sessionLock = new();
     private readonly Dictionary<long, InMemorySession> _sessions = new();
+    private readonly WatcherManager _watcherManager = new();
     private long _nextSessionId;
 
     public DataStore(string dataDir, ILogger<DataStore>? logger = null) {
@@ -67,17 +68,6 @@ public class DataStore : IDisposable {
         GC.SuppressFinalize(this);
     }
 
-    public void Stop() {}
-
-    // create root node if not exists, zxid=0
-    private void CreateRootNode() {
-        var rootValue = _db.Get(MakeDataKey("/"));
-        if (rootValue != null) {
-            return;
-        }
-        CreateNode(0, new CreateNodeTransaction { Path = "/", Data = ByteString.Empty, Ctime = Time.CurrentTimeMillis() });
-    }
-
     public void Start() {
         CreateRootNode();
 
@@ -92,6 +82,8 @@ public class DataStore : IDisposable {
             }
         }
     }
+
+    public void Stop() {}
 
     public void CreateNode(long zxid, CreateNodeTransaction txn) {
         var statBuffer = _db.Get(MakeStatKey(txn.Path));
@@ -140,6 +132,8 @@ public class DataStore : IDisposable {
 
         // submit write batch
         _db.Write(batch, new WriteOptions().SetSync(true));
+
+        _watcherManager.Trigger(txn.Path, WatcherEventType.EventNodeCreated);
     }
 
     public static string GetParentPath(string childPath) {
@@ -179,6 +173,8 @@ public class DataStore : IDisposable {
         batch.Delete(MakeDataKey(txn.Path));
         batch.Delete(MakeStatKey(txn.Path));
         _db.Write(batch, new WriteOptions().SetSync(true));
+
+        _watcherManager.Trigger(txn.Path, WatcherEventType.EventNodeDeleted);
     }
 
     public byte[]? GetNodeData(string path) {
@@ -325,6 +321,19 @@ public class DataStore : IDisposable {
         return lastKey == null ? "" : Encoding.UTF8.GetString(lastKey);
     }
 
+    public void UpdateNode(long zxid, UpdateNodeTransaction txn) {
+
+    }
+
+    // create root node if not exists, zxid=0
+    private void CreateRootNode() {
+        var rootValue = _db.Get(MakeDataKey("/"));
+        if (rootValue != null) {
+            return;
+        }
+        CreateNode(0, new CreateNodeTransaction { Path = "/", Data = ByteString.Empty, Ctime = Time.CurrentTimeMillis() });
+    }
+
     private static byte[] LongBytes(long value) {
         var buffer = new byte[sizeof(long)];
         BinaryPrimitives.WriteInt64BigEndian(buffer, value);
@@ -359,6 +368,4 @@ public class DataStore : IDisposable {
         }
         return path.Count(x => x == '/');
     }
-
-    public void UpdateNode(long zxid, UpdateNodeTransaction txn) {}
 }

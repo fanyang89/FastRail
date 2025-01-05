@@ -32,6 +32,7 @@ public class Server : IDisposable, IStateMachine {
     private readonly DataStore _ds;
     private readonly Config _config;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly WatcherManager _watcherManager = new();
 
     public Server(
         Config config,
@@ -287,6 +288,7 @@ public class Server : IDisposable, IStateMachine {
 
                     case OpCode.AddWatch: {
                         var request = JuteDeserializer.Deserialize<AddWatchRequest>(requestBuffer);
+                        HandleAddWatchRequest(conn, request, xid, token);
                         break;
                     }
 
@@ -336,6 +338,17 @@ public class Server : IDisposable, IStateMachine {
         client.Close();
     }
 
+    private void HandleAddWatchRequest(NetworkStream conn, AddWatchRequest request, int xid, CancellationToken token) {
+        if (string.IsNullOrWhiteSpace(request.Path)
+            || request.Mode > (int)AddWatchMode.PersistentRecursive || request.Mode <= (int)AddWatchMode.Persistent) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+
+        var watchMode = (AddWatchMode)request.Mode;
+        var watchPath = request.Path;
+        switch (conn) {}
+    }
+
     private async Task HandleCreateTTLRequest(NetworkStream conn, CreateTtlRequest request, int xid,
         CancellationToken token) {
         var createMode = request.Flags.ParseCreateMode();
@@ -356,7 +369,7 @@ public class Server : IDisposable, IStateMachine {
             EphemeralOwner = 0,
             Ttl = request.Ttl,
             IsContainer = false,
-            IsSequential = false,
+            IsSequential = false
         };
         await Broadcast(new Transaction { Zxid = _ds.NextZxid, CreateNode = txn });
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new CreateResponse { Path = request.Path }, token);
