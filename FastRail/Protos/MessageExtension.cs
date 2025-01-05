@@ -20,7 +20,7 @@ public static class MessageExtension {
         };
     }
 
-    public static Stat ToStat(this StatEntry entry) {
+    public static Stat ToJuteStat(this StatEntry entry) {
         return new Stat {
             Czxid = entry.Czxid,
             Mzxid = entry.Mzxid,

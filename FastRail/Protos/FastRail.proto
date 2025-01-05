@@ -101,14 +101,7 @@ message StatEntry {
   int32 num_children = 11;
 }
 
-message DataNodeEntry {
-  // the data of this node
-  bytes data = 1;
-  // stat data
-  StatEntry stat = 2;
-}
-
-message DataNodeMetadata {
+message DataNodeProperty {
   // is container node
   bool is_container = 1;
   // time to live

@@ -263,6 +263,7 @@ public class Server : IDisposable, IStateMachine {
 
                     case OpCode.Ping: {
                         PingCount++;
+                        _ds.TouchSession(sessionId);
                         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), token);
                         break;
                     }
@@ -385,12 +386,12 @@ public class Server : IDisposable, IStateMachine {
             throw new RailException(ErrorCodes.BadArguments);
         }
 
-        var node = _ds.GetNode(request.Path);
-        if (node == null) {
+        var stat = _ds.GetNodeStat(request.Path);
+        if (stat == null) {
             throw new RailException(ErrorCodes.NoNode);
         }
         var txn = new UpdateNodeTransaction {
-            Path = request.Path, Mtime = Time.CurrentTimeMillis(), Version = node.Stat.Version + 1
+            Path = request.Path, Mtime = Time.CurrentTimeMillis(), Version = stat.Version + 1
         };
         if (request.Data != null) {
             txn.Data = ByteString.CopyFrom(request.Data);
@@ -398,12 +399,12 @@ public class Server : IDisposable, IStateMachine {
 
         await Broadcast(new Transaction { UpdateNode = txn });
 
-        node = _ds.GetNode(request.Path);
-        if (node == null) {
+        stat = _ds.GetNodeStat(request.Path);
+        if (stat == null) {
             throw new RailException(ErrorCodes.SystemError);
         }
 
-        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SetDataResponse { Stat = node.Stat.ToStat() }, token);
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new SetDataResponse { Stat = stat.ToJuteStat() }, token);
     }
 
     private async Task HandleSyncRequest(NetworkStream conn, SyncRequest request, int xid, CancellationToken token) {
@@ -423,7 +424,7 @@ public class Server : IDisposable, IStateMachine {
         var children = _ds.GetChildren(request.Path, out var stat);
         await SendResponse(conn,
             new ReplyHeader(xid, _ds.LastZxid),
-            new GetChildren2Response { Children = children, Stat = stat.ToStat() }, token);
+            new GetChildren2Response { Children = children, Stat = stat.ToJuteStat() }, token);
     }
 
     private async Task HandleGetChildrenRequest(NetworkStream conn, GetChildrenRequest request,
@@ -442,16 +443,15 @@ public class Server : IDisposable, IStateMachine {
             throw new RailException(ErrorCodes.BadArguments);
         }
 
-        var node = _ds.GetNode(request.Path);
-
-        if (node == null) {
+        var stat = _ds.GetNodeStat(request.Path);
+        var data = _ds.GetNodeData(request.Path);
+        if (stat == null || data == null) {
             throw new RailException(ErrorCodes.NoNode);
         }
 
-        var stat = node.Stat.ToStat();
         await SendResponse(conn,
             new ReplyHeader(xid, _ds.LastZxid),
-            new GetDataResponse { Data = node.Data.ToArray(), Stat = stat }, token);
+            new GetDataResponse { Data = data, Stat = stat.ToJuteStat() }, token);
     }
 
     private async Task HandleExistsRequest(NetworkStream conn, ExistsRequest request, int xid, CancellationToken token) {
@@ -459,14 +459,12 @@ public class Server : IDisposable, IStateMachine {
             throw new RailException(ErrorCodes.BadArguments);
         }
 
-        var node = _ds.GetNode(request.Path);
-
-        if (node == null) {
-            throw new RailException(ErrorCodes.NoNode);
+        var response = new ExistsResponse { Stat = null };
+        var stat = _ds.GetNodeStat(request.Path);
+        if (stat != null) {
+            response.Stat = stat.ToJuteStat();
         }
-
-        var stat = node.Stat.ToStat();
-        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new ExistsResponse { Stat = stat }, token);
+        await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), response, token);
     }
 
     private async Task HandleDeleteRequest(NetworkStream conn, DeleteRequest request, int xid, CancellationToken token) {
@@ -492,7 +490,7 @@ public class Server : IDisposable, IStateMachine {
 
         long? sequence = null;
         if (createMode is CreateMode.Sequence) {
-            var lastPrefixPath = _ds.LastPrefixPath(request.Path);
+            var lastPrefixPath = _ds.LastPathByPrefix(request.Path);
             var sequenceStr = lastPrefixPath.TrimPrefix(request.Path);
             sequence = long.Parse(sequenceStr) + 1;
         }
@@ -526,13 +524,13 @@ public class Server : IDisposable, IStateMachine {
                     new CreateResponse { Path = request.Path }, token);
                 break;
             case OpCode.Create2: {
-                var node = _ds.GetNode(request.Path);
-                if (node == null) {
+                var stat = _ds.GetNodeStat(request.Path);
+                if (stat == null) {
                     _logger.LogError("Node created just now but not found");
                     throw new RailException(ErrorCodes.SystemError);
                 }
                 await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
-                    new Create2Response { Path = request.Path, Stat = node.Stat.ToStat() }, token);
+                    new Create2Response { Path = request.Path, Stat = stat.ToJuteStat() }, token);
                 break;
             }
             default:
