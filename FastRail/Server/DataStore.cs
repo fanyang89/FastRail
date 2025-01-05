@@ -112,6 +112,7 @@ public class DataStore : IDisposable {
             }
             var parentStat = StatEntry.Parser.ParseFrom(parentStatBuffer);
             parentStat.NumChildren += 1;
+            parentStat.Cversion += 1;
             parentStat.Pzxid = zxid;
             batch.Put(MakeStatKey(parentPath), parentStat.ToByteArray());
         }

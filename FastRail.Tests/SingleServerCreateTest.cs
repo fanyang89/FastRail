@@ -9,11 +9,11 @@ public class SingleServerCreateTest : SingleServerTestBase {
         const string path = "/test-node1";
         const string expected = "test-value";
 
-        var realPath = await _client.createAsync(path, expected.ToBytes(), [ACLs.WorldAnyone],
+        var realPath = await Client.createAsync(path, expected.ToBytes(), [ACLs.WorldAnyone],
             CreateMode.PERSISTENT);
         Assert.That(realPath, Is.EqualTo(path));
 
-        var stat = await _client.existsAsync(path);
+        var stat = await Client.existsAsync(path);
         Assert.That(stat, Is.Not.Null);
     }
 }

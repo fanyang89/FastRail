@@ -10,16 +10,16 @@ public class SingleServerTestBase : TestBase {
     protected const int Port = 15000;
     protected const int RaftPort = 15001;
     protected const int SessionTimeout = 6000;
-    protected Launcher _launcher;
-    protected Server.Server _server;
-    protected RaftServer _raft;
-    protected ZooKeeper _client;
+    protected Launcher Launcher;
+    protected Server.Server Server;
+    protected RaftServer Raft;
+    protected ZooKeeper Client;
 
     [SetUp]
     public new void Setup() {
         var addressBook = new AddressBook();
         addressBook.Add(MyId, IPAddress.Loopback, RaftPort);
-        _launcher = new Launcher(new LaunchConfig {
+        Launcher = new Launcher(new LaunchConfig {
             MyId = 1,
             DataDir = CreateTempDirectory(),
             Listen = new IPEndPoint(IPAddress.Loopback, Port),
@@ -27,17 +27,17 @@ public class SingleServerTestBase : TestBase {
             RaftListen = new IPEndPoint(IPAddress.Loopback, RaftPort),
             AddressBook = addressBook
         });
-        _server = _launcher.Server;
-        _raft = _launcher.Raft;
-        _launcher.Start();
-        _client = CreateClient();
+        Server = Launcher.Server;
+        Raft = Launcher.Raft;
+        Launcher.Start();
+        Client = CreateClient();
     }
 
     [TearDown]
     public new async Task TearDown() {
-        await _client.closeAsync();
-        _launcher.Stop();
-        _launcher.Dispose();
+        await Client.closeAsync();
+        Launcher.Stop();
+        Launcher.Dispose();
     }
 
     protected ZooKeeper CreateClient() {
