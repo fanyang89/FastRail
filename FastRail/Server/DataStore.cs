@@ -5,39 +5,59 @@ using FastRail.Exceptions;
 using FastRail.Protos;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RaftNET;
 using RocksDbSharp;
 
 namespace FastRail.Server;
 
+public record InMemorySession(
+    SessionEntry Session,
+    List<string> Ephemerals
+);
+
 public class DataStore : IDisposable {
-    private static readonly byte[] KeyDataNodeMetaPrefix = "/zmta"u8.ToArray();
-    private static readonly byte[] KeyDataNodeStatPrefix = "/stat"u8.ToArray();
-    private static readonly byte[] KeyDataNodePrefix = "/zdat"u8.ToArray();
+    private static readonly byte[] KeyStatPrefix = "/stat"u8.ToArray();
+    private static readonly byte[] KeyDataPrefix = "/data"u8.ToArray();
     private static readonly byte[] KeySessionPrefix = "/sess/"u8.ToArray();
     private static readonly byte[] KeyZxid = "/zxid"u8.ToArray();
-    private readonly CancellationTokenSource _cts = new();
     private readonly RocksDb _db;
     private readonly ILogger<DataStore> _logger;
-    private readonly Dictionary<string, long> _nodeTracks = new();
-    private readonly TimeSpan _scanTickInterval;
-    private readonly Dictionary<long, SessionEntry> _sessions = new();
-    private Task? _backgroundScanTask;
+    private readonly Lock _sessionLock = new();
+    private readonly Dictionary<long, InMemorySession> _sessions = new();
     private long _nextSessionId;
 
-    public DataStore(string dataDir, TimeSpan scanTickInterval, ILogger<DataStore> logger) {
-        _logger = logger;
+    public DataStore(string dataDir, ILogger<DataStore>? logger = null) {
+        _logger = logger ?? new NullLogger<DataStore>();
         var options = new DbOptions().SetCreateIfMissing();
         _db = RocksDb.Open(options, dataDir);
-        _scanTickInterval = scanTickInterval;
     }
 
-    public long NextZxid => LastZxid + 1;
+    public long NextZxid {
+        get {
+            lock (KeyZxid) {
+                var zxid = LastZxid + 1;
+                LastZxid = zxid;
+                return zxid;
+            }
+        }
+    }
 
     public long LastZxid {
         get {
-            var buffer = _db.Get(KeyZxid);
-            return BinaryPrimitives.ReadInt64BigEndian(buffer);
+            lock (KeyZxid) {
+                var buffer = _db.Get(KeyZxid);
+                if (buffer != null) {
+                    return ReadLong(buffer);
+                }
+                _db.Put(KeyZxid, LongBytes(0));
+                return 0;
+            }
+        }
+        private set {
+            lock (KeyZxid) {
+                _db.Put(KeyZxid, LongBytes(value));
+            }
         }
     }
 
@@ -46,108 +66,79 @@ public class DataStore : IDisposable {
         GC.SuppressFinalize(this);
     }
 
-    public void Stop() {
-        _cts.Cancel();
-        try {
-            _backgroundScanTask?.Wait();
+    public void Stop() {}
+
+    // create root node if not exists, zxid=0
+    private void CreateRootNode() {
+        var rootValue = _db.Get(MakeDataKey("/"));
+        if (rootValue != null) {
+            return;
         }
-        catch (AggregateException ex) {
-            if (ex.InnerExceptions.Count != 1) {
-                throw;
-            }
-            if (ex.InnerException is not TaskCanceledException) {
-                throw;
-            }
-        }
+        CreateNode(0, new CreateNodeTransaction { Path = "/", Data = ByteString.Empty, Ctime = Time.CurrentTimeMillis() });
     }
 
     public void Start() {
-        // read zxid buffer or initialize
-        var zxidBuffer = _db.Get(KeyZxid);
-        if (zxidBuffer == null) {
-            zxidBuffer = new byte[sizeof(long)];
-            BinaryPrimitives.WriteInt64BigEndian(zxidBuffer, 0);
-            _db.Put(KeyZxid, zxidBuffer);
-        }
+        CreateRootNode();
 
-        // create root node if not exists
-        var rootValue = _db.Get(CreateDataNodeKey("/"));
-        if (rootValue == null) {
-            var now = Time.CurrentTimeMillis();
-            CreateNode("/", [], 0, new StatEntry {
-                Czxid = 0,
-                Mzxid = 0,
-                Ctime = now,
-                Mtime = now,
-                Version = 0,
-                Cversion = 0,
-                Aversion = 0,
-                EphemeralOwner = 0,
-                Pzxid = 0,
-                DataLength = 0,
-                NumChildren = 0
-            });
-        }
-
-        // loading data
+        // loading sessions
         using var it = _db.NewIterator();
-        for (it.SeekToFirst(); it.Valid(); it.Next())
+        for (it.SeekToFirst(); it.Valid(); it.Next()) {
             if (it.Key().StartsWith(KeySessionPrefix)) {
                 var session = SessionEntry.Parser.ParseFrom(it.Value());
                 lock (_sessions) {
-                    _sessions[session.Id] = session;
-                }
-            } else if (it.Key().StartsWith(KeyDataNodeMetaPrefix)) {
-                var node = DataNodeProperty.Parser.ParseFrom(it.Value());
-                var path = Encoding.UTF8.GetString(it.Key().TrimPrefix(KeyDataNodeMetaPrefix));
-                if (node.IsContainer) {
-                    lock (_nodeTracks) {
-                        _nodeTracks.Add(path, -1);
-                    }
-                } else if (node.Ttl > 0) {
-                    lock (_nodeTracks) {
-                        _nodeTracks.Add(path, node.Ttl);
-                    }
+                    _sessions[session.Id] = new InMemorySession(session, []);
                 }
             }
-
-        // start background scan task
-        _backgroundScanTask = Task.Run(BackgroundScan(_cts.Token));
+        }
     }
 
-    public void CreateNode(string path, byte[] data, long zxid, StatEntry stat, long? ttl = null, bool isContainer = false) {
-        var key = CreateDataNodeKey(path);
-        var buffer = _db.Get(key);
-        if (buffer != null) {
-            throw new NodeExistsException(path);
-        }
-
-        var nodeMeta = new DataNodeProperty { IsContainer = isContainer };
-        if (ttl != null) {
-            nodeMeta.Ttl = ttl.Value;
+    public void CreateNode(long zxid, CreateNodeTransaction txn) {
+        var statBuffer = _db.Get(MakeStatKey(txn.Path));
+        if (statBuffer != null) {
+            throw new NodeExistsException(txn.Path);
         }
 
         var batch = new WriteBatch();
-        batch.Put(key, data);
-        batch.Put(CreateStatKey(path), stat.ToByteArray());
-        batch.Put(KeyZxid, CreateBufferForLong(zxid));
-        if (ttl != null || isContainer) {
-            var metadataKey = ByteArrayUtil.Concat(KeyDataNodeMetaPrefix, path);
-            batch.Put(metadataKey, nodeMeta.ToByteArray());
+        var stat = new StatEntry {
+            Czxid = zxid,
+            Mzxid = zxid,
+            Ctime = txn.Ctime,
+            Mtime = txn.Ctime,
+            DataLength = txn.Data.Length,
+            Ttl = txn.Ttl,
+            IsContainer = txn.IsContainer,
+            EphemeralOwner = txn.EphemeralOwner
+        };
+
+        // update parent properties
+        if (txn.Path != "/") {
+            var parentPath = GetParentPath(txn.Path);
+            var parentStatBuffer = _db.Get(MakeStatKey(parentPath));
+            if (parentStatBuffer == null) {
+                throw new SystemException($"parent not found, path={txn.Path}");
+            }
+            var parentStat = StatEntry.Parser.ParseFrom(parentStatBuffer);
+            parentStat.NumChildren += 1;
+            parentStat.Pzxid = zxid;
+            batch.Put(MakeStatKey(parentPath), parentStat.ToByteArray());
         }
+        batch.Put(KeyZxid, LongBytes(zxid));
+        batch.Put(MakeStatKey(txn.Path), stat.ToByteArray());
+        batch.Put(MakeDataKey(txn.Path), txn.Data.ToByteArray());
+
+        // submit memory changes
+        if (txn.EphemeralOwner != 0) {
+            lock (_sessionLock) {
+                if (!_sessions.TryGetValue(txn.EphemeralOwner, out var value)) {
+                    throw new SystemException(
+                        $"Create ephemeral for non-existing session, session_id={txn.EphemeralOwner} path={txn.Path}");
+                }
+                value.Ephemerals.Add(txn.Path);
+            }
+        }
+
+        // submit write batch
         _db.Write(batch, new WriteOptions().SetSync(true));
-
-        if (ttl != null) {
-            lock (_nodeTracks) {
-                _nodeTracks.Add(path, ttl.Value);
-            }
-        } else if (isContainer) {
-            lock (_nodeTracks) {
-                _nodeTracks.Add(path, -1);
-            }
-        }
-
-        UpdateParent(path);
     }
 
     public static string GetParentPath(string childPath) {
@@ -158,138 +149,128 @@ public class DataStore : IDisposable {
         return p == 0 ? "/" : childPath[..p];
     }
 
-    private void UpdateParent(string childPath) {
-        if (childPath == "/") {
-            return;
+    public void RemoveNode(long zxid, DeleteNodeTransaction txn) {
+        if (txn.Path == "/") {
+            throw new ArgumentException("Can't delete root node", nameof(txn));
         }
-        var parentPath = GetParentPath(childPath);
-        var parent = GetNodeStat(parentPath);
-        if (parent == null) {
-            throw new ApplicationException();
+        if (string.IsNullOrWhiteSpace(txn.Path)) {
+            throw new ArgumentException("Path is empty", nameof(txn));
         }
-        parent.NumChildren = CountNodeChildren(parentPath);
-    }
 
-    public void RemoveNode(string path) {
-        _db.Remove(ByteArrayUtil.Concat(KeyDataNodePrefix, path));
-        _db.Remove(ByteArrayUtil.Concat(KeyDataNodeMetaPrefix, path));
-    }
-
-    private int CountNodeChildren(string path) {
-        var acc = 0;
-        var depth = path.Count(x => x == '/');
-        var keyBytes = path.ToBytes();
-        using var it = _db.NewIterator();
-        for (it.Seek(keyBytes); it.Valid(); it.Next()) {
-            if (!it.Key().StartsWith(keyBytes)) {
-                break;
-            }
-            var keyDepth = it.Key().Count(x => x == '/');
-            if (keyDepth > depth + 1) {
-                break;
-            }
-            if (keyDepth == depth + 1) {
-                ++acc;
-            }
+        // read parent stat
+        var parentPath = GetParentPath(txn.Path);
+        var parentStatBuffer = _db.Get(MakeStatKey(parentPath));
+        if (parentStatBuffer == null) {
+            throw new SystemException($"parent not found, path={txn.Path}");
         }
-        return acc;
+        var parentStat = StatEntry.Parser.ParseFrom(parentStatBuffer);
+        parentStat.NumChildren -= 1;
+
+        var batch = new WriteBatch();
+        if (parentStat is { NumChildren: <= 0, IsContainer: true }) {
+            // delete empty container node
+            batch.Delete(MakeStatKey(parentPath));
+            batch.Delete(MakeDataKey(parentPath));
+        } else {
+            // update parent stat
+            batch.Put(MakeStatKey(parentPath), parentStat.ToByteArray());
+        }
+        batch.Delete(MakeDataKey(txn.Path));
+        batch.Delete(MakeStatKey(txn.Path));
+        _db.Write(batch, new WriteOptions().SetSync(true));
     }
 
     public byte[]? GetNodeData(string path) {
-        var key = CreateDataNodeKey(path);
+        var key = MakeDataKey(path);
         return _db.Get(key);
     }
 
     public StatEntry? GetNodeStat(string path) {
-        var key = CreateStatKey(path);
+        var key = MakeStatKey(path);
         var value = _db.Get(key);
         return value == null ? null : StatEntry.Parser.ParseFrom(value);
     }
 
-    public void PutNodeStat(string path, StatEntry stat) {
-        var key = CreateStatKey(path);
-        _db.Put(key, stat.ToByteArray());
-    }
-
-    public void PutSession(SessionEntry session) {
-        var key = CreateSessionKey(session.Id);
+    public void CreateSession(long zxid, CreateSessionTransaction txn) {
+        var sessionId = txn.Session.Id;
         lock (_sessions) {
-            _db.Put(key, session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
-            _sessions.Add(session.Id, session);
+            _sessions.Add(sessionId, new InMemorySession(txn.Session, []));
+            _db.Put(MakeSessionKey(sessionId), txn.Session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
         }
     }
 
     public long CreateSession(TimeSpan sessionTimeout) {
         var sessionId = _nextSessionId++;
-        var key = CreateSessionKey(sessionId);
+        var key = MakeSessionKey(sessionId);
         var session = new SessionEntry {
             Id = sessionId, Timeout = sessionTimeout.Milliseconds, LastLive = Time.CurrentTimeMillis()
         };
         lock (_sessions) {
+            _sessions.Add(sessionId, new InMemorySession(session, []));
             _db.Put(key, session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
-            _sessions.Add(session.Id, session);
         }
         return sessionId;
     }
 
     public void RemoveSession(long sessionId) {
-        var key = CreateSessionKey(sessionId);
+        var sessionKey = MakeSessionKey(sessionId);
         lock (_sessions) {
-            _db.Remove(key, writeOptions: new WriteOptions().SetSync(true));
+            var session = _sessions[sessionId];
             _sessions.Remove(sessionId);
+
+            var batch = new WriteBatch();
+            batch.Delete(sessionKey);
+            foreach (var path in session.Ephemerals) {
+                batch.Delete(MakeDataKey(path));
+                batch.Delete(MakeStatKey(path));
+            }
+            _db.Write(batch, new WriteOptions().SetSync(true));
         }
     }
 
     public void TouchSession(long sessionId) {
-        var key = CreateSessionKey(sessionId);
+        var key = MakeSessionKey(sessionId);
         lock (_sessions) {
             var session = _sessions[sessionId];
-            session.LastLive = Time.CurrentTimeMillis();
-            _db.Put(key, session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
-            _sessions[sessionId] = session;
+            session.Session.LastLive = Time.CurrentTimeMillis();
+            _db.Put(key, session.Session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
         }
     }
 
     public List<string> GetChildren(string path, out StatEntry stat) {
-        var children = new List<string>();
-        var prefix = CreateStatKey(path);
+        var prefix = MakeStatKey(path);
         var buffer = _db.Get(prefix);
-
         if (buffer == null) {
             throw new RailException(ErrorCodes.NoNode);
         }
-
         stat = StatEntry.Parser.ParseFrom(buffer);
 
-        using var it = _db.NewIterator();
         var depth = PathDepth(path);
-
+        var children = new List<string>();
+        using var it = _db.NewIterator();
         for (it.Seek(prefix); it.Valid(); it.Next()) {
             if (!it.Key().StartsWith(prefix)) {
                 break;
             }
-
             var nodeDepth = PathDepth(it.Key());
-
             if (nodeDepth == depth + 1) {
                 children.Add(Encoding.UTF8.GetString(it.Value()));
             } else if (nodeDepth > depth + 1) {
                 break;
             }
         }
-
         return children;
     }
 
     public List<string> ListEphemeral(string? pathPrefix) {
         var results = new List<string>();
         using var it = _db.NewIterator();
-        for (it.Seek(KeyDataNodeStatPrefix); it.Valid(); it.Next()) {
-            if (!it.Key().StartsWith(KeyDataNodeStatPrefix)) {
+        for (it.Seek(KeyStatPrefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(KeyStatPrefix)) {
                 break;
             }
-            var path = new ArraySegment<byte>(it.Key(), KeyDataNodeStatPrefix.Length,
-                it.Key().Length - KeyDataNodeStatPrefix.Length);
+            var path = new ArraySegment<byte>(it.Key(), KeyStatPrefix.Length,
+                it.Key().Length - KeyStatPrefix.Length);
             if (pathPrefix != null && !path.StartsWith(pathPrefix)) {
                 continue;
             }
@@ -304,8 +285,8 @@ public class DataStore : IDisposable {
     public int CountAllChildren() {
         var acc = 0;
         using var it = _db.NewIterator();
-        for (it.Seek(KeyDataNodePrefix); it.Valid(); it.Next()) {
-            if (!it.Key().StartsWith(KeyDataNodePrefix)) {
+        for (it.Seek(KeyDataPrefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(KeyDataPrefix)) {
                 break;
             }
             acc++;
@@ -315,14 +296,14 @@ public class DataStore : IDisposable {
 
     public int CountAllChildren(string requestPath) {
         var acc = 0;
-        var prefix = ByteArrayUtil.Concat(KeyDataNodePrefix, requestPath);
+        var prefix = ByteArrayUtil.Concat(KeyDataPrefix, requestPath);
         using var it = _db.NewIterator();
         for (it.Seek(prefix); it.Valid(); it.Next()) {
             if (!it.Key().StartsWith(prefix)) {
                 break;
             }
-            var path = new ArraySegment<byte>(it.Key(), KeyDataNodePrefix.Length,
-                it.Key().Length - KeyDataNodePrefix.Length);
+            var path = new ArraySegment<byte>(it.Key(), KeyDataPrefix.Length,
+                it.Key().Length - KeyDataPrefix.Length);
             if (requestPath != null && path.StartsWith(requestPath) && path.Count > requestPath.Length) {
                 acc++;
             }
@@ -331,7 +312,7 @@ public class DataStore : IDisposable {
     }
 
     public string LastPathByPrefix(string requestPathPrefix) {
-        var prefix = ByteArrayUtil.Concat(KeyDataNodePrefix, requestPathPrefix);
+        var prefix = ByteArrayUtil.Concat(KeyDataPrefix, requestPathPrefix);
         using var it = _db.NewIterator();
         byte[]? lastKey = null;
         for (it.Seek(prefix); it.Valid(); it.Next()) {
@@ -343,46 +324,7 @@ public class DataStore : IDisposable {
         return lastKey == null ? "" : Encoding.UTF8.GetString(lastKey);
     }
 
-    private Func<Task> BackgroundScan(CancellationToken token) {
-        return async () => {
-            _logger.LogInformation("Data store background task started");
-            while (!token.IsCancellationRequested) {
-                await Task.Delay(_scanTickInterval, token);
-                ScanNodes();
-            }
-            _logger.LogInformation("Data store background task exited");
-        };
-    }
-
-    private void ScanNodes() {
-        var expired = new List<string>();
-        lock (_nodeTracks) {
-            foreach (var (path, ttl) in _nodeTracks) {
-                if (ttl == -1) {
-                    // it's container
-                    var children = CountNodeChildren(path);
-                    if (children <= 0) {
-                        expired.Add(path);
-                    }
-                    _logger.LogInformation("Removing container node, path={}", path);
-                } else if (ttl > 0) {
-                    if (ttl - _scanTickInterval.Milliseconds > 0) {
-                        _nodeTracks[path] -= _scanTickInterval.Milliseconds;
-                    } else {
-                        _logger.LogInformation("Removing TTL node, path={}", path);
-                        expired.Add(path);
-                    }
-                }
-            }
-
-            foreach (var path in expired) {
-                _nodeTracks.Remove(path);
-                RemoveNode(path);
-            }
-        }
-    }
-
-    private static byte[] CreateBufferForLong(long value) {
+    private static byte[] LongBytes(long value) {
         var buffer = new byte[sizeof(long)];
         BinaryPrimitives.WriteInt64BigEndian(buffer, value);
         return buffer;
@@ -393,18 +335,16 @@ public class DataStore : IDisposable {
         return BinaryPrimitives.ReadInt64BigEndian(buffer);
     }
 
-    private static byte[] CreateSessionKey(long sessionId) {
-        var buffer = new byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64BigEndian(buffer, sessionId);
-        return ByteArrayUtil.Concat(KeySessionPrefix, buffer);
+    private static byte[] MakeSessionKey(long sessionId) {
+        return ByteArrayUtil.Concat(KeySessionPrefix, LongBytes(sessionId));
     }
 
-    private static byte[] CreateDataNodeKey(string path) {
-        return ByteArrayUtil.Concat(KeyDataNodePrefix, path);
+    private static byte[] MakeDataKey(string path) {
+        return ByteArrayUtil.Concat(KeyDataPrefix, path);
     }
 
-    private static byte[] CreateStatKey(string path) {
-        return ByteArrayUtil.Concat(KeyDataNodeStatPrefix, path);
+    private static byte[] MakeStatKey(string path) {
+        return ByteArrayUtil.Concat(KeyStatPrefix, path);
     }
 
     private static int PathDepth(string path) {
@@ -418,4 +358,6 @@ public class DataStore : IDisposable {
         }
         return path.Count(x => x == '/');
     }
+
+    public void UpdateNode(long zxid, UpdateNodeTransaction txn) {}
 }

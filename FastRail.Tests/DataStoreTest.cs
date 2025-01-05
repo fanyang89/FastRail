@@ -1,5 +1,6 @@
 using FastRail.Protos;
 using FastRail.Server;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
 namespace FastRail.Tests;
@@ -9,9 +10,7 @@ public class DataStoreTest : TestBase {
 
     [SetUp]
     public new void Setup() {
-        _ds = new DataStore(CreateTempDirectory(),
-            TimeSpan.FromMilliseconds(1000),
-            LoggerFactory.CreateLogger<DataStore>());
+        _ds = new DataStore(CreateTempDirectory(), LoggerFactory.CreateLogger<DataStore>());
         _ds.Start();
     }
 
@@ -35,19 +34,9 @@ public class DataStoreTest : TestBase {
 
         const string node1 = "/test-node1";
         var nodeData1 = "test-node1"u8.ToArray();
-        _ds.CreateNode(node1, nodeData1, 1,
-            new StatEntry {
-                Czxid = 1,
-                Mzxid = 1,
-                Ctime = Time.CurrentTimeMillis(),
-                Mtime = Time.CurrentTimeMillis(),
-                Version = 0,
-                Cversion = 0,
-                Aversion = 0,
-                EphemeralOwner = 0,
-                Pzxid = 0,
-                DataLength = nodeData1.Length,
-                NumChildren = 0
+        _ds.CreateNode(1,
+            new CreateNodeTransaction {
+                Path = node1, Data = ByteString.CopyFrom(nodeData1), Ctime = Time.CurrentTimeMillis(),
             });
 
         var node = _ds.GetNodeStat(node1);

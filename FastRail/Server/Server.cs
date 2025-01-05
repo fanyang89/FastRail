@@ -39,9 +39,7 @@ public class Server : IDisposable, IStateMachine {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<Server>();
         _listener = new TcpListener(config.EndPoint);
-        _ds = new DataStore(config.DataDir,
-            TimeSpan.FromMilliseconds(config.Tick),
-            _loggerFactory.CreateLogger<DataStore>());
+        _ds = new DataStore(config.DataDir, _loggerFactory.CreateLogger<DataStore>());
     }
 
     public RaftServer? Raft { get; set; }
@@ -56,38 +54,21 @@ public class Server : IDisposable, IStateMachine {
     public void Apply(List<Command> commands) {
         foreach (var transaction in commands
                      .Select(command => Transaction.Parser.ParseFrom(command.Buffer))) {
+            var zxid = transaction.Zxid;
             switch (transaction.TxnCase) {
                 case Transaction.TxnOneofCase.CreateNode: {
                     var txn = transaction.CreateNode;
-
-                    var stat = new StatEntry {
-                        Czxid = txn.Zxid,
-                        Mzxid = txn.Zxid,
-                        Ctime = txn.Ctime,
-                        Mtime = txn.Ctime,
-                        Version = 0,
-                        Cversion = 0,
-                        Aversion = 0,
-                        EphemeralOwner = txn.EphemeralOwner,
-                        Pzxid = 0
-                    };
-
-                    if (txn.IsContainer) {
-                        _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), transaction.Zxid, stat, null, true);
-                    } else if (txn.Ttl > 0) {
-                        _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), txn.Ttl, stat, txn.Ttl);
-                    } else {
-                        _ds.CreateNode(txn.Path, txn.Data.ToByteArray(), transaction.Zxid, stat);
-                    }
+                    _ds.CreateNode(zxid, txn);
                     break;
                 }
                 case Transaction.TxnOneofCase.DeleteNode: {
                     var txn = transaction.DeleteNode;
-                    _ds.RemoveNode(txn.Path);
+                    _ds.RemoveNode(zxid, txn);
                     break;
                 }
                 case Transaction.TxnOneofCase.UpdateNode: {
                     var txn = transaction.UpdateNode;
+                    _ds.UpdateNode(zxid, txn);
                     break;
                 }
                 case Transaction.TxnOneofCase.Sync: {
@@ -96,7 +77,7 @@ public class Server : IDisposable, IStateMachine {
                 }
                 case Transaction.TxnOneofCase.CreateSession: {
                     var txn = transaction.CreateSession;
-                    _ds.PutSession(txn.Session);
+                    _ds.CreateSession(zxid, txn);
                     break;
                 }
                 case Transaction.TxnOneofCase.RemoveSession: {
@@ -178,7 +159,8 @@ public class Server : IDisposable, IStateMachine {
         var connectResponse = CreateSession(connectRequest);
         var sessionId = connectResponse.SessionId;
         await Broadcast(new Transaction {
-            CreateSession = new CreateSession {
+            Zxid = _ds.NextZxid,
+            CreateSession = new CreateSessionTransaction {
                 Session = new SessionEntry {
                     Id = sessionId,
                     Password = ByteString.CopyFrom(connectResponse.Passwd),
@@ -215,7 +197,7 @@ public class Server : IDisposable, IStateMachine {
 
                     case OpCode.CreateTTL: {
                         var request = JuteDeserializer.Deserialize<CreateTtlRequest>(requestBuffer);
-                        await HandleCreateTTLRequest(conn, request, sessionId, xid, token);
+                        await HandleCreateTTLRequest(conn, request, xid, token);
                         break;
                     }
 
@@ -333,13 +315,16 @@ public class Server : IDisposable, IStateMachine {
         client.Close();
     }
 
-    private async Task HandleCreateTTLRequest(NetworkStream conn, CreateTtlRequest request, long sessionId, int xid,
+    private async Task HandleCreateTTLRequest(NetworkStream conn, CreateTtlRequest request, int xid,
         CancellationToken token) {
         var createMode = request.Flags.ParseCreateMode();
         if (createMode != CreateMode.Ttl && createMode != CreateMode.PersistentSequentialWithTtl) {
             throw new RailException(ErrorCodes.BadArguments);
         }
         if (string.IsNullOrEmpty(request.Path) || !request.Flags.IsValidCreateMode()) {
+            throw new RailException(ErrorCodes.BadArguments);
+        }
+        if (request.Ttl <= 0) {
             throw new RailException(ErrorCodes.BadArguments);
         }
 
@@ -351,11 +336,15 @@ public class Server : IDisposable, IStateMachine {
             Ttl = request.Ttl,
             IsContainer = false,
             IsSequential = false,
-            Zxid = _ds.NextZxid
         };
-        await Broadcast(new Transaction { CreateNode = txn });
-
+        await Broadcast(new Transaction { Zxid = _ds.NextZxid, CreateNode = txn });
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new CreateResponse { Path = request.Path }, token);
+        _logger.LogInformation("TTL node created, path={} ttl={}ms", request.Path, request.Ttl);
+        _ = Task.Run(async () => {
+            await Task.Delay(TimeSpan.FromMilliseconds(request.Ttl), token);
+            _logger.LogInformation("Removing expired TTL node, path={} ttl={}ms", request.Path, request.Ttl);
+            _ds.RemoveNode(_ds.NextZxid, new DeleteNodeTransaction { Path = null });
+        }, token);
     }
 
     private async Task HandleGetAllChildrenNumberRequest(NetworkStream conn, GetAllChildrenNumberRequest request, int xid,
@@ -508,14 +497,13 @@ public class Server : IDisposable, IStateMachine {
             Ctime = Time.CurrentTimeMillis(),
             IsContainer = isContainer,
             IsSequential = sequence != null,
-            Zxid = _ds.NextZxid,
             Ttl = 0
         };
         if (createMode is CreateMode.Ephemeral or CreateMode.EphemeralSequential) {
             txn.EphemeralOwner = sessionId;
         }
 
-        await Broadcast(new Transaction { CreateNode = txn });
+        await Broadcast(new Transaction { Zxid = _ds.NextZxid, CreateNode = txn });
 
         switch (opCode) {
             case OpCode.Create:
@@ -542,8 +530,7 @@ public class Server : IDisposable, IStateMachine {
         _logger.LogInformation("Client attempting to establish new session");
         var sessionTimeout = int.Min(int.Max(request.Timeout, _config.MinSessionTimeout), _config.MaxSessionTimeout);
         var sessionId = _ds.CreateSession(TimeSpan.FromMilliseconds(sessionTimeout));
-        var passwd = request.Passwd ??
-                     [];
+        var passwd = request.Passwd ?? [];
         var rnd = new Random((int)(sessionId ^ SuperSecret));
         rnd.NextBytes(passwd);
         return new ConnectResponse {
