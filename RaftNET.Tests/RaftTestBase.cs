@@ -10,8 +10,5 @@ public class RaftTestBase {
         LoggerFactory = RaftNET.LoggerFactory.Instance;
     }
 
-    [TearDown]
-    public void TearDown() {}
-
     protected ILoggerFactory LoggerFactory;
 }

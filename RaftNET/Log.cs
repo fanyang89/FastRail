@@ -181,7 +181,10 @@ public class Log {
     }
 
     public ulong LastTerm() {
-        return _log.Count == 0 ? _snapshot.Term : _log.Last().Term;
+        if (_log.Count == 0) {
+            return _snapshot.Term;
+        }
+        return _log.Last().Term;
     }
 
     public ulong? TermFor(ulong idx) {
@@ -216,7 +219,6 @@ public class Log {
     public Configuration LastConfFor(ulong idx) {
         return new Configuration(DoLastConfFor(idx));
     }
-
 
     public Configuration? GetPreviousConfiguration() {
         var cfg = DoGetPreviousConfiguration();
@@ -324,5 +326,9 @@ public class Log {
                 break;
             }
         }
+    }
+
+    public int InMemorySize() {
+        return _log.Count;
     }
 }

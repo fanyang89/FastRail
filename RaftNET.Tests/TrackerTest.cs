@@ -44,7 +44,7 @@ public class TrackerTest {
             Assert.That(_tracker.Committed(0), Is.EqualTo(10));
         });
 
-        // Out of order confirmation is OK
+        // Out-of-order confirmation is OK
         _tracker.Find(id1).Accepted(5);
         Assert.Multiple(() => {
             Assert.That(_tracker.Find(id1).MatchIdx, Is.EqualTo(10));
@@ -65,7 +65,7 @@ public class TrackerTest {
         Find(id1).Accepted(14);
         Assert.That(_tracker.Committed(13), Is.EqualTo(13));
 
-        // Leave joint configuration, final configuration is {A,B,C}
+        // Leave joint configuration. The final configuration is {A,B,C}
         cfg.LeaveJoint();
         _tracker.SetConfiguration(cfg, 1);
         Assert.That(_tracker.Committed(13), Is.EqualTo(13));
@@ -94,12 +94,12 @@ public class TrackerTest {
         cfg.LeaveJoint();
         cfg.EnterJoint(Messages.CreateConfigMembers(id2));
         _tracker.SetConfiguration(cfg, 1);
-        // Sic: we're in a weird state. The joint commit index
-        // is actually 1, since id2 is at position 1. But in
-        // unwinding back the commit index would be weird,
+        // Sic: we're in a weird state.
+        // The joint commit index is actually 1, since id2 is at position 1.
+        // But in unwinding back the commit index would be weird,
         // so we report back the hint (prev_commit_idx).
         // As soon as the cluster enters joint configuration,
-        // and old quorum is insufficient, the leader won't be able to
+        // and old quorum is not enough, the leader won't be able to
         // commit new entries until the new members catch up.
         Assert.That(_tracker.Committed(17), Is.EqualTo(17));
         Find(id1).Accepted(18);
@@ -136,8 +136,8 @@ public class TrackerTest {
     }
 
     private FollowerProgress Find(ulong id) {
-        var p = _tracker.Find(id);
-        Assert.That(p, Is.Not.Null);
-        return p;
+        var progress = _tracker.Find(id);
+        Assert.That(progress, Is.Not.Null);
+        return progress;
     }
 }

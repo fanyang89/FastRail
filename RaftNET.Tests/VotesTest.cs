@@ -12,9 +12,9 @@ public class VotesTest {
 
     [Test]
     public void TestVotesBasics() {
-        var votes = new Votes(Messages.ConfigFromIds(Id1), new NullLogger<Votes>());
+        var votes = new Votes(Messages.ConfigFromIds(Id1));
         Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
-        Assert.That(votes.Voters.Count, Is.EqualTo(1));
+        Assert.That(votes.Voters, Has.Count.EqualTo(1));
 
         // Try a vote from an unknown server, it should be ignored.
         votes.RegisterVote(0, true);

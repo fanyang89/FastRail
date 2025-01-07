@@ -42,7 +42,6 @@ public static class Messages {
         return new LogEntry { Configuration = cfg };
     }
 
-
     public static void EnterJoint(
         this Configuration configuration, RepeatedField<ConfigMember> members
     ) {
@@ -64,7 +63,6 @@ public static class Messages {
     public static bool IsJoint(this Configuration configuration) {
         return configuration.Previous.Count > 0;
     }
-
 
     public static void LeaveJoint(this Configuration configuration) {
         Debug.Assert(configuration.Previous.Count > 0);
@@ -128,5 +126,13 @@ public static class Messages {
         }
 
         return cfg;
+    }
+
+    public static SnapshotDescriptor LogSnapshot(Log log, ulong idx) {
+        return new SnapshotDescriptor {
+            Idx = idx,
+            Term = log.LastTerm(),
+            Config = log.GetSnapshot().Config
+        };
     }
 }
