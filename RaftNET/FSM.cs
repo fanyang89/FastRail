@@ -814,7 +814,7 @@ public partial class FSM {
                 new VoteResponse { CurrentTerm = request.CurrentTerm, IsPreVote = request.IsPreVote, VoteGranted = true });
         } else {
             SendTo(from,
-                new VoteResponse { CurrentTerm = request.CurrentTerm, IsPreVote = request.IsPreVote, VoteGranted = false });
+                new VoteResponse { CurrentTerm = CurrentTerm, IsPreVote = request.IsPreVote, VoteGranted = false });
         }
     }
 
