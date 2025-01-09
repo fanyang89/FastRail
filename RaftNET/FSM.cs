@@ -981,4 +981,11 @@ public partial class FSM {
     protected Log GetLog() {
         return _log;
     }
+
+    public ulong Id() {
+        return _myID;
+    }
+
+    public int InMemoryLogSize => _log.InMemorySize();
+    public int LogMemoryUsage => _log.MemoryUsage();
 }

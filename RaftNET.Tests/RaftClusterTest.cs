@@ -18,7 +18,7 @@ public class RaftClusterTest : RaftTestBase {
     }
 
     [TearDown]
-    public new void TearDown() {
+    public void TearDown() {
         _cluster.Stop();
     }
 

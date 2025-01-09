@@ -49,7 +49,7 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     }
 
     [TearDown]
-    public new void TearDown() {
+    public void TearDown() {
         _server.Stop();
     }
 
