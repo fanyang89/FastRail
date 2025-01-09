@@ -60,7 +60,7 @@ public partial class FSM {
         _commitIdx = _log.GetSnapshot().Idx;
         _observed.Advance(this);
         _commitIdx = ulong.Max(_commitIdx, commitIdx);
-        _logger.LogTrace("fsm[{}]: starting, current term {}, log length {}, commit index {}", _myID, CurrentTerm,
+        _logger.LogTrace("[{}] FSM() starting, current_term={} log_length={} commit_idx={}", _myID, CurrentTerm,
             _log.LastIdx(), _commitIdx);
 
         if (_log.GetConfiguration().Current.Count == 1 && _log.GetConfiguration().CanVote(_myID)) {
@@ -86,8 +86,7 @@ public partial class FSM {
     public Role Role => IsFollower ? Role.Follower : IsLeader ? Role.Leader : Role.Candidate;
 
     public bool HasOutput() {
-        _logger.LogTrace("fsm::has_output() {} stable index: {} last index: {}",
-            _myID, _log.StableIdx(), _log.LastIdx());
+        _logger.LogTrace("[{}] FSM.HasOutput() stable_idx={} last_idx={}", _myID, _log.StableIdx(), _log.LastIdx());
         var diff = _log.LastIdx() - _log.StableIdx();
         return diff > 0 ||
                _output.StateChanged ||
@@ -137,7 +136,7 @@ public partial class FSM {
         output.AbortLeadershipTransfer = _abortLeadershipTransfer;
         _abortLeadershipTransfer = false;
 
-        if (_observed.LastConfIdx != _log.LastConfIdx() ||
+        if (_observed.LastConfIdx != _log.LastConfIdx ||
             _observed.CurrentTerm != _log.LastTerm() &&
             _observed.LastTerm != _log.LastTerm()) {
             output.Configuration = new HashSet<ConfigMember>();
@@ -210,10 +209,10 @@ public partial class FSM {
             // unusable, such as transitioning to an empty configuration or
             // one with no voters.
             Messages.CheckConfiguration(command.AsT2.Current);
-            if (_log.LastConfIdx() > _commitIdx || _log.GetConfiguration().IsJoint()) {
+            if (_log.LastConfIdx > _commitIdx || _log.GetConfiguration().IsJoint()) {
                 _logger.LogTrace("[{}] A{}configuration change at index {} is not yet committed (config {}) (commit_idx: {})",
                     _myID, _log.GetConfiguration().IsJoint() ? " joint " : " ",
-                    _log.LastConfIdx(), _log.GetConfiguration(), _commitIdx);
+                    _log.LastConfIdx, _log.GetConfiguration(), _commitIdx);
                 throw new ConfigurationChangeInProgressException();
             }
             // 4.3. Arbitrary configuration changes using joint consensus
@@ -236,7 +235,7 @@ public partial class FSM {
             buffer => { logEntry.Command = new Command { Buffer = ByteString.CopyFrom(buffer) }; },
             config => { logEntry.Configuration = config; }
         );
-        _logger.LogInformation("Adding entry, idx={} term={}", logEntry.Idx, logEntry.Term);
+        _logger.LogInformation("[{}] AddEntry() idx={} term={}", _myID, logEntry.Idx, logEntry.Term);
         _log.Add(logEntry);
         _smEvents.Signal();
 
@@ -401,12 +400,8 @@ public partial class FSM {
         );
     }
 
-    public void WaitForMemoryPermit(int size) {
-        CheckIsLeader();
-        LeaderState.LogLimiter.Wait(size);
-    }
-
     public void TransferLeadership(long timeout = 0) {
+        // TODO: prevent new requests coming in
         CheckIsLeader();
         var leader = LeaderState.Tracker.Find(_myID);
         var voterCount = GetConfiguration().Current.Count(x => x.CanVote);
@@ -416,7 +411,6 @@ public partial class FSM {
         }
 
         LeaderState.StepDown = _clock.Now() + timeout;
-        LeaderState.LogLimiter.Wait(_config.MaxLogSize); // prevent new requests
 
         foreach (var (_, progress) in LeaderState.Tracker.FollowerProgresses) {
             if (progress.Id != _myID && progress.CanVote && progress.MatchIdx == _log.LastIdx()) {
@@ -467,7 +461,7 @@ public partial class FSM {
     private void AdvanceStableIdx(ulong idx) {
         var prevStableIdx = _log.StableIdx();
         _log.StableTo(idx);
-        _logger.LogTrace("AdvanceStableIdx[{}] prev_stable_idx={} idx={}", _myID, prevStableIdx, idx);
+        _logger.LogTrace("[{}] AdvanceStableIdx() prev_stable_idx={} idx={}", _myID, prevStableIdx, idx);
 
         if (IsLeader) {
             var leaderProgress = LeaderState.Tracker.Find(_myID);
@@ -485,33 +479,32 @@ public partial class FSM {
             return;
         }
 
-        var committedConfChange = _commitIdx < _log.LastConfIdx() && newCommitIdx >= _log.LastConfIdx();
+        var committedConfChange = _commitIdx < _log.LastConfIdx && newCommitIdx >= _log.LastConfIdx;
 
         if (_log[newCommitIdx].Term != CurrentTerm) {
-            _logger.LogTrace("maybe_commit[{}]: cannot commit because of term {} != {}",
-                _myID, _log[newCommitIdx].Term, CurrentTerm);
+            _logger.LogTrace("[{}] MaybeCommit() cannot commit, because term {} != {}", _myID, _log[newCommitIdx].Term,
+                CurrentTerm);
             return;
         }
-        _logger.LogTrace("maybe_commit[{}]: commit {}", _myID, newCommitIdx);
+        _logger.LogTrace("[{}] MaybeCommit() commit_idx={}", _myID, newCommitIdx);
 
         _commitIdx = newCommitIdx;
         _smEvents.Signal();
 
         if (committedConfChange) {
-            _logger.LogTrace("maybe_commit[{}]: committed conf change at idx {} (config: {})", _myID, _log.LastConfIdx(),
+            _logger.LogTrace("[{}] MaybeCommit() committed conf change at idx {} (config: {})", _myID, _log.LastConfIdx,
                 _log.GetConfiguration());
             if (_log.GetConfiguration().IsJoint()) {
                 var cfg = _log.GetConfiguration();
                 cfg.LeaveJoint();
-                _logger.LogTrace("[{}] appending non-joint config entry at {}: {}", _myID, _log.NextIdx(), cfg);
+                _logger.LogTrace("[{}] MaybeCommit() appending non-joint config entry at {}: {}", _myID, _log.NextIdx(), cfg);
                 _log.Add(new LogEntry { Term = CurrentTerm, Idx = _log.NextIdx(), Configuration = cfg });
                 LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
                 MaybeCommit();
             } else {
                 var lp = LeaderState.Tracker.Find(_myID);
-
-                if (lp is not { CanVote: true }) {
-                    _logger.LogTrace("maybe_commit[{}] stepping down as leader", _myID);
+                if (lp == null || !lp.CanVote) {
+                    _logger.LogTrace("[{}] MaybeCommit() stepping down as leader", _myID);
                     TransferLeadership();
                 }
             }
@@ -572,7 +565,7 @@ public partial class FSM {
             _output.StateChanged = true;
         }
 
-        _logger.LogInformation("FSM{{{}}} become follower", _myID);
+        _logger.LogInformation("[{}] BecomeFollower()", _myID);
         _state = new Follower(leader);
 
         if (leader != 0) {
@@ -585,13 +578,11 @@ public partial class FSM {
         Debug.Assert(!IsLeader);
         _output.StateChanged = true;
         _state = new Leader(_config.MaxLogSize);
-        LeaderState.LogLimiter.Wait(_log.MemoryUsage());
         _lastElectionTime = _clock.Now();
         _pingLeader = false;
         AddEntry(new Dummy());
         LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
-        _logger.LogTrace("BecomeLeader() {} stable index: {} last index: {}",
-            _myID, _log.StableIdx(), _log.LastIdx());
+        _logger.LogTrace("[{}] BecomeLeader() stable_idx={} last_idx={}", _myID, _log.StableIdx(), _log.LastIdx());
     }
 
     private void BecomeCandidate(bool isPreVote, bool isLeadershipTransfer = false) {
@@ -607,7 +598,7 @@ public partial class FSM {
         var voters = votes.Voters;
 
         if (voters.All(x => x.ServerId != _myID)) {
-            if (_log.LastConfIdx() <= _commitIdx) {
+            if (_log.LastConfIdx <= _commitIdx) {
                 BecomeFollower(0);
                 return;
             }
@@ -654,10 +645,10 @@ public partial class FSM {
 
         if (votes.CountVotes() == VoteResult.Won) {
             if (isPreVote) {
-                _logger.LogTrace("become_candidate[{}] won prevote", _myID);
+                _logger.LogTrace("[{}] BecomeCandidate() won prevote", _myID);
                 BecomeCandidate(false);
             } else {
-                _logger.LogTrace("become_candidate[{}] won vote", _myID);
+                _logger.LogTrace("[{}] BecomeCandidate() won vote", _myID);
                 BecomeLeader();
             }
         }
@@ -877,12 +868,12 @@ public partial class FSM {
 
     private void AdvanceCommitIdx(ulong leaderCommitIdx) {
         var newCommitIdx = ulong.Min(leaderCommitIdx, _log.LastIdx());
-        _logger.LogTrace("AdvanceCommitIdx[{}]: leader_commit_idx={}, new_commit_idx={}",
+        _logger.LogTrace("[{}] AdvanceCommitIdx() leader_commit_idx={}, new_commit_idx={}",
             _myID, leaderCommitIdx, newCommitIdx);
         if (newCommitIdx > _commitIdx) {
             _commitIdx = newCommitIdx;
             _smEvents.Signal();
-            _logger.LogTrace("AdvanceCommitIdx[{}]: signal apply_entries: committed: {}",
+            _logger.LogTrace("[{}] AdvanceCommitIdx() signal apply_entries: committed: {}",
                 _myID, _commitIdx);
         }
     }
@@ -982,10 +973,10 @@ public partial class FSM {
         return _log;
     }
 
-    public ulong Id() {
-        return _myID;
-    }
+    public ulong Id => _myID;
 
     public int InMemoryLogSize => _log.InMemorySize();
     public int LogMemoryUsage => _log.MemoryUsage();
+    public ulong LogLastIdx => _log.LastIdx();
+    public ulong LogLastTerm => _log.LastTerm();
 }

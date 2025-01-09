@@ -9,7 +9,7 @@ public class LogTest {
 
         Assert.Multiple(() => {
             Assert.That(log.LastIdx(), Is.EqualTo(0));
-            Assert.That(log.LastConfIdx(), Is.EqualTo(0));
+            Assert.That(log.LastConfIdx, Is.EqualTo(0));
         });
 
         // initial log with 3 entries
@@ -22,7 +22,7 @@ public class LogTest {
         log.Add(Messages.CreateConfiguration(cfg));
         Assert.Multiple(() => {
             Assert.That(log.LastIdx(), Is.EqualTo(2));
-            Assert.That(log.LastConfIdx(), Is.EqualTo(2));
+            Assert.That(log.LastConfIdx, Is.EqualTo(2));
             Assert.That(log[2].Configuration, Is.Not.Null);
         });
 
@@ -50,7 +50,7 @@ public class LogTest {
                 Is.EqualTo(2));
             Assert.That(log.LastIdx(), Is.EqualTo(2));
             Assert.That(log[2].Dummy, Is.Not.Null);
-            Assert.That(log.LastConfIdx(), Is.EqualTo(0));
+            Assert.That(log.LastConfIdx, Is.EqualTo(0));
         });
     }
 }

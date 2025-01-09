@@ -1,10 +1,11 @@
 ﻿using System.Diagnostics;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace RaftNET;
 
-public class Log {
+public class Log : IDeepCloneable<Log> {
     private readonly List<LogEntry> _log;
     private readonly ILogger<Log> _logger;
     private ulong _firstIdx;
@@ -29,6 +30,12 @@ public class Log {
         Debug.Assert(_firstIdx > 0);
         StableTo(LastIdx());
         InitLastConfigurationIdx();
+    }
+
+    public Log Clone() {
+        var logEntries = _log.Select(entry => entry.Clone()).ToList();
+        var log = new Log(_snapshot.Clone(), logEntries, _logger);
+        return log;
     }
 
     public LogEntry this[ulong index] {
@@ -199,9 +206,7 @@ public class Log {
         return null;
     }
 
-    public ulong LastConfIdx() {
-        return _lastConfIdx > 0 ? _lastConfIdx : _snapshot.Idx;
-    }
+    public ulong LastConfIdx => _lastConfIdx > 0 ? _lastConfIdx : _snapshot.Idx;
 
     public Configuration GetConfiguration() {
         if (_lastConfIdx > 0) {

@@ -17,7 +17,7 @@ public class LogLastConfIdxTest : FSMTestBase {
         Assert.That(log.LastConfIdx, Is.EqualTo(3));
         // apply snapshot truncates the log and resets last_conf_idx()
         log.ApplySnapshot(Messages.LogSnapshot(log, log.LastIdx()), 0, 0);
-        Assert.That(log.LastConfIdx(), Is.EqualTo(log.GetSnapshot().Idx));
+        Assert.That(log.LastConfIdx, Is.EqualTo(log.GetSnapshot().Idx));
         // log::last_term() is maintained correctly by truncate_head/truncate_tail() (snapshotting)
         Assert.That(log.LastTerm(), Is.EqualTo(log.GetSnapshot().Term));
         Assert.That(log.TermFor(log.GetSnapshot().Idx), Is.Not.Null);
@@ -46,7 +46,7 @@ public class LogLastConfIdxTest : FSMTestBase {
         Assert.That(log.InMemorySize(), Is.EqualTo(3));
         log.ApplySnapshot(Messages.LogSnapshot(log, log.LastIdx()), 3, int.MaxValue);
         Assert.That(log.InMemorySize(), Is.EqualTo(3));
-        Assert.That(log.LastConfIdx(), Is.EqualTo(log.GetSnapshot().Idx));
+        Assert.That(log.LastConfIdx, Is.EqualTo(log.GetSnapshot().Idx));
         log.Add(new LogEntry { Dummy = new Void(), Term = log.LastTerm(), Idx = log.LastIdx() });
         // Set trailing shorter than the length of the log
         log.ApplySnapshot(Messages.LogSnapshot(log, log.LastIdx()), 1, int.MaxValue);
@@ -57,13 +57,13 @@ public class LogLastConfIdxTest : FSMTestBase {
         log.Add(new LogEntry { Dummy = new Void(), Term = log.LastTerm(), Idx = log.LastIdx() });
         var snpIdx = log.LastIdx();
         log.ApplySnapshot(Messages.LogSnapshot(log, snpIdx), 10, int.MaxValue);
-        Assert.That(log.LastConfIdx(), Is.EqualTo(snpIdx));
+        Assert.That(log.LastConfIdx, Is.EqualTo(snpIdx));
         // Check that configuration from the log is used if it has higher index then snapshot idx
         log.Add(new LogEntry { Dummy = new Void(), Term = log.LastTerm(), Idx = log.LastIdx() });
         snpIdx = log.LastIdx();
         log.Add(new LogEntry { Configuration = cfg, Term = log.LastTerm(), Idx = log.LastIdx() });
         log.Add(new LogEntry { Configuration = cfg, Term = log.LastTerm(), Idx = log.LastIdx() });
         log.ApplySnapshot(Messages.LogSnapshot(log, snpIdx), 10, int.MaxValue);
-        Assert.That(log.LastConfIdx(), Is.EqualTo(log.LastIdx()));
+        Assert.That(log.LastConfIdx, Is.EqualTo(log.LastIdx()));
     }
 }
