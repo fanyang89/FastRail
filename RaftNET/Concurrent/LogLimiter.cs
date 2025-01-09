@@ -1,21 +1,34 @@
 ﻿namespace RaftNET.Concurrent;
 
 public class LogLimiter(int initialCount, int maxCount) {
-    private readonly SemaphoreSlim _semaphore = new(initialCount, maxCount);
+    private readonly object _lock = new();
+    private Exception? _lastException;
+    private int _count = initialCount;
 
-    public void Wait(int n) {
-        if (n > maxCount) {
-            throw new ArgumentOutOfRangeException(nameof(n));
+    public void Consume(int n) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(n, maxCount);
+        lock (_lock) {
+            while (_count < n || _lastException != null) {
+                Monitor.Wait(_lock);
+            }
+            if (_lastException != null) {
+                throw _lastException;
+            }
+            _count -= n;
         }
-
-        for (var i = 0; i < n; i++) WaitOne();
     }
 
-    public void Release(int n) {
-        _semaphore.Release(n);
+    public void Signal(int n) {
+        lock (_lock) {
+            _count += Math.Min(maxCount, _count + n);
+            Monitor.Pulse(_lock);
+        }
     }
 
-    private void WaitOne() {
-        _semaphore.Wait();
+    public void Broken(Exception ex) {
+        lock (_lock) {
+            _lastException = ex;
+            Monitor.PulseAll(_lock);
+        }
     }
 }

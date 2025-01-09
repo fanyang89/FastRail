@@ -23,7 +23,7 @@ public partial class FSM {
     private readonly ThreadLocal<Random> _random = new(() => new Random());
     private readonly LastObservedState _observed = new();
     private readonly Notifier _smEvents;
-    private OneOf<Follower, Candidate, Leader> _state = new Follower(0);
+    private State _state = new(new Follower(0));
     private ulong _votedFor;
     private ulong _commitIdx;
     private bool _abortLeadershipTransfer;
@@ -411,6 +411,7 @@ public partial class FSM {
         }
 
         LeaderState.StepDown = _clock.Now() + timeout;
+        LeaderState.LogLimiter.Consume(_config.MaxLogSize);
 
         foreach (var (_, progress) in LeaderState.Tracker.FollowerProgresses) {
             if (progress.Id != _myID && progress.CanVote && progress.MatchIdx == _log.LastIdx()) {
@@ -423,23 +424,32 @@ public partial class FSM {
     public bool ApplySnapshot(
         SnapshotDescriptor snapshot, int maxTrailingEntries, int maxTrailingBytes, bool local
     ) {
+        _logger.LogTrace("[{}] ApplySnapshot() current_term={} term={} idx={} id={} local={}",
+            _myID, CurrentTerm, snapshot.Term, snapshot.Idx, snapshot.Id, local);
         Debug.Assert(local && snapshot.Idx <= _observed.CommitIdx || !local && IsFollower);
-        var currentSnapshot = _log.GetSnapshot();
 
+        var currentSnapshot = _log.GetSnapshot();
         if (snapshot.Idx <= currentSnapshot.Idx || !local && snapshot.Idx <= _commitIdx) {
+            _logger.LogError("[{}] ApplySnapshot() ignore outdated snapshot {}/{} current one is {}/{}, commit_idx={}",
+                _myID, snapshot.Id, snapshot.Idx, currentSnapshot.Id, currentSnapshot.Idx, _commitIdx);
             _output.SnapshotsToDrop.Add(snapshot.Id);
             return false;
         }
 
         _output.SnapshotsToDrop.Add(currentSnapshot.Id);
+
         _commitIdx = ulong.Max(_commitIdx, snapshot.Idx);
-        var newFirstIndex = _log.ApplySnapshot(snapshot, maxTrailingEntries, maxTrailingBytes);
+        var (units, newFirstIndex) = _log.ApplySnapshot(snapshot, maxTrailingEntries, maxTrailingBytes);
         currentSnapshot = _log.GetSnapshot();
         _output.Snapshot = new AppliedSnapshot(
             currentSnapshot,
             local,
             currentSnapshot.Idx + 1 - newFirstIndex
         );
+        if (IsLeader) {
+            _logger.LogTrace("[{}] ApplySnapshot() signal {} available units", _myID, units);
+            LeaderState.LogLimiter.Signal(units);
+        }
         _smEvents.Signal();
         return true;
     }
@@ -566,7 +576,10 @@ public partial class FSM {
         }
 
         _logger.LogInformation("[{}] BecomeFollower()", _myID);
-        _state = new Follower(leader);
+        if (_state.IsLeader) {
+            _state.Leader.Cancel();
+        }
+        _state = new State(new Follower(leader));
 
         if (leader != 0) {
             _pingLeader = false;
@@ -577,7 +590,8 @@ public partial class FSM {
     private void BecomeLeader() {
         Debug.Assert(!IsLeader);
         _output.StateChanged = true;
-        _state = new Leader(_config.MaxLogSize);
+        _state = new State(new Leader(_config.MaxLogSize));
+        LeaderState.LogLimiter.Consume(_log.MemoryUsage());
         _lastElectionTime = _clock.Now();
         _pingLeader = false;
         AddEntry(new Dummy());
@@ -590,7 +604,11 @@ public partial class FSM {
             _output.StateChanged = true;
         }
 
-        _state = new Candidate(_log.GetConfiguration(), isPreVote);
+        if (_state.IsLeader) {
+            _state.Leader.Cancel();
+        }
+        _state = new State(new Candidate(_log.GetConfiguration(), isPreVote));
+
         ResetElectionTimeout();
 
         _lastElectionTime = _clock.Now();
@@ -720,6 +738,8 @@ public partial class FSM {
                 _logger.LogTrace("Tick({}) not aborting step down: we have been removed from the configuration", _myID);
             } else if (state.StepDown <= _clock.Now()) {
                 _logger.LogTrace("Tick({}) cancel step down", _myID);
+                // Cancel the step-down (only if the leader is part of the cluster)
+                LeaderState.LogLimiter.Signal(_config.MaxLogSize);
                 state.StepDown = null;
                 state.TimeoutNowSent = null;
                 _abortLeadershipTransfer = true;

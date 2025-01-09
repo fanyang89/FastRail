@@ -53,9 +53,10 @@ public class Log : IDeepCloneable<Log> {
         return _snapshot;
     }
 
-    public ulong ApplySnapshot(SnapshotDescriptor snp, int maxTrailingEntries, int maxTrailingBytes) {
+    public (int, ulong) ApplySnapshot(SnapshotDescriptor snp, int maxTrailingEntries, int maxTrailingBytes) {
         Debug.Assert(snp.Idx > _snapshot.Idx);
 
+        var releasedMemory = 0;
         var idx = snp.Idx;
 
         if (idx > LastIdx()) {
@@ -76,7 +77,7 @@ public class Log : IDeepCloneable<Log> {
                 --entriesToRemove;
             }
 
-            var releasedMemory = MemoryUsageOf(0, entriesToRemove);
+            releasedMemory = MemoryUsageOf(0, entriesToRemove);
             _log.RemoveRange(0, entriesToRemove);
             _memoryUsage -= releasedMemory;
             _firstIdx += (ulong)entriesToRemove;
@@ -93,7 +94,7 @@ public class Log : IDeepCloneable<Log> {
         }
 
         _snapshot = snp;
-        return _firstIdx;
+        return (releasedMemory, _firstIdx);
     }
 
     public ulong MaybeAppend(IList<LogEntry> entries) {
