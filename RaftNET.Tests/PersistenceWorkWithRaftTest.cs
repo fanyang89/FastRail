@@ -26,7 +26,6 @@ public class PersistenceWorkWithRaftTest {
         _persistence.Dispose();
     }
 
-
     [Test]
     public void LoadLogs() {
         var logs = _persistence.LoadLog();

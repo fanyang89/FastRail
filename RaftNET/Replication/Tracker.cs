@@ -59,7 +59,6 @@ public class Tracker {
         }
     }
 
-
     // Calculate the current commit index based on the current simple or joint quorum
     public ulong Committed(ulong prevCommitIdx) {
         var current = new MatchVector<ulong>(prevCommitIdx, CurrentVoters.Count);

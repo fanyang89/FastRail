@@ -11,7 +11,6 @@ internal class SemaphoreGuard : IDisposable {
         for (var i = 0; i < n; i++) _semaphore.Wait();
     }
 
-
     public void Dispose() {
         _semaphore.Release(_n);
     }
