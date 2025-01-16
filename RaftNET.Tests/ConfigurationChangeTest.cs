@@ -276,4 +276,48 @@ public class ConfigurationChangeTest : FSMTestBase {
             Assert.That(c.GetConfiguration().Current, Has.Count.EqualTo(3));
         });
     }
+
+    [Test]
+    public void Replace3() {
+        // Configuration change {A, B, C, D, E, F} to {A, B, C, G, H}
+        // Test configuration changes in presence of down nodes in C_old
+        var fd = new DiscreteFailureDetector();
+        var log = new Log(new SnapshotDescriptor {
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID, F_ID)
+        });
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        var b = CreateFollower(B_ID, log.Clone(), fd);
+        var c = CreateFollower(C_ID, log.Clone(), fd);
+        var d = CreateFollower(D_ID, log.Clone(), fd);
+        var e = CreateFollower(E_ID, log.Clone(), fd);
+        var f = CreateFollower(F_ID, log.Clone(), fd);
+        ElectionTimeout(d);
+        Communicate(a, d, e, f);
+        Assert.That(d.IsLeader, Is.True);
+
+        var g = CreateFollower(G_ID, log.Clone());
+        var h = CreateFollower(H_ID, log.Clone());
+
+        d.AddEntry(Messages.ConfigFromIds(A_ID, B_ID, C_ID, G_ID, H_ID));
+        Communicate(b, c, d, g, h);
+        Assert.Multiple(() => {
+            Assert.That(d.IsLeader, Is.True);
+            Assert.That(d.GetConfiguration().IsJoint(), Is.True);
+        });
+        d.Tick();
+        Communicate(b, c, e, d, g, h);
+        Assert.That(d.IsFollower, Is.True);
+
+        var leader = SelectLeader(a, b, c, g, h);
+        Assert.Multiple(() => {
+            Assert.That(leader.GetConfiguration().IsJoint(), Is.False);
+            Assert.That(leader.GetConfiguration().Current, Has.Count.EqualTo(5));
+        });
+
+        fd.MarkAllDead();
+        ElectionTimeout(d);
+        ElectionTimeout(a);
+        Communicate(a, b, c, d, e, f, g, h);
+        Assert.That(leader.IsLeader, Is.True);
+    }
 }

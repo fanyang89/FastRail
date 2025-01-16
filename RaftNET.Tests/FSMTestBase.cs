@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Records;
 
@@ -16,6 +17,9 @@ public class FSMTestBase : RaftTestBase {
     protected const ulong C_ID = 3;
     protected const ulong D_ID = 4;
     protected const ulong E_ID = 5;
+    protected const ulong F_ID = 6;
+    protected const ulong G_ID = 7;
+    protected const ulong H_ID = 8;
 
     protected readonly FSM.Config FSMConfig = new(
         MaxLogSize: 4 * 1024 * 1024,
@@ -79,6 +83,16 @@ public class FSMTestBase : RaftTestBase {
                 }
             }
         } while (hasTraffic);
+    }
+
+    protected FSM SelectLeader(params FSM[] fsmList) {
+        foreach (var fsm in fsmList) {
+            if (fsm.IsLeader) {
+                return fsm;
+            }
+        }
+        Debug.Assert(false);
+        return null;
     }
 
     private static bool Deliver(Dictionary<ulong, FSM> routes, ulong from, ToMessage m) {
