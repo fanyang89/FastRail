@@ -1,4 +1,5 @@
 ﻿using RaftNET.Exceptions;
+using RaftNET.FailureDetectors;
 
 namespace RaftNET.Tests;
 
@@ -196,5 +197,83 @@ public class ConfigurationChangeTest : FSMTestBase {
             });
         Assert.That(fsm.GetConfiguration().Current.Count, Is.EqualTo(3));
         Assert.That(fsm.GetConfiguration().IsJoint, Is.False);
+    }
+
+    [Test]
+    public void Replace1() {
+        // Configuration change {A, B} to {C, D}
+        // Similar to A -> B change, but with many nodes,
+        // so C_new has to campaign after configuration change.
+        var log = new Log(new SnapshotDescriptor {
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID)
+        });
+        var a = CreateFollower(A_ID, log.Clone());
+        var b = CreateFollower(B_ID, log.Clone());
+        ElectionTimeout(a);
+        Communicate(a, b);
+        Assert.That(a.IsLeader, Is.True);
+
+        var c = CreateFollower(C_ID, log.Clone());
+        var d = CreateFollower(D_ID, log.Clone());
+
+        a.AddEntry(Messages.ConfigFromIds(C_ID, D_ID));
+        Communicate(a, b, c, d);
+
+        Assert.Multiple(() => {
+            Assert.That(a.CurrentTerm, Is.EqualTo(1));
+            Assert.That(a.IsFollower, Is.True);
+            Assert.That(b.IsFollower, Is.True);
+        });
+
+        ElectionTimeout(c);
+        ElectionThreshold(d);
+        Communicate(a, b, c, d);
+        Assert.Multiple(() => {
+            Assert.That(c.CurrentTerm, Is.EqualTo(2));
+            Assert.That(c.IsLeader, Is.True);
+            Assert.That(c.GetConfiguration().IsJoint, Is.False);
+            Assert.That(c.GetConfiguration().Current, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public void Replace2() {
+        // Configuration change {A, B, C} to {C, D, E}
+        // Check configuration changes when C_old and C_new have no common quorum,
+        // test leader change during configuration change
+        var fd = new DiscreteFailureDetector();
+        var log = new Log(new SnapshotDescriptor {
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID)
+        });
+        var a = CreateFollower(A_ID, log.Clone());
+        var b = CreateFollower(B_ID, log.Clone(), fd);
+        var c = CreateFollower(C_ID, log.Clone(), fd);
+        ElectionTimeout(a);
+        Communicate(a, b, c);
+        Assert.That(a.IsLeader, Is.True);
+
+        var d = CreateFollower(D_ID, log.Clone());
+        var e = CreateFollower(E_ID, log.Clone());
+
+        a.AddEntry(Messages.ConfigFromIds(C_ID, D_ID, E_ID));
+        Communicate(a, b, c);
+
+        fd.MarkDead(A_ID);
+        ElectionTimeout(c);
+        Assert.That(c.IsCandidate, Is.True);
+
+        ElectionThreshold(b);
+        Communicate(b, c, d, e);
+        Assert.Multiple(() => {
+            Assert.That(a.IsLeader, Is.True);
+            Assert.That(a.CurrentTerm, Is.EqualTo(1));
+            Assert.That(b.IsFollower, Is.True);
+            Assert.That(c.IsLeader, Is.True);
+            Assert.That(d.IsFollower, Is.True);
+            Assert.That(e.IsFollower, Is.True);
+            Assert.That(c.CurrentTerm, Is.GreaterThanOrEqualTo(2));
+            Assert.That(c.GetConfiguration().IsJoint(), Is.False);
+            Assert.That(c.GetConfiguration().Current, Has.Count.EqualTo(3));
+        });
     }
 }
