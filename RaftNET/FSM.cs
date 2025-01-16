@@ -15,7 +15,6 @@ namespace RaftNET;
 public partial class FSM {
     public const long ElectionTimeout = 10;
     private readonly ulong _myID;
-    private readonly Log _log;
     private readonly Config _config;
     private readonly LogicalClock _clock = new();
     private readonly IFailureDetector _failureDetector;
@@ -47,7 +46,7 @@ public partial class FSM {
         _myID = id;
         CurrentTerm = currentTerm;
         _votedFor = votedFor;
-        _log = log;
+        Log = log;
         _failureDetector = failureDetector;
         _config = config;
         _smEvents = smEvents;
@@ -57,13 +56,13 @@ public partial class FSM {
             throw new ArgumentException("raft::fsm: raft instance cannot have id zero", nameof(id));
         }
 
-        _commitIdx = _log.GetSnapshot().Idx;
+        _commitIdx = Log.GetSnapshot().Idx;
         _observed.Advance(this);
         _commitIdx = ulong.Max(_commitIdx, commitIdx);
         _logger.LogTrace("[{}] FSM() starting, current_term={} log_length={} commit_idx={}", _myID, CurrentTerm,
-            _log.LastIdx(), _commitIdx);
+            Log.LastIdx(), _commitIdx);
 
-        if (_log.GetConfiguration().Current.Count == 1 && _log.GetConfiguration().CanVote(_myID)) {
+        if (Log.GetConfiguration().Current.Count == 1 && Log.GetConfiguration().CanVote(_myID)) {
             BecomeCandidate(_config.EnablePreVote);
         } else {
             ResetElectionTimeout();
@@ -85,9 +84,11 @@ public partial class FSM {
     protected Leader LeaderState => _state.AsT2;
     public Role Role => IsFollower ? Role.Follower : IsLeader ? Role.Leader : Role.Candidate;
 
+    public Log Log { get; }
+
     public bool HasOutput() {
-        _logger.LogTrace("[{}] FSM.HasOutput() stable_idx={} last_idx={}", _myID, _log.StableIdx(), _log.LastIdx());
-        var diff = _log.LastIdx() - _log.StableIdx();
+        _logger.LogTrace("[{}] FSM.HasOutput() stable_idx={} last_idx={}", _myID, Log.StableIdx(), Log.LastIdx());
+        var diff = Log.LastIdx() - Log.StableIdx();
         return diff > 0 ||
                _output.StateChanged ||
                _messages.Count != 0 ||
@@ -97,7 +98,7 @@ public partial class FSM {
     }
 
     public Output GetOutput() {
-        var diff = _log.LastIdx() - _log.StableIdx();
+        var diff = Log.LastIdx() - Log.StableIdx();
 
         if (IsLeader) {
             if (diff > 0) {
@@ -109,8 +110,8 @@ public partial class FSM {
         _output = new Output();
 
         if (diff > 0) {
-            for (var i = _log.StableIdx() + 1; i <= _log.LastIdx(); ++i) {
-                output.LogEntries.Add(_log[i]);
+            for (var i = Log.StableIdx() + 1; i <= Log.LastIdx(); ++i) {
+                output.LogEntries.Add(Log[i]);
             }
         }
 
@@ -121,11 +122,11 @@ public partial class FSM {
         // Return committed entries.
         // Observer commit index may be smaller than snapshot index,
         // in which case we should not attempt to commit entries belonging to a snapshot
-        var observedCommitIdx = ulong.Max(_observed.CommitIdx, _log.GetSnapshot().Idx);
+        var observedCommitIdx = ulong.Max(_observed.CommitIdx, Log.GetSnapshot().Idx);
 
         if (observedCommitIdx < _commitIdx) {
             for (var idx = observedCommitIdx + 1; idx <= _commitIdx; ++idx) {
-                var entry = _log[idx];
+                var entry = Log[idx];
                 output.Committed.Add(entry);
             }
         }
@@ -136,11 +137,11 @@ public partial class FSM {
         output.AbortLeadershipTransfer = _abortLeadershipTransfer;
         _abortLeadershipTransfer = false;
 
-        if (_observed.LastConfIdx != _log.LastConfIdx ||
-            _observed.CurrentTerm != _log.LastTerm() &&
-            _observed.LastTerm != _log.LastTerm()) {
+        if (_observed.LastConfIdx != Log.LastConfIdx ||
+            _observed.CurrentTerm != Log.LastTerm() &&
+            _observed.LastTerm != Log.LastTerm()) {
             output.Configuration = new HashSet<ConfigMember>();
-            var lastLogConf = _log.GetConfiguration();
+            var lastLogConf = Log.GetConfiguration();
 
             foreach (var member in lastLogConf.Previous) {
                 output.Configuration.Add(member);
@@ -209,10 +210,10 @@ public partial class FSM {
             // unusable, such as transitioning to an empty configuration or
             // one with no voters.
             Messages.CheckConfiguration(command.AsT2.Current);
-            if (_log.LastConfIdx > _commitIdx || _log.GetConfiguration().IsJoint()) {
+            if (Log.LastConfIdx > _commitIdx || Log.GetConfiguration().IsJoint()) {
                 _logger.LogTrace("[{}] A{}configuration change at index {} is not yet committed (config {}) (commit_idx: {})",
-                    _myID, _log.GetConfiguration().IsJoint() ? " joint " : " ",
-                    _log.LastConfIdx, _log.GetConfiguration(), _commitIdx);
+                    _myID, Log.GetConfiguration().IsJoint() ? " joint " : " ",
+                    Log.LastConfIdx, Log.GetConfiguration(), _commitIdx);
                 throw new ConfigurationChangeInProgressException();
             }
             // 4.3. Arbitrary configuration changes using joint consensus
@@ -222,28 +223,28 @@ public partial class FSM {
             // configuration for joint consensus (C_old,new) as a log
             // entry and replicates that entry using the normal Raft
             // mechanism.
-            var tmp = _log.GetConfiguration().Clone();
+            var tmp = Log.GetConfiguration().Clone();
             tmp.EnterJoint(command.AsT2.Current);
             command = tmp;
 
-            _logger.LogTrace("[{}] appending joint config entry at {}: {}", _myID, _log.NextIdx(), command);
+            _logger.LogTrace("[{}] appending joint config entry at {}: {}", _myID, Log.NextIdx(), command);
         }
 
-        var logEntry = new LogEntry { Term = CurrentTerm, Idx = _log.NextIdx() };
+        var logEntry = new LogEntry { Term = CurrentTerm, Idx = Log.NextIdx() };
         command.Switch(
             _ => { logEntry.Dummy = new Void(); },
             buffer => { logEntry.Command = new Command { Buffer = ByteString.CopyFrom(buffer) }; },
             config => { logEntry.Configuration = config; }
         );
         _logger.LogInformation("[{}] AddEntry() idx={} term={}", _myID, logEntry.Idx, logEntry.Term);
-        _log.Add(logEntry);
+        Log.Add(logEntry);
         _smEvents.Signal();
 
         if (isConfig) {
-            LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
+            LeaderState.Tracker.SetConfiguration(Log.GetConfiguration(), Log.LastIdx());
         }
 
-        return _log[_log.LastIdx()];
+        return Log[Log.LastIdx()];
     }
 
     public void Step(ulong from, VoteRequest msg) {
@@ -303,7 +304,7 @@ public partial class FSM {
                     new AppendResponse {
                         CurrentTerm = CurrentTerm,
                         CommitIdx = _commitIdx,
-                        Rejected = new AppendRejected { LastIdx = _log.LastIdx(), NonMatchingIdx = 0 }
+                        Rejected = new AppendRejected { LastIdx = Log.LastIdx(), NonMatchingIdx = 0 }
                     });
             } else if (msg.IsInstallSnapshot) {
                 SendTo(from, new SnapshotResponse { CurrentTerm = CurrentTerm, Success = false });
@@ -329,7 +330,9 @@ public partial class FSM {
                 _lastElectionTime = _clock.Now();
 
                 if (CurrentLeader != from) {
-                    throw new UnexpectedLeaderException(from, CurrentLeader);
+                    _logger.LogError(
+                        "Got append request/install snapshot/read_quorum from an unexpected leader {from}, expected {currentLeader}",
+                        from, CurrentLeader);
                 }
             }
         }
@@ -414,7 +417,7 @@ public partial class FSM {
         LeaderState.LogLimiter.Consume(_config.MaxLogSize);
 
         foreach (var (_, progress) in LeaderState.Tracker.FollowerProgresses) {
-            if (progress.Id != _myID && progress.CanVote && progress.MatchIdx == _log.LastIdx()) {
+            if (progress.Id != _myID && progress.CanVote && progress.MatchIdx == Log.LastIdx()) {
                 SendTimeoutNow(progress.Id);
                 break;
             }
@@ -428,7 +431,7 @@ public partial class FSM {
             _myID, CurrentTerm, snapshot.Term, snapshot.Idx, snapshot.Id, local);
         Debug.Assert(local && snapshot.Idx <= _observed.CommitIdx || !local && IsFollower);
 
-        var currentSnapshot = _log.GetSnapshot();
+        var currentSnapshot = Log.GetSnapshot();
         if (snapshot.Idx <= currentSnapshot.Idx || !local && snapshot.Idx <= _commitIdx) {
             _logger.LogError("[{}] ApplySnapshot() ignore outdated snapshot {}/{} current one is {}/{}, commit_idx={}",
                 _myID, snapshot.Id, snapshot.Idx, currentSnapshot.Id, currentSnapshot.Idx, _commitIdx);
@@ -439,8 +442,8 @@ public partial class FSM {
         _output.SnapshotsToDrop.Add(currentSnapshot.Id);
 
         _commitIdx = ulong.Max(_commitIdx, snapshot.Idx);
-        var (units, newFirstIndex) = _log.ApplySnapshot(snapshot, maxTrailingEntries, maxTrailingBytes);
-        currentSnapshot = _log.GetSnapshot();
+        var (units, newFirstIndex) = Log.ApplySnapshot(snapshot, maxTrailingEntries, maxTrailingBytes);
+        currentSnapshot = Log.GetSnapshot();
         _output.Snapshot = new AppliedSnapshot(
             currentSnapshot,
             local,
@@ -455,7 +458,7 @@ public partial class FSM {
     }
 
     public Configuration GetConfiguration() {
-        return _log.GetConfiguration();
+        return Log.GetConfiguration();
     }
 
     private void Replicate() {
@@ -469,8 +472,8 @@ public partial class FSM {
     }
 
     private void AdvanceStableIdx(ulong idx) {
-        var prevStableIdx = _log.StableIdx();
-        _log.StableTo(idx);
+        var prevStableIdx = Log.StableIdx();
+        Log.StableTo(idx);
         _logger.LogTrace("[{}] AdvanceStableIdx() prev_stable_idx={} idx={}", _myID, prevStableIdx, idx);
 
         if (IsLeader) {
@@ -489,10 +492,10 @@ public partial class FSM {
             return;
         }
 
-        var committedConfChange = _commitIdx < _log.LastConfIdx && newCommitIdx >= _log.LastConfIdx;
+        var committedConfChange = _commitIdx < Log.LastConfIdx && newCommitIdx >= Log.LastConfIdx;
 
-        if (_log[newCommitIdx].Term != CurrentTerm) {
-            _logger.LogTrace("[{}] MaybeCommit() cannot commit, because term {} != {}", _myID, _log[newCommitIdx].Term,
+        if (Log[newCommitIdx].Term != CurrentTerm) {
+            _logger.LogTrace("[{}] MaybeCommit() cannot commit, because term {} != {}", _myID, Log[newCommitIdx].Term,
                 CurrentTerm);
             return;
         }
@@ -502,14 +505,14 @@ public partial class FSM {
         _smEvents.Signal();
 
         if (committedConfChange) {
-            _logger.LogTrace("[{}] MaybeCommit() committed conf change at idx {} (config: {})", _myID, _log.LastConfIdx,
-                _log.GetConfiguration());
-            if (_log.GetConfiguration().IsJoint()) {
-                var cfg = _log.GetConfiguration();
+            _logger.LogTrace("[{}] MaybeCommit() committed conf change at idx {} (config: {})", _myID, Log.LastConfIdx,
+                Log.GetConfiguration());
+            if (Log.GetConfiguration().IsJoint()) {
+                var cfg = Log.GetConfiguration();
                 cfg.LeaveJoint();
-                _logger.LogTrace("[{}] MaybeCommit() appending non-joint config entry at {}: {}", _myID, _log.NextIdx(), cfg);
-                _log.Add(new LogEntry { Term = CurrentTerm, Idx = _log.NextIdx(), Configuration = cfg });
-                LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
+                _logger.LogTrace("[{}] MaybeCommit() appending non-joint config entry at {}: {}", _myID, Log.NextIdx(), cfg);
+                Log.Add(new LogEntry { Term = CurrentTerm, Idx = Log.NextIdx(), Configuration = cfg });
+                LeaderState.Tracker.SetConfiguration(Log.GetConfiguration(), Log.LastIdx());
                 MaybeCommit();
             } else {
                 var lp = LeaderState.Tracker.Find(_myID);
@@ -522,7 +525,7 @@ public partial class FSM {
     }
 
     private bool HasStableLeader() {
-        var cfg = _log.GetConfiguration();
+        var cfg = Log.GetConfiguration();
         var currentLeader = CurrentLeader;
         return currentLeader > 0 && cfg.CanVote(currentLeader) && _failureDetector.IsAlive(currentLeader);
     }
@@ -591,12 +594,12 @@ public partial class FSM {
         Debug.Assert(!IsLeader);
         _output.StateChanged = true;
         _state = new State(new Leader(_config.MaxLogSize));
-        LeaderState.LogLimiter.Consume(_log.MemoryUsage());
+        LeaderState.LogLimiter.Consume(Log.MemoryUsage());
         _lastElectionTime = _clock.Now();
         _pingLeader = false;
         AddEntry(new Dummy());
-        LeaderState.Tracker.SetConfiguration(_log.GetConfiguration(), _log.LastIdx());
-        _logger.LogTrace("[{}] BecomeLeader() stable_idx={} last_idx={}", _myID, _log.StableIdx(), _log.LastIdx());
+        LeaderState.Tracker.SetConfiguration(Log.GetConfiguration(), Log.LastIdx());
+        _logger.LogTrace("[{}] BecomeLeader() stable_idx={} last_idx={}", _myID, Log.StableIdx(), Log.LastIdx());
     }
 
     private void BecomeCandidate(bool isPreVote, bool isLeadershipTransfer = false) {
@@ -607,7 +610,7 @@ public partial class FSM {
         if (_state.IsLeader) {
             _state.Leader.Cancel();
         }
-        _state = new State(new Candidate(_log.GetConfiguration(), isPreVote));
+        _state = new State(new Candidate(Log.GetConfiguration(), isPreVote));
 
         ResetElectionTimeout();
 
@@ -616,12 +619,12 @@ public partial class FSM {
         var voters = votes.Voters;
 
         if (voters.All(x => x.ServerId != _myID)) {
-            if (_log.LastConfIdx <= _commitIdx) {
+            if (Log.LastConfIdx <= _commitIdx) {
                 BecomeFollower(0);
                 return;
             }
 
-            var prevConfig = _log.GetPreviousConfiguration();
+            var prevConfig = Log.GetPreviousConfiguration();
             Debug.Assert(prevConfig != null);
 
             if (!prevConfig.CanVote(_myID)) {
@@ -648,7 +651,7 @@ public partial class FSM {
             }
 
             _logger.LogTrace("{} [term: {}, index: {}, last log term: {}{}{}] sent vote request to {}",
-                _myID, term, _log.LastIdx(), _log.LastTerm(), isPreVote ? ", prevote" : "",
+                _myID, term, Log.LastIdx(), Log.LastTerm(), isPreVote ? ", prevote" : "",
                 isLeadershipTransfer ? ", force" : "", server.ServerId);
 
             SendTo(server.ServerId,
@@ -656,8 +659,8 @@ public partial class FSM {
                     CurrentTerm = term,
                     Force = isLeadershipTransfer,
                     IsPreVote = isPreVote,
-                    LastLogIdx = _log.LastIdx(),
-                    LastLogTerm = _log.LastTerm()
+                    LastLogIdx = Log.LastIdx(),
+                    LastLogTerm = Log.LastTerm()
                 });
         }
 
@@ -680,7 +683,7 @@ public partial class FSM {
 
     private void ResetElectionTimeout() {
         Debug.Assert(_random.Value != null);
-        var upper = long.Max(ElectionTimeout, _log.GetConfiguration().Current.Count);
+        var upper = long.Max(ElectionTimeout, Log.GetConfiguration().Current.Count);
         _randomizedElectionTimeout = ElectionTimeout + _random.Value.NextInt64(1, upper);
     }
 
@@ -716,10 +719,10 @@ public partial class FSM {
                         throw new ArgumentOutOfRangeException();
                 }
 
-                if (progress.MatchIdx < _log.LastIdx() || progress.CommitIdx < _commitIdx) {
+                if (progress.MatchIdx < Log.LastIdx() || progress.CommitIdx < _commitIdx) {
                     _logger.LogTrace(
                         "tick[{}]: replicate to {} because match={} < last_idx={} || follower commit_idx={} < commit_idx={}",
-                        _myID, progress.Id, progress.MatchIdx, _log.LastIdx(),
+                        _myID, progress.Id, progress.MatchIdx, Log.LastIdx(),
                         progress.CommitIdx, _commitIdx);
                     ReplicateTo(progress, true);
                 }
@@ -755,7 +758,7 @@ public partial class FSM {
         while (progress.CanSendTo()) {
             var nextIdx = progress.NextIdx;
 
-            if (progress.NextIdx > _log.LastIdx()) {
+            if (progress.NextIdx > Log.LastIdx()) {
                 nextIdx = 0;
 
                 if (!allowEmpty) {
@@ -765,10 +768,10 @@ public partial class FSM {
 
             allowEmpty = false;
             var prevIdx = progress.NextIdx - 1;
-            var prevTerm = _log.TermFor(prevIdx);
+            var prevTerm = Log.TermFor(prevIdx);
 
             if (prevTerm == null) {
-                var snapshot = _log.GetSnapshot();
+                var snapshot = Log.GetSnapshot();
                 progress.BecomeSnapshot(snapshot.Idx);
                 SendTo(progress.Id, new InstallSnapshot { CurrentTerm = CurrentTerm, Snp = snapshot });
                 return;
@@ -781,8 +784,8 @@ public partial class FSM {
             if (nextIdx > 0) {
                 var size = 0;
 
-                while (nextIdx <= _log.LastIdx() && size < _config.AppendRequestThreshold) {
-                    var entry = _log[nextIdx];
+                while (nextIdx <= Log.LastIdx() && size < _config.AppendRequestThreshold) {
+                    var entry = Log[nextIdx];
                     req.Entries.Add(entry);
                     size += entry.EntrySize();
                     nextIdx++;
@@ -815,7 +818,7 @@ public partial class FSM {
             _votedFor == 0 && CurrentLeader == 0 ||
             request.IsPreVote && request.CurrentTerm > CurrentTerm;
 
-        if (canVote && _log.IsUpToUpdate(request.LastLogIdx, request.LastLogTerm)) {
+        if (canVote && Log.IsUpToUpdate(request.LastLogIdx, request.LastLogTerm)) {
             if (!request.IsPreVote) {
                 _lastElectionTime = _clock.Now();
                 _votedFor = from;
@@ -859,7 +862,7 @@ public partial class FSM {
     private void AppendEntries(ulong from, AppendRequest request) {
         Debug.Assert(IsFollower);
 
-        var matchResult = _log.MatchTerm(request.PrevLogIdx, request.PrevLogTerm);
+        var matchResult = Log.MatchTerm(request.PrevLogIdx, request.PrevLogTerm);
         var match = matchResult.Item1;
         var term = matchResult.Item2;
 
@@ -868,7 +871,7 @@ public partial class FSM {
                 new AppendResponse {
                     CurrentTerm = CurrentTerm,
                     CommitIdx = _commitIdx,
-                    Rejected = new AppendRejected { NonMatchingIdx = request.PrevLogIdx, LastIdx = _log.LastIdx() }
+                    Rejected = new AppendRejected { NonMatchingIdx = request.PrevLogIdx, LastIdx = Log.LastIdx() }
                 });
             return;
         }
@@ -876,7 +879,7 @@ public partial class FSM {
         var lastNewIdx = request.PrevLogIdx;
 
         if (request.Entries.Count > 0) {
-            lastNewIdx = _log.MaybeAppend(request.Entries);
+            lastNewIdx = Log.MaybeAppend(request.Entries);
         }
 
         AdvanceCommitIdx(ulong.Min(request.LeaderCommitIdx, lastNewIdx));
@@ -887,7 +890,7 @@ public partial class FSM {
     }
 
     private void AdvanceCommitIdx(ulong leaderCommitIdx) {
-        var newCommitIdx = ulong.Min(leaderCommitIdx, _log.LastIdx());
+        var newCommitIdx = ulong.Min(leaderCommitIdx, Log.LastIdx());
         _logger.LogTrace("[{}] AdvanceCommitIdx() leader_commit_idx={}, new_commit_idx={}",
             _myID, leaderCommitIdx, newCommitIdx);
         if (newCommitIdx > _commitIdx) {
@@ -924,7 +927,7 @@ public partial class FSM {
             if (LeaderState.StepDown != null &&
                 LeaderState.TimeoutNowSent == null &&
                 progress.CanVote &&
-                progress.MatchIdx == _log.LastIdx()) {
+                progress.MatchIdx == Log.LastIdx()) {
                 SendTimeoutNow(progress.Id);
 
                 if (!IsLeader) {
@@ -990,13 +993,13 @@ public partial class FSM {
     }
 
     protected Log GetLog() {
-        return _log;
+        return Log;
     }
 
     public ulong Id => _myID;
 
-    public int InMemoryLogSize => _log.InMemorySize();
-    public int LogMemoryUsage => _log.MemoryUsage();
-    public ulong LogLastIdx => _log.LastIdx();
-    public ulong LogLastTerm => _log.LastTerm();
+    public int InMemoryLogSize => Log.InMemorySize();
+    public int LogMemoryUsage => Log.MemoryUsage();
+    public ulong LogLastIdx => Log.LastIdx();
+    public ulong LogLastTerm => Log.LastTerm();
 }

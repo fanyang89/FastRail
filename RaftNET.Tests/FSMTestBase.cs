@@ -95,11 +95,21 @@ public class FSMTestBase : RaftTestBase {
         return null;
     }
 
-    private static bool Deliver(Dictionary<ulong, FSM> routes, ulong from, ToMessage m) {
+    protected static bool Deliver(Dictionary<ulong, FSM> routes, ulong from, ToMessage m) {
         if (!routes.TryGetValue(m.To, out var to)) {
             return false;
         }
         to.Step(from, m.Message);
         return true;
+    }
+
+    protected static void Deliver(Dictionary<ulong, FSM> routes, ulong from, IList<ToMessage> messages) {
+        foreach (var message in messages) {
+            Deliver(routes, from, message);
+        }
+    }
+
+    protected bool RollDice(float probability = 0.5f) {
+        return Random.Shared.NextSingle() < probability;
     }
 }
