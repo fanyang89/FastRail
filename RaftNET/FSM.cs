@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Text;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -220,6 +221,10 @@ public partial class FSM {
                 }
             }
         }
+    }
+
+    public LogEntry AddEntry(string command) {
+        return AddEntry(Encoding.UTF8.GetBytes(command));
     }
 
     public LogEntry AddEntry(OneOf<Void, byte[], Configuration> command) {
