@@ -111,4 +111,19 @@ public class FSMTestBase : RaftTestBase {
     protected bool RollDice(float probability = 0.5f) {
         return Random.Shared.NextSingle() < probability;
     }
+
+    protected static bool CompareLogEntries(Log log1, Log log2, ulong from, ulong to) {
+        Debug.Assert(to <= log1.LastIdx());
+        Debug.Assert(to <= log2.LastIdx());
+        for (var i = from; i < to; i++) {
+            if (!CompareLogEntry(log1[i], log2[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    protected static bool CompareLogEntry(LogEntry le1, LogEntry le2) {
+        return le1.Term == le2.Term && le1.Idx == le2.Idx && le1.DataCase == le2.DataCase;
+    }
 }

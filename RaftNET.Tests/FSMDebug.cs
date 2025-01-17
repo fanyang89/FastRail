@@ -26,4 +26,8 @@ public class FSMDebug(
         Debug.Assert(IsLeader);
         return LeaderState.StepDown != null;
     }
+
+    public new void BecomeFollower(ulong leader) {
+        base.BecomeFollower(leader);
+    }
 }
