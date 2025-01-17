@@ -2,7 +2,7 @@
 
 public class ByteArrayUtilTest {
     [Test]
-    public void ConcatByteBuffers() {
+    public void TestConcatByteBuffers() {
         var keyLogEntryPrefix = "/log/"u8.ToArray();
         var buf = ByteArrayUtil.Concat(keyLogEntryPrefix, 0x12345678);
         Assert.That(buf, Is.EqualTo("/log/\x00\x00\x00\x00\x12\x34\x56\x78"u8.ToArray()));
@@ -12,7 +12,7 @@ public class ByteArrayUtilTest {
     }
 
     [Test]
-    public void GetIdx() {
+    public void TestGetIdx() {
         Assert.That(
             ByteArrayUtil.GetIdx(
                 "/log/\x00\x00\x00\x00\x12\x34\x56\x78"u8.ToArray(),
