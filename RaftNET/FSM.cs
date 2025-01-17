@@ -1008,6 +1008,11 @@ public partial class FSM {
         return Log;
     }
 
+    public void PingLeader() {
+        Debug.Assert(CurrentLeader == 0);
+        _pingLeader = true;
+    }
+
     public ulong Id => _myID;
 
     public int InMemoryLogSize => Log.InMemorySize();
