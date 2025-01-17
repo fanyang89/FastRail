@@ -322,5 +322,57 @@ public class LeaderTransferTest : FSMTestBase {
     }
 
     [Test]
-    public void test_leader_transfer_lost_force_vote_request() {}
+    public void TestLeaderTransferLostForceVoteRequest() {
+        var log = new Log(new SnapshotDescriptor {
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID)
+        });
+        var a = CreateFollower(A_ID, log.Clone());
+        var b = CreateFollower(B_ID, log.Clone());
+        var c = CreateFollower(C_ID, log.Clone());
+
+        var map = new Dictionary<ulong, FSM> {
+            { A_ID, a },
+            { B_ID, b },
+            { C_ID, c },
+        };
+
+        ElectionTimeout(a);
+        Communicate(a, b, c);
+        Assert.That(a.IsLeader, Is.True);
+
+        var newCfg = Messages.ConfigFromIds(B_ID, C_ID);
+        a.AddEntry(newCfg);
+
+        CommunicateUntil(() => !a.IsLeader, a, b, c);
+        map.Remove(A_ID);
+
+        var output = a.GetOutput();
+        Assert.That(output.Messages, Has.Count.EqualTo(1));
+        Assert.That(output.Messages.Last().Message.IsTimeoutNowRequest, Is.True);
+        var timeoutNowTargetId = output.Messages.Last().To;
+        var timeoutNowMessage = output.Messages.Last().Message;
+
+        var timeoutNowTarget = map[timeoutNowTargetId];
+        timeoutNowTarget.Step(A_ID, timeoutNowMessage);
+        output = timeoutNowTarget.GetOutput();
+        Assert.That(output.Messages, Has.Count.EqualTo(1));
+        Assert.That(output.Messages.Last().Message.IsVoteRequest, Is.True);
+        var voteRequest1 = output.Messages.First().Message.VoteRequest;
+        Assert.That(voteRequest1.Force, Is.True);
+
+        ElectionTimeout(timeoutNowTarget);
+        output = timeoutNowTarget.GetOutput();
+        Assert.That(output.Messages, Has.Count.EqualTo(1));
+        Assert.That(output.Messages.Last().Message.IsVoteRequest, Is.True);
+        var voteRequest1Regular = output.Messages.First().Message.VoteRequest;
+        var voteRequest1RegularTarget = output.Messages.First().To;
+        Assert.That(voteRequest1Regular.Force, Is.False);
+
+        ElectionThreshold(map[voteRequest1RegularTarget]);
+        map[voteRequest1RegularTarget].Step(timeoutNowTargetId, voteRequest1Regular);
+
+        Communicate(b, c);
+        var finalLeader = SelectLeader(b, c);
+        Assert.That(finalLeader.Id, Is.EqualTo(timeoutNowTargetId));
+    }
 }
