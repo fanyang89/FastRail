@@ -85,14 +85,13 @@ public class FSMTestBase : RaftTestBase {
         } while (hasTraffic);
     }
 
-    protected FSM SelectLeader(params FSM[] fsmList) {
+    protected static FSM SelectLeader(params FSM[] fsmList) {
         foreach (var fsm in fsmList) {
             if (fsm.IsLeader) {
                 return fsm;
             }
         }
-        Debug.Assert(false);
-        return null;
+        throw new UnreachableException("No leader");
     }
 
     protected static bool Deliver(Dictionary<ulong, FSM> routes, ulong from, ToMessage m) {

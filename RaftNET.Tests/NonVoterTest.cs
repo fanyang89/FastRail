@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Records;
 using RaftNET.Replication;
@@ -5,6 +6,13 @@ using RaftNET.Replication;
 namespace RaftNET.Tests;
 
 public class NonVoterTest : FSMTestBase {
+    private ILogger<NonVoterTest> _logger;
+
+    [SetUp]
+    public new void Setup() {
+        _logger = LoggerFactory.CreateLogger<NonVoterTest>();
+    }
+
     [Test]
     public void TestNonVoterStaysPipeline() {
         // Check that a node stays in PIPELINE mode through configuration changes
@@ -389,7 +397,7 @@ public class NonVoterTest : FSMTestBase {
         ElectionTimeout(first);
         ElectionThreshold(second);
 
-        Communicate(b, c, d);
+        CommunicateImpl(() => false, map);
         var finalLeader = SelectLeader(b, c, d);
         Assert.That(finalLeader.Id == first.Id || finalLeader.Id == second.Id, Is.True);
     }

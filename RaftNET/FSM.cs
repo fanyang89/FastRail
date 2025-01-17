@@ -346,7 +346,7 @@ public partial class FSM {
 
     public void Step(ulong from, Leader leader, Message message) {
         message.Switch(
-            voteRequest => { RequestVote(from, voteRequest); },
+            voteRequest => { HandleVoteRequest(from, voteRequest); },
             voteResponse => {
                 // ignored
             },
@@ -364,8 +364,8 @@ public partial class FSM {
 
     public void Step(ulong from, Candidate candidate, Message message) {
         message.Switch(
-            voteRequest => { RequestVote(from, voteRequest); },
-            voteResponse => { RequestVoteResponse(from, voteResponse); },
+            voteRequest => { HandleVoteRequest(from, voteRequest); },
+            voteResponse => { HandleVoteResponse(from, voteResponse); },
             appendRequest => {
                 // ignored
             },
@@ -384,7 +384,7 @@ public partial class FSM {
 
     public void Step(ulong from, Follower follower, Message message) {
         message.Switch(
-            voteRequest => { RequestVote(from, voteRequest); },
+            voteRequest => { HandleVoteRequest(from, voteRequest); },
             voteResponse => {
                 // ignored
             },
@@ -599,7 +599,7 @@ public partial class FSM {
         _pingLeader = false;
         AddEntry(new Dummy());
         LeaderState.Tracker.SetConfiguration(Log.GetConfiguration(), Log.LastIdx());
-        _logger.LogTrace("[{}] BecomeLeader() stable_idx={} last_idx={}", _myID, Log.StableIdx(), Log.LastIdx());
+        _logger.LogInformation("[{}] BecomeLeader() stable_idx={} last_idx={}", _myID, Log.StableIdx(), Log.LastIdx());
     }
 
     private void BecomeCandidate(bool isPreVote, bool isLeadershipTransfer = false) {
@@ -650,9 +650,9 @@ public partial class FSM {
                 continue;
             }
 
-            _logger.LogTrace("{} [term: {}, index: {}, last log term: {}{}{}] sent vote request to {}",
-                _myID, term, Log.LastIdx(), Log.LastTerm(), isPreVote ? ", prevote" : "",
-                isLeadershipTransfer ? ", force" : "", server.ServerId);
+            _logger.LogTrace(
+                "[{}] BecomeCandidate() send vote request to {}, term={} idx={} last_log_term={} pre_vote={} force={}",
+                _myID, server.ServerId, term, Log.LastIdx(), Log.LastTerm(), isPreVote, isLeadershipTransfer);
 
             SendTo(server.ServerId,
                 new VoteRequest {
@@ -666,10 +666,10 @@ public partial class FSM {
 
         if (votes.CountVotes() == VoteResult.Won) {
             if (isPreVote) {
-                _logger.LogTrace("[{}] BecomeCandidate() won prevote", _myID);
+                _logger.LogInformation("[{}] BecomeCandidate() won pre-vote", _myID);
                 BecomeCandidate(false);
             } else {
-                _logger.LogTrace("[{}] BecomeCandidate() won vote", _myID);
+                _logger.LogInformation("[{}] BecomeCandidate() won vote", _myID);
                 BecomeLeader();
             }
         }
@@ -811,36 +811,45 @@ public partial class FSM {
         }
     }
 
-    private void RequestVote(ulong from, VoteRequest request) {
+    private void HandleVoteRequest(ulong from, VoteRequest request) {
         Debug.Assert(request.IsPreVote || CurrentTerm == request.CurrentTerm);
         var canVote =
             _votedFor == from ||
             _votedFor == 0 && CurrentLeader == 0 ||
             request.IsPreVote && request.CurrentTerm > CurrentTerm;
 
+        VoteResponse response;
         if (canVote && Log.IsUpToUpdate(request.LastLogIdx, request.LastLogTerm)) {
             if (!request.IsPreVote) {
                 _lastElectionTime = _clock.Now();
                 _votedFor = from;
             }
 
-            SendTo(from,
-                new VoteResponse { CurrentTerm = request.CurrentTerm, IsPreVote = request.IsPreVote, VoteGranted = true });
+            response = new VoteResponse {
+                CurrentTerm = request.CurrentTerm,
+                IsPreVote = request.IsPreVote,
+                VoteGranted = true
+            };
         } else {
-            SendTo(from,
-                new VoteResponse { CurrentTerm = CurrentTerm, IsPreVote = request.IsPreVote, VoteGranted = false });
+            response = new VoteResponse {
+                CurrentTerm = CurrentTerm,
+                IsPreVote = request.IsPreVote,
+                VoteGranted = false
+            };
         }
+        _logger.LogInformation("[{}] RequestVote() respond to {}, response={}", _myID, from, response);
+        SendTo(from, response);
     }
 
-    private void RequestVoteResponse(ulong from, VoteResponse rsp) {
+    private void HandleVoteResponse(ulong from, VoteResponse response) {
         Debug.Assert(IsCandidate);
         var state = CandidateState;
 
-        if (state.IsPreVote != rsp.IsPreVote) {
+        if (state.IsPreVote != response.IsPreVote) {
             return;
         }
 
-        state.Votes.RegisterVote(from, rsp.VoteGranted);
+        state.Votes.RegisterVote(from, response.VoteGranted);
 
         switch (state.Votes.CountVotes()) {
             case VoteResult.Unknown:
@@ -851,11 +860,12 @@ public partial class FSM {
                 } else {
                     BecomeLeader();
                 }
-
                 break;
             case VoteResult.Lost:
                 BecomeFollower(0);
                 break;
+            default:
+                throw new UnreachableException();
         }
     }
 
