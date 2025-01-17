@@ -4,9 +4,10 @@ using OneOf;
 namespace RaftNET.Records;
 
 public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshot, SnapshotResponse,
-    TimeoutNowRequest> {
+    TimeoutNowRequest, ReadQuorumRequest, ReadQuorumResponse> {
     public Message(
-        OneOf<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshot, SnapshotResponse, TimeoutNowRequest>
+        OneOf<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshot, SnapshotResponse, TimeoutNowRequest,
+                ReadQuorumRequest, ReadQuorumResponse>
             input
     ) : base(input) {}
 
@@ -17,10 +18,14 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
     public Message(InstallSnapshot request) : base(request) {}
     public Message(SnapshotResponse request) : base(request) {}
     public Message(TimeoutNowRequest request) : base(request) {}
+    public Message(ReadQuorumRequest request) : base(request) {}
+    public Message(ReadQuorumResponse request) : base(request) {}
 
     public ulong CurrentTerm {
         get {
             return Match(
+                x => x.CurrentTerm,
+                x => x.CurrentTerm,
                 x => x.CurrentTerm,
                 x => x.CurrentTerm,
                 x => x.CurrentTerm,
@@ -81,17 +86,27 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
         }
     }
 
+    public ReadQuorumRequest ReadQuorumRequest {
+        get {
+            Debug.Assert(IsReadQuorumRequest);
+            return AsT7;
+        }
+    }
+
+    public ReadQuorumResponse ReadQuorumResponse {
+        get {
+            Debug.Assert(IsReadQuorumResponse);
+            return AsT8;
+        }
+    }
+
     public bool IsVoteRequest => IsT0;
-
     public bool IsVoteResponse => IsT1;
-
     public bool IsAppendRequest => IsT2;
-
     public bool IsAppendResponse => IsT3;
-
     public bool IsInstallSnapshot => IsT4;
-
     public bool IsSnapshotResponse => IsT5;
-
     public bool IsTimeoutNowRequest => IsT6;
+    public bool IsReadQuorumRequest => IsT7;
+    public bool IsReadQuorumResponse => IsT8;
 }

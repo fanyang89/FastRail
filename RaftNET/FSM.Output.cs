@@ -12,7 +12,7 @@ public partial class FSM {
         public bool AbortLeadershipTransfer { get; set; }
         public ISet<ConfigMember>? Configuration { get; set; }
         public IList<ulong> SnapshotsToDrop { get; set; } = new List<ulong>();
-
         public AppliedSnapshot? Snapshot { get; set; }
+        public ulong? MaxReadIdWithQuorum { get; set; }
     }
 }

@@ -12,6 +12,8 @@ service Raft {
   rpc RespondSendSnapshot(SnapshotResponse) returns (Void);
   rpc TimeoutNow(TimeoutNowRequest) returns (Void);
   rpc Ping(PingRequest) returns (PingResponse);
+  rpc ReadQuorum(ReadQuorumRequest) returns (Void);
+  rpc RespondReadQuorum(ReadQuorumResponse) returns (Void);
 }
 
 message Void {}
@@ -149,7 +151,7 @@ message TimeoutNowRequest {
   uint64 current_term = 1;
 }
 
-message ReadQuorum {
+message ReadQuorumRequest {
   // The leader's term.
   uint64 current_term = 1;
   // The leader's commit index. Has the same semantics
@@ -159,7 +161,7 @@ message ReadQuorum {
   uint64 id = 3;
 };
 
-message ReadQuorumReply {
+message ReadQuorumResponse {
   // The leader's term, as sent in the read_quorum request.
   // read_id is only valid (and unique) within a given term.
   uint64 current_term = 1;

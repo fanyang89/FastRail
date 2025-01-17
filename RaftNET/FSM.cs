@@ -90,17 +90,24 @@ public partial class FSM {
         _logger.LogTrace("[{}] FSM.HasOutput() stable_idx={} last_idx={}", _myID, Log.StableIdx(), Log.LastIdx());
         var diff = Log.LastIdx() - Log.StableIdx();
         return diff > 0 ||
-               _output.StateChanged ||
                _messages.Count != 0 ||
                !_observed.Equals(this) ||
+               _output.MaxReadIdWithQuorum.HasValue ||
+               IsLeader && LeaderState.LastReadIdChanged ||
                _output.Snapshot != null ||
-               _output.SnapshotsToDrop.Any();
+               _output.SnapshotsToDrop.Any() ||
+               _output.StateChanged;
     }
 
     public Output GetOutput() {
         var diff = Log.LastIdx() - Log.StableIdx();
 
         if (IsLeader) {
+            if (LeaderState.LastReadIdChanged) {
+                BroadcastReadQuorum(LeaderState.LastReadId);
+                LeaderState.LastReadIdChanged = false;
+            }
+
             if (diff > 0) {
                 Replicate();
             }
@@ -159,6 +166,27 @@ public partial class FSM {
         }
 
         return output;
+    }
+
+    private void BroadcastReadQuorum(ulong readId) {
+        _logger.LogTrace("[{}] BroadcastReadQuorum() send read id {}", _myID, readId);
+        foreach (var (_, p) in LeaderState.Tracker.FollowerProgresses) {
+            if (!p.CanVote) continue;
+
+            if (p.Id == _myID) {
+                HandleReadQuorumResponse(_myID, new ReadQuorumResponse {
+                    CurrentTerm = CurrentTerm,
+                    CommitIdx = _commitIdx,
+                    Id = readId
+                });
+            } else {
+                SendTo(p.Id, new ReadQuorumRequest {
+                    CurrentTerm = CurrentTerm,
+                    LeaderCommitIdx = Math.Min(p.MatchIdx, _commitIdx),
+                    Id = readId
+                });
+            }
+        }
     }
 
     public void Tick() {
@@ -275,14 +303,26 @@ public partial class FSM {
         Step(from, new Message(msg));
     }
 
+    public void Step(ulong from, ReadQuorumRequest msg) {
+        Step(from, new Message(msg));
+    }
+
+    public void Step(ulong from, ReadQuorumResponse msg) {
+        Step(from, new Message(msg));
+    }
+
     public void Step(ulong from, Message msg) {
         Debug.Assert(from != _myID, "fsm cannot process messages from itself");
 
         if (msg.CurrentTerm > CurrentTerm) {
             ulong leader = 0;
 
-            if (msg.IsAppendRequest || msg.IsInstallSnapshot) {
+            if (msg.IsAppendRequest || msg.IsInstallSnapshot || msg.IsReadQuorumRequest) {
                 leader = from;
+            } else if (msg.IsReadQuorumResponse) {
+                _logger.LogError("[{}] ignore read barrier response with higher term={} current_term={}", _myID,
+                    msg.CurrentTerm, CurrentTerm);
+                return;
             }
 
             var ignoreTerm = false;
@@ -299,7 +339,7 @@ public partial class FSM {
                 UpdateCurrentTerm(msg.CurrentTerm);
             }
         } else if (msg.CurrentTerm < CurrentTerm) {
-            if (msg.IsAppendRequest) {
+            if (msg.IsAppendRequest || msg.IsReadQuorumRequest) {
                 SendTo(from,
                     new AppendResponse {
                         CurrentTerm = CurrentTerm,
@@ -319,7 +359,7 @@ public partial class FSM {
             return;
         } else {
             // _current_term == msg.current_term
-            if (msg.IsAppendRequest || msg.IsInstallSnapshot) {
+            if (msg.IsAppendRequest || msg.IsInstallSnapshot || msg.IsReadQuorumRequest) {
                 if (IsCandidate) {
                     BecomeFollower(from);
                 } else if (CurrentLeader == 0) {
@@ -331,7 +371,7 @@ public partial class FSM {
 
                 if (CurrentLeader != from) {
                     _logger.LogError(
-                        "Got append request/install snapshot/read_quorum from an unexpected leader {from}, expected {currentLeader}",
+                        "Got AppendRequest/InstallSnapshot/ReadQuorumRequest from an unexpected leader {from}, expected {currentLeader}",
                         from, CurrentLeader);
                 }
             }
@@ -358,8 +398,43 @@ public partial class FSM {
             snapshotResponse => { HandleSnapshotResponse(from, snapshotResponse); },
             timeoutNowRequest => {
                 // ignored
+            },
+            readQuorumRequest => {
+                // ignored
+            },
+            readQuorumResponse => {
+                HandleReadQuorumResponse(from, readQuorumResponse);
             }
         );
+    }
+
+    private void HandleReadQuorumResponse(ulong from, ReadQuorumResponse response) {
+        Debug.Assert(IsLeader);
+        _logger.LogTrace("[{}] HandleReadQuorumResponse() got response, from={} id={}", _myID, from, response.Id);
+
+        var state = LeaderState;
+        var progress = state.Tracker.Find(from);
+        if (progress == null) {
+            return;
+        }
+
+        progress.CommitIdx = Math.Max(progress.CommitIdx, response.CommitIdx);
+        progress.MaxAckedRead = Math.Max(progress.MaxAckedRead, response.Id);
+
+        if (response.Id <= state.MaxReadIdWithQuorum) {
+            return;
+        }
+
+        var newCommittedRead = LeaderState.Tracker.CommittedReadId(state.MaxReadIdWithQuorum);
+        if (newCommittedRead <= state.MaxReadIdWithQuorum) {
+            return;
+        }
+
+        _output.MaxReadIdWithQuorum = newCommittedRead;
+        state.MaxReadIdWithQuorum = newCommittedRead;
+
+        _logger.LogTrace("[{}] HandleReadQuorumResponse() new commit read {}", _myID, newCommittedRead);
+        _smEvents.Signal();
     }
 
     public void Step(ulong from, Candidate candidate, Message message) {
@@ -377,6 +452,12 @@ public partial class FSM {
                 // ignored
             },
             timeoutNowRequest => {
+                // ignored
+            },
+            readQuorumRequest => {
+                // ignored
+            },
+            readQuorumResponse => {
                 // ignored
             }
         );
@@ -399,12 +480,23 @@ public partial class FSM {
             snapshotResponse => {
                 // ignored
             },
-            timeoutNowRequest => { BecomeCandidate(false, true); }
+            timeoutNowRequest => { BecomeCandidate(false, true); },
+            readQuorumRequest => {
+                _logger.LogTrace("[{}] receive ReadQuorumRequest from {} for read_id={}", _myID, from, readQuorumRequest.Id);
+                AdvanceCommitIdx(readQuorumRequest.LeaderCommitIdx);
+                SendTo(from, new ReadQuorumResponse {
+                    CurrentTerm = CurrentTerm,
+                    CommitIdx = _commitIdx,
+                    Id = readQuorumRequest.Id
+                });
+            },
+            readQuorumResponse => {
+                // ignored
+            }
         );
     }
 
     public void TransferLeadership(long timeout = 0) {
-        // TODO: prevent new requests coming in
         CheckIsLeader();
         var leader = LeaderState.Tracker.Find(_myID);
         var voterCount = GetConfiguration().Current.Count(x => x.CanVote);
@@ -521,6 +613,9 @@ public partial class FSM {
                     TransferLeadership();
                 }
             }
+            if (IsLeader && LeaderState.LastReadId != LeaderState.MaxReadIdWithQuorum) {
+                BroadcastReadQuorum(LeaderState.LastReadId);
+            }
         }
     }
 
@@ -560,6 +655,14 @@ public partial class FSM {
     }
 
     private void SendTo(ulong to, TimeoutNowRequest request) {
+        SendTo(to, new Message(request));
+    }
+
+    public void SendTo(ulong to, ReadQuorumRequest request) {
+        SendTo(to, new Message(request));
+    }
+
+    public void SendTo(ulong to, ReadQuorumResponse request) {
         SendTo(to, new Message(request));
     }
 
@@ -711,12 +814,11 @@ public partial class FSM {
                         if (progress.InFlight == FollowerProgress.MaxInFlight) {
                             progress.InFlight--;
                         }
-
                         break;
                     case FollowerProgressState.Snapshot:
                         continue;
                     default:
-                        throw new ArgumentOutOfRangeException();
+                        throw new UnreachableException();
                 }
 
                 if (progress.MatchIdx < Log.LastIdx() || progress.CommitIdx < _commitIdx) {
@@ -727,6 +829,10 @@ public partial class FSM {
                     ReplicateTo(progress, true);
                 }
             }
+        }
+
+        if (state.LastReadId != state.MaxReadIdWithQuorum) {
+            BroadcastReadQuorum(state.LastReadId);
         }
 
         if (active.Invoke()) {
@@ -1004,17 +1110,39 @@ public partial class FSM {
         }
     }
 
-    protected Log GetLog() {
-        return Log;
-    }
-
     public void PingLeader() {
         Debug.Assert(CurrentLeader == 0);
         _pingLeader = true;
     }
 
-    public ulong Id => _myID;
+    public (ulong, ulong)? StartReadBarrier(ulong requester) {
+        CheckIsLeader();
 
+        if (requester != _myID && LeaderState.Tracker.Find(requester) == null) {
+            throw new OutsideConfigurationException(requester);
+        }
+
+        var termForCommitIdx = Log.TermFor(_commitIdx);
+        Debug.Assert(termForCommitIdx != null);
+
+        if (termForCommitIdx.Value != CurrentTerm) {
+            return null;
+        }
+
+        var id = NextReadId();
+        _logger.LogTrace("[{}] StartReadBarrier() starting read barrier with id {}", _myID, id);
+        return (id, _commitIdx);
+    }
+
+    private ulong NextReadId() {
+        Debug.Assert(IsLeader);
+        ++LeaderState.LastReadId;
+        LeaderState.LastReadIdChanged = true;
+        _smEvents.Signal();
+        return LeaderState.LastReadId;
+    }
+
+    public ulong Id => _myID;
     public int InMemoryLogSize => Log.InMemorySize();
     public int LogMemoryUsage => Log.MemoryUsage();
     public ulong LogLastIdx => Log.LastIdx();

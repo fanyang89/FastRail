@@ -65,21 +65,17 @@ public class Tracker {
 
         if (PreviousVoters.Count > 0) {
             var previous = new MatchVector<ulong>(prevCommitIdx, PreviousVoters.Count);
-
             foreach (var (id, progress) in FollowerProgresses) {
                 if (CurrentVoters.Contains(id)) {
                     current.Add(progress.MatchIdx);
                 }
-
                 if (PreviousVoters.Contains(id)) {
                     previous.Add(progress.MatchIdx);
                 }
             }
-
             if (!current.Committed() || !previous.Committed()) {
                 return prevCommitIdx;
             }
-
             return ulong.Min(current.CommitIdx(), previous.CommitIdx());
         }
 
@@ -88,12 +84,34 @@ public class Tracker {
                 current.Add(progress.MatchIdx);
             }
         }
+        return current.Committed() ? current.CommitIdx() : prevCommitIdx;
+    }
 
-        if (!current.Committed()) {
-            return prevCommitIdx;
+    public ulong CommittedReadId(ulong prevCommitIdx) {
+        var current = new MatchVector<ulong>(prevCommitIdx, CurrentVoters.Count);
+
+        if (PreviousVoters.Count > 0) {
+            var previous = new MatchVector<ulong>(prevCommitIdx, PreviousVoters.Count);
+            foreach (var (id, progress) in FollowerProgresses) {
+                if (CurrentVoters.Contains(id)) {
+                    current.Add(progress.MaxAckedRead);
+                }
+                if (PreviousVoters.Contains(id)) {
+                    previous.Add(progress.MaxAckedRead);
+                }
+            }
+            if (!current.Committed() || !previous.Committed()) {
+                return prevCommitIdx;
+            }
+            return ulong.Min(current.CommitIdx(), previous.CommitIdx());
         }
 
-        return current.CommitIdx();
+        foreach (var (id, progress) in FollowerProgresses) {
+            if (CurrentVoters.Contains(id)) {
+                current.Add(progress.MaxAckedRead);
+            }
+        }
+        return current.Committed() ? current.CommitIdx() : prevCommitIdx;
     }
 
     public ActivityTracker GetActivityTracker() {
