@@ -22,7 +22,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         // A new leader applies one fake entry
         output = fsm.GetOutput();
         Assert.That(output.LogEntries.Count, Is.EqualTo(1));
-        Assert.That(output.LogEntries.First().Dummy, Is.Not.Null);
+        Assert.That(output.LogEntries.First().Fake, Is.Not.Null);
         Assert.That(output.Committed.Count, Is.Zero);
         // accept fake entry, otherwise no more entries will be sent
         Assert.That(output.Messages.Count, Is.EqualTo(1));
@@ -95,7 +95,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(fsm.IsLeader, Is.True);
         output = fsm.GetOutput();
         Assert.That(output.LogEntries.Count, Is.EqualTo(1));
-        Assert.That(output.LogEntries.First().Dummy, Is.Not.Null);
+        Assert.That(output.LogEntries.First().Fake, Is.Not.Null);
         Assert.That(output.Messages.Count, Is.EqualTo(2));
         var msg = output.Messages.Last().Message.AppendRequest;
         var idx = msg.Entries.Last().Idx;
@@ -158,7 +158,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         Assert.That(fsm.IsLeader, Is.True);
         output = fsm.GetOutput();
         Assert.That(output.LogEntries.Count, Is.EqualTo(1));
-        Assert.That(output.LogEntries.First().Dummy, Is.Not.Null);
+        Assert.That(output.LogEntries.First().Fake, Is.Not.Null);
         Assert.That(output.Committed.Count, Is.EqualTo(0));
         Assert.That(output.Messages.Count, Is.EqualTo(2));
         var msg = output.Messages.Last().Message.AppendRequest;
@@ -343,9 +343,9 @@ public class ConfigurationChangeTest : FSMTestBase {
         var g = CreateFollower(G_ID, log.Clone());
 
         // Wrap configuration entry into some traffic
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
         a.AddEntry(Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID, F_ID, G_ID));
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
         // Without tick() A won't re-try communication with nodes it
         // believes are down (B, C).
         a.Tick();
@@ -452,7 +452,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         ElectionTimeout(a);
         Assert.That(a.IsLeader, Is.True);
         // Let's have a non-empty log at A
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
 
         var b = CreateFollower(B_ID, log.Clone());
         a.AddEntry(Messages.ConfigFromIds(B_ID));

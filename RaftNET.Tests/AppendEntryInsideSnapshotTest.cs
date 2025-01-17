@@ -15,12 +15,12 @@ public class AppendEntryInsideSnapshotTest : FSMTestBase {
 
         ElectionTimeout(a);
         Communicate(a, b, c);
-        a.AddEntry(new Dummy());
-        a.AddEntry(new Dummy());
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
+        a.AddEntry(new Void());
+        a.AddEntry(new Void());
         Communicate(a, b, c);
 
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
         var output = a.GetOutput();
         Assert.That(output.Messages, Has.Count.EqualTo(2));
         var append = output.Messages.Last().Message.AppendRequest;
@@ -53,7 +53,7 @@ public class AppendEntryInsideSnapshotTest : FSMTestBase {
         c.GetOutput();
         c.ApplySnapshot(Messages.LogSnapshot(c.Log, c.LogLastIdx), 0, 0, true);
 
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
         a.Tick();
         Communicate(a, b, c);
         Assert.That(c.Log.Empty, Is.False);

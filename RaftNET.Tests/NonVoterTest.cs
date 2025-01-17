@@ -31,7 +31,7 @@ public class NonVoterTest : FSMTestBase {
         var progress = a.GetProgress(B_ID);
         Assert.That(progress, Is.Not.Null);
         Assert.That(progress.State, Is.EqualTo(FollowerProgressState.Probe));
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
         a.Tick();
         Communicate(a, b);
         progress = a.GetProgress(B_ID);
@@ -132,7 +132,7 @@ public class NonVoterTest : FSMTestBase {
             Assert.That(output.Messages, Is.Empty);
             Assert.That(output.TermAndVote, Is.Null);
         });
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
         Communicate(a, b, c);
         Assert.Multiple(() => {
             Assert.That(a.LogLastIdx, Is.EqualTo(c.LogLastIdx));
@@ -193,11 +193,11 @@ public class NonVoterTest : FSMTestBase {
         for (var i = 0; i < 100; i++) {
             a.AddEntry(i % 2 == 1 ? cfgWithNonVoter : cfg);
             if (RollDice()) {
-                a.AddEntry(new Dummy());
+                a.AddEntry(new Void());
             }
             Communicate(a, b, c);
             if (RollDice()) {
-                a.AddEntry(new Dummy());
+                a.AddEntry(new Void());
                 Communicate(a, b, c);
             }
             if (RollDice(1.0f / 1000)) {
@@ -230,7 +230,7 @@ public class NonVoterTest : FSMTestBase {
         Communicate(a, b, c);
         Assert.That(a.IsLeader, Is.True);
 
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
         var cfgWithNonVoter = new Configuration {
             Current = {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = A_ID }, CanVote = true },
@@ -267,7 +267,7 @@ public class NonVoterTest : FSMTestBase {
         fd.MarkAllAlive();
         a.Tick();
         for (int i = 0; i < 100; i++) {
-            a.AddEntry(new Dummy());
+            a.AddEntry(new Void());
         }
         a.AddEntry(cfg);
         a.Tick();

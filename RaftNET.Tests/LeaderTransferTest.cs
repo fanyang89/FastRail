@@ -197,7 +197,7 @@ public class LeaderTransferTest : FSMTestBase {
         append = output.Messages.Last().Message.AppendRequest;
         idx = append.Entries.Last().Idx;
 
-        fsm2.AddEntry(new Dummy());
+        fsm2.AddEntry(new Void());
 
         fsm2.Step(Id2, new AppendResponse {
             CurrentTerm = fsm2.CurrentTerm,

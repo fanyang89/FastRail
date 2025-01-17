@@ -25,7 +25,7 @@ public class ElectionTest : FSMTestBase {
         Assert.That(output.TermAndVote.VotedFor, Is.Not.Zero);
         Assert.That(output.Messages.Count, Is.Zero);
         Assert.That(output.LogEntries.Count, Is.EqualTo(1));
-        Assert.That(output.LogEntries.First().Dummy, Is.Not.Null);
+        Assert.That(output.LogEntries.First().Fake, Is.Not.Null);
         Assert.That(output.Committed.Count, Is.Zero);
 
         ElectionTimeout(fsm);
@@ -35,7 +35,7 @@ public class ElectionTest : FSMTestBase {
         Assert.That(output.Messages.Count, Is.Zero);
         Assert.That(output.LogEntries.Count, Is.Zero);
         Assert.That(output.Committed.Count, Is.EqualTo(1));
-        Assert.That(output.Committed.First().Dummy, Is.Not.Null);
+        Assert.That(output.Committed.First().Fake, Is.Not.Null);
     }
 
     [Test]

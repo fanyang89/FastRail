@@ -222,7 +222,7 @@ public partial class FSM {
         }
     }
 
-    public LogEntry AddEntry(OneOf<Dummy, byte[], Configuration> command) {
+    public LogEntry AddEntry(OneOf<Void, byte[], Configuration> command) {
         // It's only possible to add entries on a leader.
         CheckIsLeader();
         if (LeaderState.StepDown != null) {
@@ -260,7 +260,7 @@ public partial class FSM {
 
         var logEntry = new LogEntry { Term = CurrentTerm, Idx = Log.NextIdx() };
         command.Switch(
-            _ => { logEntry.Dummy = new Void(); },
+            _ => { logEntry.Fake = new Void(); },
             buffer => { logEntry.Command = new Command { Buffer = ByteString.CopyFrom(buffer) }; },
             config => { logEntry.Configuration = config; }
         );
@@ -700,7 +700,7 @@ public partial class FSM {
         LeaderState.LogLimiter.Consume(Log.MemoryUsage());
         _lastElectionTime = _clock.Now();
         _pingLeader = false;
-        AddEntry(new Dummy());
+        AddEntry(new Void());
         LeaderState.Tracker.SetConfiguration(Log.GetConfiguration(), Log.LastIdx());
         _logger.LogInformation("[{}] BecomeLeader() stable_idx={} last_idx={}", _myID, Log.StableIdx(), Log.LastIdx());
     }

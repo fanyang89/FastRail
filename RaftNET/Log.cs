@@ -249,7 +249,7 @@ public class Log : IDeepCloneable<Log> {
             case LogEntry.DataOneofCase.Command:
                 return entry.Command.CalculateSize();
             case LogEntry.DataOneofCase.Configuration:
-            case LogEntry.DataOneofCase.Dummy:
+            case LogEntry.DataOneofCase.Fake:
             case LogEntry.DataOneofCase.None:
                 break;
         }

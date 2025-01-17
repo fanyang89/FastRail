@@ -15,8 +15,8 @@ public class SnapshotTest : FSMTestBase {
         Communicate(a, b);
         Assert.That(a.IsLeader, Is.True);
 
-        a.AddEntry(new Dummy());
-        a.AddEntry(new Dummy());
+        a.AddEntry(new Void());
+        a.AddEntry(new Void());
         Communicate(a, b);
 
         ulong snpIdx = 1;

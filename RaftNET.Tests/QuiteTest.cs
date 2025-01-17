@@ -14,7 +14,7 @@ public class QuiteTest : FSMTestBase {
         Assert.That(fsm.IsLeader, Is.True);
 
         fsm.GetOutput();
-        fsm.AddEntry(new Dummy());
+        fsm.AddEntry(new Void());
         Assert.That(fsm.GetOutput().Messages, Is.Empty);
 
         fsm.Tick();

@@ -30,8 +30,8 @@ public static class Messages {
         return cfg;
     }
 
-    public static LogEntry CreateDummy(ulong idx = 0, ulong term = 0) {
-        return new LogEntry { Idx = idx, Term = term, Dummy = new Void() };
+    public static LogEntry CreateFake(ulong idx = 0, ulong term = 0) {
+        return new LogEntry { Idx = idx, Term = term, Fake = new Void() };
     }
 
     public static LogEntry CreateCommand(string cmd) {
@@ -99,7 +99,7 @@ public static class Messages {
     }
 
     public static int EntrySize(this LogEntry entry) {
-        Debug.Assert(entry.Dummy != null || entry.Command != null || entry.Configuration != null);
+        Debug.Assert(entry.Fake != null || entry.Command != null || entry.Configuration != null);
 
         if (entry.Command != null) {
             return entry.Command.Buffer.Length;

@@ -3,15 +3,15 @@
 namespace RaftNET.Services;
 
 public class Notifier {
-    private class Dummy;
+    private class Bottom;
 
-    private readonly BlockingCollection<Dummy> _dummies = new();
+    private readonly BlockingCollection<Bottom> _queue = new();
 
     public void Signal() {
-        _dummies.Add(new Dummy());
+        _queue.Add(new Bottom());
     }
 
     public void Wait() {
-        _ = _dummies.Take();
+        _ = _queue.Take();
     }
 }

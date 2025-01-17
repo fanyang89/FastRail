@@ -29,7 +29,7 @@ public class ProgressLeaderTest : FSMTestBase {
             Assert.That(output.LogEntries, Has.Count.EqualTo(1));
             Assert.That(output.Messages, Has.Count.EqualTo(1));
         });
-        Assert.That(output.LogEntries.First().DataCase, Is.EqualTo(LogEntry.DataOneofCase.Dummy));
+        Assert.That(output.LogEntries.First().DataCase, Is.EqualTo(LogEntry.DataOneofCase.Fake));
 
         // accept fake entry
         var msg = output.Messages.Last().Message.AppendRequest;

@@ -69,10 +69,10 @@ message LogEntry {
   uint64 idx = 2;
 
   oneof data {
-    // Dummy entry is used when a leader needs to commit an entry
+    // Fake entry is used when a leader needs to commit an entry
     // (after leadership change for instance) but there is nothing
     // else to commit.
-    Void dummy = 3;
+    Void fake = 3;
     Command command = 4;
     Configuration configuration = 5;
   }

@@ -13,10 +13,10 @@ public class LogTest {
         });
 
         // initial log with 3 entries
-        log.Add(Messages.CreateDummy());
+        log.Add(Messages.CreateFake());
         Assert.Multiple(() => {
             Assert.That(log.LastIdx(), Is.EqualTo(1));
-            Assert.That(log[1].Dummy, Is.Not.Null);
+            Assert.That(log[1].Fake, Is.Not.Null);
         });
 
         log.Add(Messages.CreateConfiguration(cfg));
@@ -35,7 +35,7 @@ public class LogTest {
         // re-append last entry with same term, should be no-op
         Assert.Multiple(() => {
             Assert.That(
-                log.MaybeAppend([Messages.CreateDummy(2, log.LastTerm())]),
+                log.MaybeAppend([Messages.CreateFake(2, log.LastTerm())]),
                 Is.EqualTo(2));
             Assert.That(log.LastIdx(), Is.EqualTo(3));
             Assert.That(log[3].Command, Is.Not.Null);
@@ -45,11 +45,11 @@ public class LogTest {
         Assert.Multiple(() => {
             Assert.That(
                 log.MaybeAppend([
-                    Messages.CreateDummy(2, log.LastTerm() + 1)
+                    Messages.CreateFake(2, log.LastTerm() + 1)
                 ]),
                 Is.EqualTo(2));
             Assert.That(log.LastIdx(), Is.EqualTo(2));
-            Assert.That(log[2].Dummy, Is.Not.Null);
+            Assert.That(log[2].Fake, Is.Not.Null);
             Assert.That(log.LastConfIdx, Is.EqualTo(0));
         });
     }
