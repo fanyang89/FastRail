@@ -1,15 +1,27 @@
-﻿namespace RaftNET;
+﻿using Google.Protobuf;
+
+namespace RaftNET;
 
 public partial class FSM {
-    public record Config(
+    public class Config(
+        bool enablePreVote,
+        int appendRequestThreshold,
+        int maxLogSize
+    ) : IDeepCloneable<Config> {
         // If set to true will enable prevoting stage during election
-        bool EnablePreVote,
+        public bool EnablePreVote { get; set; } = enablePreVote;
+
         // max size of appended entries in bytes
-        int AppendRequestThreshold,
+        public int AppendRequestThreshold { get; set; } = appendRequestThreshold;
+
         // Limit in bytes on the size of the in-memory part of the log after which
         // which requests are stopped until the log is shrunk by a is shrunk by a snapshot.
         // Should be greater than than the sum of the following log entry sizes,
         // otherwise the state machine will deadlock.
-        int MaxLogSize
-    );
+        public int MaxLogSize { get; set; } = maxLogSize;
+
+        public Config Clone() {
+            return new Config(enablePreVote, appendRequestThreshold, maxLogSize);
+        }
+    }
 }

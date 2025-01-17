@@ -8,9 +8,9 @@ public class ElectionTest : FSMTestBase {
     [TestCase(false)]
     public void TestSingleNodeElection(bool enablePreVote) {
         var fsmConfig = new FSM.Config(
-            MaxLogSize: 4 * 1024 * 1024,
-            AppendRequestThreshold: 1,
-            EnablePreVote: enablePreVote
+            maxLogSize: 4 * 1024 * 1024,
+            appendRequestThreshold: 1,
+            enablePreVote: enablePreVote
         );
         var cfg = Messages.ConfigFromIds(Id1);
         var log = new Log(new SnapshotDescriptor { Config = cfg });

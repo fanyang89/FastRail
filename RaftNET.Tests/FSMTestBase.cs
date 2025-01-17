@@ -22,15 +22,15 @@ public class FSMTestBase : RaftTestBase {
     protected const ulong H_ID = 8;
 
     protected readonly FSM.Config FSMConfig = new(
-        MaxLogSize: 4 * 1024 * 1024,
-        AppendRequestThreshold: 1,
-        EnablePreVote: false
+        maxLogSize: 4 * 1024 * 1024,
+        appendRequestThreshold: 1,
+        enablePreVote: false
     );
 
     protected readonly FSM.Config FSMPreVoteConfig = new(
-        MaxLogSize: 4 * 1024 * 1024,
-        AppendRequestThreshold: 1,
-        EnablePreVote: true
+        maxLogSize: 4 * 1024 * 1024,
+        appendRequestThreshold: 1,
+        enablePreVote: true
     );
 
     protected void ElectionTimeout(FSM fsm) {
