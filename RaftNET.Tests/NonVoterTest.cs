@@ -288,4 +288,109 @@ public class NonVoterTest : FSMTestBase {
         Communicate(c, b);
         Assert.That(c.IsLeader, Is.True);
     }
+
+    [Test]
+    public void TestNonVoterCanVote() {
+        var fd = new DiscreteFailureDetector();
+        var cfg = new Configuration {
+            Current = {
+                new ConfigMember { ServerAddress = new ServerAddress { ServerId = A_ID }, CanVote = true },
+                new ConfigMember { ServerAddress = new ServerAddress { ServerId = B_ID }, CanVote = true },
+                new ConfigMember { ServerAddress = new ServerAddress { ServerId = C_ID }, CanVote = false },
+            }
+        };
+        var log = new Log(new SnapshotDescriptor {
+            Idx = 0, Config = cfg
+        });
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        var b = CreateFollower(B_ID, log.Clone(), fd);
+        var c = CreateFollower(C_ID, log.Clone(), fd);
+        ElectionTimeout(a);
+        Communicate(a, b, c);
+        Assert.That(a.IsLeader, Is.True);
+
+        var cfgAllVoters = Messages.ConfigFromIds(A_ID, B_ID, C_ID);
+        a.AddEntry(cfgAllVoters);
+        Communicate(a, b);
+        Assert.Multiple(() => {
+            Assert.That(a.GetConfiguration().IsJoint(), Is.False);
+            Assert.That(a.GetConfiguration().Current.First(x => x.ServerAddress.ServerId == C_ID).CanVote, Is.True);
+            Assert.That(a.LogLastIdx, Is.EqualTo(b.LogLastIdx));
+        });
+        fd.MarkDead(A_ID);
+        ElectionTimeout(b);
+        ElectionThreshold(c);
+        Communicate(b, c);
+        Assert.Multiple(() => {
+            Assert.That(b.IsLeader, Is.True);
+            Assert.That(b.CurrentTerm, Is.EqualTo(c.CurrentTerm));
+            Assert.That(b.LogLastIdx, Is.EqualTo(c.LogLastIdx));
+        });
+    }
+
+    [Test]
+    public void TestLeaderTransfereeDiesUponReceivingTimeoutNow() {
+        var fd = new DiscreteFailureDetector();
+        var log = new Log(new SnapshotDescriptor {
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID)
+        });
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        var b = CreateFollower(B_ID, log.Clone(), fd);
+        var c = CreateFollower(C_ID, log.Clone(), fd);
+        var d = CreateFollower(D_ID, log.Clone(), fd);
+
+        var map = new Dictionary<ulong, FSM> {
+            { A_ID, a },
+            { B_ID, b },
+            { C_ID, c },
+            { D_ID, d },
+        };
+
+        ElectionTimeout(a);
+        Communicate(a, b, c, d);
+        Assert.That(a.IsLeader, Is.True);
+
+        var newCfg = Messages.ConfigFromIds(B_ID, C_ID, D_ID);
+        a.AddEntry(newCfg);
+
+        CommunicateUntil(() => !a.IsLeader, a, b, c, d);
+        Assert.That(a.IsFollower, Is.True);
+
+        map.Remove(A_ID);
+
+        var output = a.GetOutput();
+        Assert.That(output.Messages, Has.Count.EqualTo(1));
+        Assert.That(output.Messages.Last().Message.IsTimeoutNowRequest, Is.True);
+        var timeoutNowTargetId = output.Messages.Last().To;
+        var timeoutNowMessage = output.Messages.Last().Message;
+
+        map[timeoutNowTargetId].Step(A_ID, timeoutNowMessage);
+
+        fd.MarkDead(timeoutNowTargetId);
+        map.Remove(timeoutNowTargetId);
+
+        FSM? first = null;
+        FSM? second = null;
+        var i = 0;
+        foreach (var fsm in map.Keys) {
+            if (i == 0) {
+                first = map[fsm];
+                i++;
+            } else if (i == 1) {
+                second = map[fsm];
+                break;
+            }
+        }
+        Assert.Multiple(() => {
+            Assert.That(first, Is.Not.Null);
+            Assert.That(second, Is.Not.Null);
+        });
+
+        ElectionTimeout(first);
+        ElectionThreshold(second);
+
+        Communicate(b, c, d);
+        var finalLeader = SelectLeader(b, c, d);
+        Assert.That(finalLeader.Id == first.Id || finalLeader.Id == second.Id, Is.True);
+    }
 }
