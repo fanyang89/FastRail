@@ -169,8 +169,8 @@ public partial class FSM {
         } else if (HasStableLeader()) {
             _lastElectionTime = _clock.Now();
         } else if (ElectionElapsed >= _randomizedElectionTimeout) {
-            _logger.LogTrace("tick[{}]: becoming a candidate at term {}, last election: {}, now: {}", _myID,
-                CurrentTerm, _lastElectionTime, _clock.Now());
+            _logger.LogTrace("[{}] Tick() becoming a candidate at term={} last_election={} now={}",
+                _myID, CurrentTerm, _lastElectionTime, _clock.Now());
             BecomeCandidate(_config.EnablePreVote);
         }
 
@@ -353,9 +353,9 @@ public partial class FSM {
             appendRequest => {
                 // ignored
             },
-            appendResponse => { AppendEntriesResponse(from, appendResponse); },
+            appendResponse => { HandleAppendResponse(from, appendResponse); },
             installSnapshot => { SendTo(from, new SnapshotResponse { CurrentTerm = CurrentTerm, Success = false }); },
-            snapshotResponse => { InstallSnapshotResponse(from, snapshotResponse); },
+            snapshotResponse => { HandleSnapshotResponse(from, snapshotResponse); },
             timeoutNowRequest => {
                 // ignored
             }
@@ -388,7 +388,7 @@ public partial class FSM {
             voteResponse => {
                 // ignored
             },
-            appendRequest => { AppendEntries(from, appendRequest); },
+            appendRequest => { HandleAppendRequest(from, appendRequest); },
             appendResponse => {
                 // ignored
             },
@@ -869,7 +869,7 @@ public partial class FSM {
         }
     }
 
-    private void AppendEntries(ulong from, AppendRequest request) {
+    private void HandleAppendRequest(ulong from, AppendRequest request) {
         Debug.Assert(IsFollower);
 
         var matchResult = Log.MatchTerm(request.PrevLogIdx, request.PrevLogTerm);
@@ -911,7 +911,7 @@ public partial class FSM {
         }
     }
 
-    private void AppendEntriesResponse(ulong from, AppendResponse response) {
+    private void HandleAppendResponse(ulong from, AppendResponse response) {
         Debug.Assert(IsLeader);
         var progress = LeaderState.Tracker.Find(from);
 
@@ -975,16 +975,18 @@ public partial class FSM {
     }
 
     private void SendTimeoutNow(ulong id) {
+        _logger.LogTrace("[{}] SendTimeoutNow() send to {}", _myID, id);
         SendTo(id, new TimeoutNowRequest { CurrentTerm = CurrentTerm });
         LeaderState.TimeoutNowSent = id;
         var me = LeaderState.Tracker.Find(_myID);
-
-        if (me == null || !me.CanVote) {
-            BecomeFollower(0);
+        if (me is { CanVote: true }) {
+            return;
         }
+        _logger.LogTrace("[{}] SendTimeoutNow() become follower", _myID);
+        BecomeFollower(0);
     }
 
-    private void InstallSnapshotResponse(ulong from, SnapshotResponse response) {
+    private void HandleSnapshotResponse(ulong from, SnapshotResponse response) {
         var progress = LeaderState.Tracker.Find(from);
 
         if (progress == null) {
