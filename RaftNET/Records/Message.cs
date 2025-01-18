@@ -109,4 +109,37 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
     public bool IsTimeoutNowRequest => IsT6;
     public bool IsReadQuorumRequest => IsT7;
     public bool IsReadQuorumResponse => IsT8;
+
+    public string Name {
+        get {
+            if (IsVoteRequest) {
+                return "VoteRequest";
+            }
+            if (IsVoteResponse) {
+                return "VoteResponse";
+            }
+            if (IsAppendRequest) {
+                return "AppendRequest";
+            }
+            if (IsAppendResponse) {
+                return "AppendResponse";
+            }
+            if (IsInstallSnapshot) {
+                return "InstallSnapshot";
+            }
+            if (IsSnapshotResponse) {
+                return "SnapshotResponse";
+            }
+            if (IsTimeoutNowRequest) {
+                return "TimeoutNowRequest";
+            }
+            if (IsReadQuorumRequest) {
+                return "ReadQuorumRequest";
+            }
+            if (IsReadQuorumResponse) {
+                return "ReadQuorumResponse";
+            }
+            return "UnknownMessage";
+        }
+    }
 }

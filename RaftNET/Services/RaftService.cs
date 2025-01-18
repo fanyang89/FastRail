@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Grpc.Core;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OneOf;
@@ -308,7 +309,13 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
     }
 
     private async Task SendMessage(ulong messageTo, Message message) {
-        await _connectionManager.Send(messageTo, message);
+        try {
+            await _connectionManager.Send(messageTo, message);
+        }
+        catch (RpcException ex) {
+            _logger.LogError("[{}] Failed to send message, message={} to={} ex={} detail=\"{}\"",
+                _myId, message.Name, messageTo, ex.StatusCode, ex.Status.Detail);
+        }
     }
 
     private void Tick(object? state) {
