@@ -1,5 +1,3 @@
-using RaftNET.Records;
-
 namespace RaftNET.Tests;
 
 public class SnapshotTest : FSMTestBase {

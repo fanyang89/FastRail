@@ -31,4 +31,12 @@ public class SingleNodeTest : FSMTestBase {
         output = fsm.GetOutput();
         Assert.That(output.Committed, Has.Count.EqualTo(1));
     }
+
+    [Test]
+    public void TestSingleNodePreCandidate() {
+        var cfg = Messages.ConfigFromIds(Id1);
+        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var fsm1 = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), FSMPreVoteConfig);
+        Assert.That(fsm1.IsLeader, Is.True);
+    }
 }

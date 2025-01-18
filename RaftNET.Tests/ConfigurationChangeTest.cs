@@ -1,6 +1,5 @@
 ﻿using RaftNET.Exceptions;
 using RaftNET.FailureDetectors;
-using RaftNET.Records;
 
 namespace RaftNET.Tests;
 

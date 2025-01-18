@@ -1,5 +1,5 @@
+using RaftNET.Exceptions;
 using RaftNET.FailureDetectors;
-using RaftNET.Records;
 
 namespace RaftNET.Tests;
 
@@ -374,5 +374,93 @@ public class LeaderTransferTest : FSMTestBase {
         Communicate(b, c);
         var finalLeader = SelectLeader(b, c);
         Assert.That(finalLeader.Id, Is.EqualTo(timeoutNowTargetId));
+    }
+
+    [Test]
+    public void TestLeaderTransferIgnoreProposal() {
+        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
+        var a = CreateFollower(A_ID, log.Clone());
+        var b = CreateFollower(B_ID, log.Clone());
+        ElectionTimeout(a);
+        Communicate(a, b);
+        Assert.That(a.IsLeader, Is.True);
+
+        a.TransferLeadership();
+
+        Assert.Throws<NotLeaderException>(() => a.AddEntry(new Void()));
+        Assert.That(a.IsLeader, Is.True);
+    }
+
+    [Test]
+    public void TestTransferNonMember() {
+        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(B_ID, C_ID, D_ID) });
+        var a = CreateFollower(A_ID, log);
+        a.Step(B_ID, new TimeoutNowRequest { CurrentTerm = a.CurrentTerm });
+        Assert.That(a.IsCandidate, Is.False);
+    }
+
+    [Test]
+    public void TestLeaderTransferTimeout() {
+        var fd = new DiscreteFailureDetector();
+        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID) });
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        var b = CreateFollower(B_ID, log.Clone(), fd);
+        var c = CreateFollower(C_ID, log.Clone(), fd);
+
+        ElectionTimeout(a);
+        Communicate(a, b, c);
+        Assert.That(a.IsLeader, Is.True);
+
+        a.Tick();
+        Communicate(a, b, c);
+
+        const long timeout = 5L;
+        a.TransferLeadership(timeout);
+        Assert.That(a.IsLeadershipTransferActive, Is.True);
+
+        for (var i = 0; i < timeout; i++) {
+            var output = a.GetOutput();
+            Assert.That(output.Messages, Has.Count.EqualTo(1));
+            Assert.Multiple(() => {
+                Assert.That(output.Messages.Last().Message.IsTimeoutNowRequest, Is.True);
+                Assert.That(output.AbortLeadershipTransfer, Is.False);
+            });
+            a.Tick();
+        }
+
+        Assert.Multiple(() => {
+            var output = a.GetOutput();
+            Assert.That(output.AbortLeadershipTransfer, Is.True);
+            Assert.That(a.IsLeader, Is.True);
+            Assert.That(a.IsLeadershipTransferActive, Is.False);
+        });
+    }
+
+    [Test]
+    public void TestLeaderTransferOneNodeCluster() {
+        var fd = new DiscreteFailureDetector();
+        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID) });
+        var a = CreateFollower(A_ID, log, fd);
+        ElectionTimeout(a);
+        Assert.That(a.IsLeader, Is.True);
+        Assert.Throws<NoOtherVotingMemberException>(() => a.TransferLeadership(5));
+        Assert.That(a.IsLeadershipTransferActive, Is.False);
+    }
+
+    [Test]
+    public void TestLeaderTransferOneVoter() {
+        var fd = new DiscreteFailureDetector();
+        var cfg = new Configuration {
+            Current = {
+                new ConfigMember { ServerAddress = new ServerAddress { ServerId = A_ID }, CanVote = true },
+                new ConfigMember { ServerAddress = new ServerAddress { ServerId = B_ID }, CanVote = false },
+            }
+        };
+        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        ElectionTimeout(a);
+        Assert.That(a.IsLeader, Is.True);
+        Assert.Throws<NoOtherVotingMemberException>(() => a.TransferLeadership(5));
+        Assert.That(a.IsLeadershipTransferActive, Is.False);
     }
 }
