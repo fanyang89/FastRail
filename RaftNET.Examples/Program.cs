@@ -39,10 +39,8 @@ class RunCommand : Command<RunCommand.Settings> {
     public class Settings : CommandSettings {
         [CommandArgument(0, "<ID>")] public required ulong MyId { get; init; }
         [CommandArgument(1, "<LISTEN>")] public required string Listen { get; init; }
-        [CommandArgument(2, "<MEMBERS>")] public string[] Members { get; init; }
-
-        [CommandOption("-d|--data-dir")] public required string DataDir { get; set; }
-
+        [CommandArgument(2, "<MEMBERS>")] public required string[] Members { get; init; }
+        [CommandOption("-d|--data-dir")] public string? DataDir { get; set; }
         [CommandOption("-t|--runtime")] public TimeSpan Runtime { get; init; } = TimeSpan.FromSeconds(10);
     }
 
