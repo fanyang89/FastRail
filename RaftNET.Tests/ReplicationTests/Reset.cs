@@ -1,3 +1,3 @@
 ﻿namespace RaftNET.Tests.ReplicationTests;
 
-public record Reset(int Id, InitialState State);
+public record Reset(ulong Id, InitialState State);

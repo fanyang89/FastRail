@@ -1,3 +1,3 @@
 ﻿namespace RaftNET.Tests.ReplicationTests;
 
-public record Connection(int from, int to);
+public record Connection(ulong from, ulong to);

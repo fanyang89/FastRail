@@ -6,17 +6,17 @@ using RaftNET.Services;
 namespace RaftNET.Tests.ReplicationTests;
 
 public class RaftCluster {
-    private List<RaftTestServer> _servers;
-    private int _leader;
-    private Dictionary<int, System.Timers.Timer> _tickers;
-    private ISet<int> _inConfiguration;
+    private Dictionary<ulong, RaftTestServer> _servers;
+    private ulong _leader;
+    private Dictionary<ulong, System.Timers.Timer> _tickers;
+    private ISet<ulong> _inConfiguration;
     private readonly ILogger<RaftCluster> _logger;
     private IList<TimeSpan> _tickDelays;
     private TimeSpan _tickDelta;
-    private int _nextValue;
+    private ulong _nextValue;
     private bool _preVote;
     private Connected _connected;
-    private int _applyEntries;
+    private ulong _applyEntries;
     private bool _verifyPersistedSnapshots;
     private PersistedSnapshots _persistedSnapshots;
     private CancellationTokenSource _cts = new();
@@ -30,7 +30,7 @@ public class RaftCluster {
     }
 
     public async Task StartAllAsync() {
-        foreach (var server in _servers) {
+        foreach (var (_, server) in _servers) {
             await server.StartAsync();
         }
         await InitRaftTickersAsync();
@@ -59,14 +59,14 @@ public class RaftCluster {
         }
     }
 
-    public RaftService GetServer(int id) {
+    public RaftService GetServer(ulong id) {
         return _servers[id].Service;
     }
 
     private async Task RestartTickersAsync() {
         if (_tickDelays.Count > 0) {
             await Task.WhenAll(_inConfiguration.Select(async s => {
-                await Task.Delay(_tickDelays[s]);
+                await Task.Delay(_tickDelays[(int)s]);
                 // TODO: make confirm we should use change()
             }));
         } else {
@@ -74,7 +74,7 @@ public class RaftCluster {
         }
     }
 
-    public async Task AddEntriesConcurrentAsync(int n, int? server) {
+    public async Task AddEntriesConcurrentAsync(ulong n, ulong? server) {
         var start = _nextValue;
         _nextValue += n;
         var tasks = new List<Task>();
@@ -87,7 +87,7 @@ public class RaftCluster {
         await Task.WhenAll(tasks);
     }
 
-    public async Task AddEntriesAsync(int n, int? server = null) {
+    public async Task AddEntriesAsync(ulong n, ulong? server = null) {
         var end = _nextValue + n;
         while (_nextValue != end) {
             AddEntry(_nextValue, server);
@@ -96,7 +96,7 @@ public class RaftCluster {
         await Task.CompletedTask;
     }
 
-    private void AddEntry(int value, int? server) {
+    private void AddEntry(ulong value, ulong? server) {
         while (true) {
             try {
                 var at = _servers[server ?? _leader].Service;
@@ -104,13 +104,14 @@ public class RaftCluster {
                 break;
             }
             catch (Exception e) {
+                // TODO: handle AddEntry() exception
                 throw new NotImplementedException();
             }
         }
     }
 
-    public async Task ElectNewLeaderAsync(int newLeader) {
-        Debug.Assert(newLeader < _servers.Count, "wrong next leader: newLeader < _servers.Count");
+    public async Task ElectNewLeaderAsync(ulong newLeader) {
+        Debug.Assert(newLeader < (ulong)_servers.Count, "wrong next leader: newLeader < _servers.Count");
         if (newLeader == _leader) {
             return;
         }
@@ -170,7 +171,7 @@ public class RaftCluster {
 
     private async Task WaitLogAllAsync() {
         var leaderLogIdxTerm = _servers[_leader].Service.LogLastIdxTerm();
-        for (var s = 0; s < _servers.Count; s++) {
+        for (ulong s = 0; s < (ulong)_servers.Count; s++) {
             if (s != _leader && _connected.IsConnected(s, _leader) && _inConfiguration.Contains(s)) {
                 await _servers[s].Service.WaitLogIdxTerm(leaderLogIdxTerm);
             }
@@ -193,21 +194,21 @@ public class RaftCluster {
         await ResetServerAsync(reset.Id, reset.State);
     }
 
-    private async Task ResetServerAsync(int id, InitialState state) {
+    private async Task ResetServerAsync(ulong id, InitialState state) {
         _servers[id] = CreateService(id, state);
         await _servers[id].Service.StartAsync(_cts.Token);
         SetTickerCallback(id);
     }
 
-    private RaftTestServer CreateService(int id, InitialState state) {
+    private RaftTestServer CreateService(ulong id, InitialState state) {
         throw new NotImplementedException();
     }
 
-    private void SetTickerCallback(int id) {
+    private void SetTickerCallback(ulong id) {
         throw new NotImplementedException();
     }
 
-    public async Task WaitLogAsync(int follower) {
+    public async Task WaitLogAsync(ulong follower) {
         if (_connected.IsConnected(_leader, follower) && _inConfiguration.Contains(_leader) &&
             _inConfiguration.Contains(follower)) {
             var leaderLogIdxTerm = _servers[_leader].Service.LogLastIdxTerm();
@@ -280,7 +281,7 @@ public class RaftCluster {
         await StopServerAsync(stop.Id);
     }
 
-    private async Task StopServerAsync(int id, string reason = "") {
+    private async Task StopServerAsync(ulong id, string reason = "") {
         CancelTicker(id);
         await _servers[id].Service.StopAsync(_cts.Token);
         if (_snapshots.TryGetValue(id, out var snapshots)) {
@@ -290,7 +291,7 @@ public class RaftCluster {
         _persistedSnapshots.Remove(id);
     }
 
-    private void CancelTicker(int id) {
+    private void CancelTicker(ulong id) {
         throw new NotImplementedException();
     }
 
@@ -337,7 +338,7 @@ public class RaftCluster {
         }
     }
 
-    public void Disconnect(int id, int? except) {
+    public void Disconnect(ulong id, ulong? except) {
         _connected.Disconnect(id, except);
     }
 }

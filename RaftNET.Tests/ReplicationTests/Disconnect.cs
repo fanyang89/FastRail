@@ -1,3 +1,3 @@
 ﻿namespace RaftNET.Tests.ReplicationTests;
 
-public record Disconnect(int First, int Second) : TwoNodes(First, Second) {}
+public record Disconnect(ulong First, ulong Second) : TwoNodes(First, Second) {}

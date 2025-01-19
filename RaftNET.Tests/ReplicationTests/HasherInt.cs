@@ -15,9 +15,9 @@ public class HasherInt {
         }
     }
 
-    public void Update(int val) {
+    public void Update(ulong val) {
         if (_hasher_int != null) {
-            _hasher_int += (ulong)val;
+            _hasher_int += val;
         }
         _hasher?.Append(BitConverter.GetBytes(val));
     }
@@ -33,9 +33,9 @@ public class HasherInt {
         throw new UnreachableException();
     }
 
-    public static HasherInt HashRange(int max, bool commutative = false) {
+    public static HasherInt HashRange(ulong max, bool commutative = false) {
         var h = new HasherInt(commutative);
-        for (var i = 0; i < max; ++i) {
+        for (ulong i = 0; i < max; ++i) {
             h.Update(i);
         }
         return h;

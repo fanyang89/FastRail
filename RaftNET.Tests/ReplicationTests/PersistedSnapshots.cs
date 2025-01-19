@@ -1,3 +1,3 @@
 namespace RaftNET.Tests.ReplicationTests;
 
-public class PersistedSnapshots : Dictionary<int, (SnapshotDescriptor, SnapshotValue)>;
+public class PersistedSnapshots : Dictionary<ulong, (SnapshotDescriptor, SnapshotValue)>;

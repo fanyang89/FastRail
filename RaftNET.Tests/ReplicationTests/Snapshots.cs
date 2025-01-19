@@ -1,3 +1,3 @@
 namespace RaftNET.Tests.ReplicationTests;
 
-public class Snapshots : Dictionary<int, Dictionary<ulong, SnapshotValue>>;
+public class Snapshots : Dictionary<ulong, Dictionary<ulong, SnapshotValue>>;

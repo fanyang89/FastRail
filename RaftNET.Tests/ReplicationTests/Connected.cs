@@ -4,26 +4,26 @@ namespace RaftNET.Tests.ReplicationTests;
 
 public class Connected : IDeepCloneable<Connected> {
     public ISet<Connection> Disconnected = new HashSet<Connection>();
-    public int N;
+    public ulong N;
 
-    public Connected(int n) {
+    public Connected(ulong n) {
         N = n;
     }
 
-    public void Cut(int id1, int id2) {
+    public void Cut(ulong id1, ulong id2) {
         Disconnected.Add(new Connection(id1, id2));
         Disconnected.Add(new Connection(id2, id1));
     }
 
-    public void Disconnect(int id, int? except = null) {
-        for (var other = 0; other < N; ++other) {
+    public void Disconnect(ulong id, ulong? except = null) {
+        for (ulong other = 0; other < N; ++other) {
             if (id != other && !(except != null && other == except.Value)) {
                 Cut(id, other);
             }
         }
     }
 
-    public void Connect(int id) {
+    public void Connect(ulong id) {
         Disconnected = Disconnected.Where(x => x.to != id && x.from != id).ToHashSet();
     }
 
@@ -31,7 +31,7 @@ public class Connected : IDeepCloneable<Connected> {
         Disconnected.Clear();
     }
 
-    public bool IsConnected(int id1, int id2) {
+    public bool IsConnected(ulong id1, ulong id2) {
         return !Disconnected.Contains(new Connection(id1, id2)) &&
                !Disconnected.Contains(new Connection(id2, id1));
     }

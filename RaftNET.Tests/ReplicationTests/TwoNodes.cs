@@ -1,3 +1,3 @@
 ﻿namespace RaftNET.Tests.ReplicationTests;
 
-public record TwoNodes(int First, int Second);
+public record TwoNodes(ulong First, ulong Second);

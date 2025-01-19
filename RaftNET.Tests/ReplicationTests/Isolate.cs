@@ -1,3 +1,3 @@
 ﻿namespace RaftNET.Tests.ReplicationTests;
 
-public record Isolate(int Id);
+public record Isolate(ulong Id);

@@ -1,3 +1,3 @@
 namespace RaftNET.Tests.ReplicationTests;
 
-public class RpcNet : Dictionary<int, ReplicationTestRpc>;
+public class RpcNet : Dictionary<ulong, MockRpc>;

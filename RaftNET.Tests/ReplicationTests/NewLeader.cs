@@ -1,3 +1,3 @@
 ﻿namespace RaftNET.Tests.ReplicationTests;
 
-public record NewLeader(int Id);
+public record NewLeader(ulong Id);

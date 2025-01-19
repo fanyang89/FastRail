@@ -66,8 +66,8 @@ public class ReplicationTestBase : RaftTestBase {
         Logger.LogInformation("[{}] ApplyChanges() got entries, count={}", id, commands.Count);
         var entries = 0;
         foreach (var command in commands) {
-            var n = BitConverter.ToInt32(command.Buffer.Span);
-            if (n != int.MinValue) {
+            var n = BitConverter.ToUInt64(command.Buffer.Span);
+            if (n != ulong.MinValue) {
                 entries++;
                 hasher.Update(n);
                 Logger.LogInformation("[{}] Apply changes, n={}", id, n);

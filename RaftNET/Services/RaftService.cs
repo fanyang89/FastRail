@@ -120,7 +120,7 @@ public class RaftService : IRaftRpcHandler {
         }
     }
 
-    public void AddEntry(int command, WaitType waitType) {
+    public void AddEntry(ulong command, WaitType waitType) {
         var buffer = BitConverter.GetBytes(command);
         AddEntry(buffer, waitType);
     }

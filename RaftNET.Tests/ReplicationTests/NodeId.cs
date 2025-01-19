@@ -1,3 +1,3 @@
 ﻿namespace RaftNET.Tests.ReplicationTests;
 
-public record NodeId(int Id);
+public record NodeId(ulong Id);
