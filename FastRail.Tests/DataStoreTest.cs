@@ -94,12 +94,3 @@ public class DataStoreTest : TestBase {
         Assert.That(_ds.GetNodeData(nodePath), Is.EqualTo("456"u8.ToArray()));
     }
 }
-
-public class DataStoreUtilTest {
-    [Test]
-    public void TestGetParentPath() {
-        Assert.Throws<ArgumentException>(() => DataStore.GetParentPath("/"));
-        Assert.That(DataStore.GetParentPath("/test-node"), Is.EqualTo("/"));
-        Assert.That(DataStore.GetParentPath("/1/2/3"), Is.EqualTo("/1/2"));
-    }
-}

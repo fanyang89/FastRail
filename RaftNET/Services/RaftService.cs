@@ -70,11 +70,12 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
         var fd = new RpcFailureDetector(config.MyId, _addressBook, new SystemClock(), _loggerFactory,
-            TimeSpan.FromMilliseconds(config.PingInterval), TimeSpan.FromMilliseconds(config.PingTimeout));
+            TimeSpan.FromMilliseconds(config.ServerOptions.PingInterval),
+            TimeSpan.FromMilliseconds(config.ServerOptions.PingTimeout));
         var fsmConfig = new FSM.Config(
-            config.EnablePreVote,
-            config.AppendRequestThreshold,
-            config.MaxLogSize
+            config.ServerOptions.EnablePreVote,
+            config.ServerOptions.AppendRequestThreshold,
+            config.ServerOptions.MaxLogSize
         );
         _fsm = new FSM(
             config.MyId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify,
@@ -119,13 +120,18 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         }
     }
 
+    public void AddEntry(int command, WaitType waitType) {
+        var buffer = BitConverter.GetBytes(command);
+        AddEntry(buffer, waitType);
+    }
+
     public void AddEntry(OneOf<byte[], Configuration> command, WaitType waitType) {
         var commandLength = command.Match(
             buffer => buffer.Length,
             configuration => configuration.CalculateSize());
 
-        if (commandLength >= _config.MaxCommandSize) {
-            throw new CommandTooLargeException(commandLength, _config.MaxCommandSize);
+        if (commandLength >= _config.ServerOptions.MaxCommandSize) {
+            throw new CommandTooLargeException(commandLength, _config.ServerOptions.MaxCommandSize);
         }
 
         LogEntry entry;
@@ -318,7 +324,7 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         }
     }
 
-    private void Tick(object? state) {
+    public void Tick(object? state) {
         lock (_fsm) {
             _fsm.Tick();
         }
@@ -346,5 +352,45 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
 
         Debug.Assert(ok);
         notifier.Wait();
+    }
+
+    public void WaitUntilCandidate() {
+        lock (_fsm) {
+            while (_fsm.IsFollower) {
+                _fsm.Tick();
+            }
+        }
+    }
+
+    public async Task WaitElectionDone() {
+        lock (_fsm) {
+            while (_fsm.IsCandidate) {
+                throw new NotImplementedException();
+            }
+        }
+    }
+
+    public (ulong, ulong) LogLastIdxTerm() {
+        lock (_fsm) {
+            return (_fsm.LogLastIdx, _fsm.LogLastTerm);
+        }
+    }
+
+    public async Task WaitLogIdxTerm((ulong, ulong) leaderLogIdxTerm) {
+        throw new NotImplementedException();
+    }
+
+    public bool IsLeader() {
+        lock (_fsm) {
+            return _fsm.IsLeader;
+        }
+    }
+
+    public void ElapseElection() {
+        lock (_fsm) {
+            while (_fsm.ElectionElapsed < FSM.ElectionTimeout) {
+                _fsm.Tick();
+            }
+        }
     }
 }

@@ -15,7 +15,7 @@ public class LeaderIgnoreMessageWithCurrentTermTest : FSMTestBase {
         Communicate(a, b);
         Assert.That(a.IsLeader, Is.True);
         // Check that InstallSnapshot with current term gets negative reply
-        a.Step(B_ID, new InstallSnapshot { CurrentTerm = a.CurrentTerm });
+        a.Step(B_ID, new InstallSnapshotRequest { CurrentTerm = a.CurrentTerm });
         var output = a.GetOutput();
         Assert.Multiple(() => {
             Assert.That(output.Messages, Has.Count.EqualTo(1));

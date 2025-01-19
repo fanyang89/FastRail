@@ -12,11 +12,6 @@ using SystemException = FastRail.Exceptions.SystemException;
 
 namespace FastRail.Server;
 
-public record InMemorySession(
-    SessionEntry Session,
-    List<string> Ephemerals
-);
-
 public class DataStore : IDisposable {
     private static readonly byte[] KeyStatPrefix = "/stat"u8.ToArray();
     private static readonly byte[] KeyDataPrefix = "/data"u8.ToArray();
