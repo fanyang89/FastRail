@@ -1,9 +1,9 @@
 using RaftNET.Services;
-using RocksDbSharp;
+using RaftNET.Tests.Exceptions;
 
 namespace RaftNET.Tests.ReplicationTests;
 
-public class MockRpc : RaftService {
+public sealed class MockRpc : RaftService {
     public ulong Id;
     public Connected Connected;
     public Snapshots Snapshots;
@@ -14,6 +14,8 @@ public class MockRpc : RaftService {
     public uint ServersRemoved = 0;
     public ulong SameNodePrefix;
     public bool Delays;
+    private ulong? _delaySnapshotId;
+    private SemaphoreSlim _delaySnapshot = new(1, 1);
 
     public MockRpc(RaftServiceConfig config, ulong id, Connected connected, Snapshots snapshots, RpcNet net,
         RpcConfig rpcConfig, uint serversAdded, uint serversRemoved, ulong sameNodePrefix, bool delays,
@@ -46,6 +48,10 @@ public class MockRpc : RaftService {
         return TimeSpan.FromMilliseconds(Random.Shared.NextInt64(0, RpcConfig.ExtraDelayMax.Milliseconds));
     }
 
+    public void DelaySendSnapshot(ulong snapshotId) {
+        _delaySnapshotId = snapshotId;
+    }
+
     public async Task<SnapshotResponse> SendSnapshot(ulong to, InstallSnapshotRequest request) {
         if (!Net.ContainsKey(to)) {
             throw new UnknownNodeException(to);
@@ -57,20 +63,10 @@ public class MockRpc : RaftService {
         // transfer the snapshot
         var snapshotId = request.Snp.Id;
         Snapshots[to][snapshotId] = Snapshots[Id][snapshotId];
-
-        // TODO: inject snapshot delays
+        if (_delaySnapshotId != null) {
+            await _delaySnapshot.WaitAsync();
+            _delaySnapshot.Release(1);
+        }
         return await Net[to].HandleInstallSnapshotRequestAsync(Id, request);
     }
-}
-
-class ReplicationTestException : Exception {
-    public override string Message => "Replication test failed";
-}
-
-class UnknownNodeException(ulong id) : ReplicationTestException {
-    public override string Message => $"Unknown node, id={id}";
-}
-
-class DisconnectedException(ulong from, ulong to) : ReplicationTestException {
-    public override string Message => $"Disconnected between two servers, from={from} to={to}";
 }
