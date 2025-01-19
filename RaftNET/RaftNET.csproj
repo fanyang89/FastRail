@@ -13,6 +13,7 @@
     <ItemGroup>
         <PackageReference Include="Grpc.AspNetCore" Version="2.67.0"/>
         <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0"/>
+        <PackageReference Include="Microsoft.VisualStudio.Threading" Version="17.12.19" />
         <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.12.19">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

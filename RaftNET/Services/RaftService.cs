@@ -69,9 +69,11 @@ public class RaftService : IRaftRpcHandler {
 
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
-        var fd = new RpcFailureDetector(config.MyId, _addressBook, new SystemClock(), _loggerFactory,
+        var fd = new RpcFailureDetector(config.MyId, _addressBook,
             TimeSpan.FromMilliseconds(config.ServerOptions.PingInterval),
-            TimeSpan.FromMilliseconds(config.ServerOptions.PingTimeout));
+            TimeSpan.FromMilliseconds(config.ServerOptions.PingTimeout),
+            new SystemClock(),
+            _loggerFactory.CreateLogger<RpcFailureDetector>());
         var fsmConfig = new FSM.Config(
             config.ServerOptions.EnablePreVote,
             config.ServerOptions.AppendRequestThreshold,
@@ -318,11 +320,11 @@ public class RaftService : IRaftRpcHandler {
         if (message.IsInstallSnapshotRequest) {
             SnapshotResponse? response = null;
             try {
-                response = await _connectionManager.SendInstallSnapshotRequest(to, message.InstallSnapshotRequest);
+                response = await _connectionManager.SendSnapshotAsync(to, message.InstallSnapshotRequest);
             }
             catch (RpcException ex) {
-                _logger.LogError("[{}] Failed to send snapshot, message={} to={} ex={} detail=\"{}\"",
-                    _myId, message.Name, to, ex.StatusCode, ex.Status.Detail);
+                _logger.LogError("[{}] Failed to send snapshot, to={} ex={} detail=\"{}\"",
+                    _myId, to, ex.StatusCode, ex.Status.Detail);
             }
             lock (_fsm) {
                 _fsm.Step(to, response ?? new SnapshotResponse { CurrentTerm = _fsm.CurrentTerm, Success = false });
@@ -340,7 +342,23 @@ public class RaftService : IRaftRpcHandler {
         }
 
         try {
-            await _connectionManager.Send(to, message);
+            if (message.IsVoteRequest) {
+                await _connectionManager.VoteRequestAsync(to, message.VoteRequest);
+            } else if (message.IsVoteResponse) {
+                await _connectionManager.VoteResponseAsync(to, message.VoteResponse);
+            } else if (message.IsAppendRequest) {
+                await _connectionManager.AppendRequestAsync(to, message.AppendRequest);
+            } else if (message.IsAppendResponse) {
+                await _connectionManager.AppendResponseAsync(to, message.AppendResponse);
+            } else if (message.IsReadQuorumRequest) {
+                await _connectionManager.ReadQuorumRequestAsync(to, message.ReadQuorumRequest);
+            } else if (message.IsReadQuorumResponse) {
+                await _connectionManager.ReadQuorumResponseAsync(to, message.ReadQuorumResponse);
+            } else if (message.IsTimeoutNowRequest) {
+                await _connectionManager.TimeoutNowRequestAsync(to, message.TimeoutNowRequest);
+            } else {
+                throw new UnreachableException("Unknown message type");
+            }
         }
         catch (RpcException ex) {
             _logger.LogError("[{}] Failed to send message, message={} to={} ex={} detail=\"{}\"",

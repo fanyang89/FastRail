@@ -3,7 +3,7 @@ using Grpc.Net.Client;
 
 namespace RaftNET.Services;
 
-public class RaftGrpcClient : IRaftRpcClient {
+public class RaftGrpcClient {
     private readonly Raft.RaftClient _client;
     private readonly ulong _myId;
 
@@ -14,29 +14,34 @@ public class RaftGrpcClient : IRaftRpcClient {
         _client = new Raft.RaftClient(channel);
     }
 
-    public async Task PingAsync(DateTime deadline) {
+    public void Ping(DateTime deadline, CancellationToken cancellationToken) {
         var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
-        await _client.PingAsync(new PingRequest(), metadata, deadline).ResponseAsync;
+        _client.Ping(new PingRequest(), metadata, deadline, cancellationToken);
     }
 
-    public async Task VoteRequestAsync(VoteRequest request) {
+    public async Task PingAsync(DateTime deadline, CancellationToken cancellationToken) {
+        var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
+        await _client.PingAsync(new PingRequest(), metadata, deadline, cancellationToken).ResponseAsync;
+    }
+
+    public async Task VoteAsync(VoteRequest request) {
         var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
         await _client.VoteAsync(request, metadata).ResponseAsync;
     }
 
-    public async Task VoteResponseAsync(VoteResponse response) {
+    public async Task RespondVoteAsync(VoteResponse response) {
         var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
         await _client.RespondVoteAsync(response, metadata).ResponseAsync;
     }
 
-    public async Task AppendRequestAsync(AppendRequest request) {
+    public async Task AppendAsync(AppendRequest request) {
         var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
         await _client.AppendAsync(request, metadata).ResponseAsync;
     }
 
-    public async Task AppendResponseAsync(AppendResponse request) {
+    public async Task RespondAppendAsync(AppendResponse response) {
         var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
-        await _client.RespondAppendAsync(request, metadata).ResponseAsync;
+        await _client.RespondAppendAsync(response, metadata).ResponseAsync;
     }
 
     public async Task<SnapshotResponse> SendSnapshotAsync(InstallSnapshotRequest request) {
@@ -44,13 +49,18 @@ public class RaftGrpcClient : IRaftRpcClient {
         return await _client.SendSnapshotAsync(request, metadata).ResponseAsync;
     }
 
-    public async Task TimeoutNowRequestAsync(TimeoutNowRequest request) {
+    public async Task TimeoutNowAsync(TimeoutNowRequest request) {
         var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
         await _client.TimeoutNowAsync(request, metadata).ResponseAsync;
     }
 
-    public async Task Ping() {
+    public async Task ReadQuorumAsync(ReadQuorumRequest request) {
         var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
-        await _client.PingAsync(new PingRequest(), metadata).ResponseAsync;
+        await _client.ReadQuorumAsync(request, metadata).ResponseAsync;
+    }
+
+    public async Task RespondReadQuorumAsync(ReadQuorumResponse response) {
+        var metadata = new Metadata { { RaftGrpcService.KeyFromId, _myId.ToString() } };
+        await _client.RespondReadQuorumAsync(response, metadata).ResponseAsync;
     }
 }

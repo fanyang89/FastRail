@@ -1,47 +1,73 @@
-﻿using System.Diagnostics;
-using Microsoft.Extensions.Logging;
-using RaftNET.Records;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace RaftNET.Services;
 
-public class ConnectionManager(ulong myId, AddressBook addressBook, ILogger<ConnectionManager> logger) {
-    private readonly Dictionary<ulong, IRaftRpcClient> _channels = new();
+public class ConnectionManager(ulong myId, AddressBook addressBook, ILogger<ConnectionManager>? logger = null) : IRaftRpcClient {
+    private readonly Dictionary<ulong, RaftGrpcClient> _channels = new();
+    private readonly ILogger<ConnectionManager> _logger = logger ?? new NullLogger<ConnectionManager>();
 
-    public async Task<SnapshotResponse> SendInstallSnapshotRequest(ulong to, InstallSnapshotRequest request) {
+    public async Task PingAsync(ulong to, DateTime deadline, CancellationToken cancellationToken) {
         var conn = EnsureConnection(to);
-        logger.LogTrace("Send({}->{}) InstallSnapshotRequest={}", myId, to, request);
-        return await conn.SendSnapshotAsync(request);
+        await conn.PingAsync(deadline, cancellationToken);
     }
 
-    public async Task Send(ulong to, Message message) {
+    public async Task VoteRequestAsync(ulong to, VoteRequest request) {
         var conn = EnsureConnection(to);
-
-        if (message.IsVoteRequest) {
-            logger.LogTrace("Send({}->{}) VoteRequest={}", myId, to, message.VoteRequest);
-            await conn.VoteRequestAsync(message.VoteRequest);
-        } else if (message.IsVoteResponse) {
-            logger.LogTrace("Send({}->{}) VoteResponse={}", myId, to, message.VoteResponse);
-            await conn.VoteResponseAsync(message.VoteResponse);
-        } else if (message.IsAppendRequest) {
-            logger.LogTrace("Send({}->{}) AppendRequest={}", myId, to, message.AppendRequest);
-            await conn.AppendRequestAsync(message.AppendRequest);
-        } else if (message.IsAppendResponse) {
-            logger.LogTrace("Send({}->{}) AppendResponse={}", myId, to, message.AppendResponse);
-            await conn.AppendResponseAsync(message.AppendResponse);
-        } else if (message.IsTimeoutNowRequest) {
-            logger.LogTrace("Send({}->{}) TimeoutNowRequest={}", myId, to, message.TimeoutNowRequest);
-            await conn.TimeoutNowRequestAsync(message.TimeoutNowRequest);
-        } else {
-            throw new UnreachableException();
-        }
+        _logger.LogTrace("Send({}->{}) VoteRequest={}", myId, to, request);
+        await conn.VoteAsync(request);
     }
 
-    private IRaftRpcClient EnsureConnection(ulong id) {
+    public async Task VoteResponseAsync(ulong to, VoteResponse response) {
+        var conn = EnsureConnection(to);
+        _logger.LogTrace("Send({}->{}) VoteResponse={}", myId, to, response);
+        await conn.RespondVoteAsync(response);
+    }
+
+    public async Task AppendRequestAsync(ulong to, AppendRequest request) {
+        var conn = EnsureConnection(to);
+        _logger.LogTrace("Send({}->{}) AppendRequest={}", myId, to, request);
+        await conn.AppendAsync(request);
+    }
+
+    public async Task AppendResponseAsync(ulong to, AppendResponse response) {
+        var conn = EnsureConnection(to);
+        _logger.LogTrace("Send({}->{}) AppendResponse={}", myId, to, response);
+        await conn.RespondAppendAsync(response);
+    }
+
+    public async Task<SnapshotResponse> SendSnapshotAsync(ulong to, InstallSnapshotRequest request) {
+        var conn = EnsureConnection(to);
+        _logger.LogTrace("Send({}->{}) SendSnapshot={}", myId, to, request);
+        var response = await conn.SendSnapshotAsync(request);
+        _logger.LogTrace("Send({}->{}) SendSnapshot success, response={}", myId, to, request);
+        return response;
+    }
+
+    public async Task TimeoutNowRequestAsync(ulong to, TimeoutNowRequest request) {
+        var conn = EnsureConnection(to);
+        _logger.LogTrace("Send({}->{}) TimeoutNowRequest={}", myId, to, request);
+        await conn.TimeoutNowAsync(request);
+    }
+
+    public async Task ReadQuorumRequestAsync(ulong to, ReadQuorumRequest request) {
+        var conn = EnsureConnection(to);
+        _logger.LogTrace("Send({}->{}) ReadQuorumRequest={}", myId, to, request);
+        await conn.ReadQuorumAsync(request);
+    }
+
+    public async Task ReadQuorumResponseAsync(ulong to, ReadQuorumResponse response) {
+        var conn = EnsureConnection(to);
+        _logger.LogTrace("Send({}->{}) ReadQuorumResponse={}", myId, to, response);
+        await conn.RespondReadQuorumAsync(response);
+    }
+
+    private RaftGrpcClient EnsureConnection(ulong id) {
         if (_channels.TryGetValue(id, out var connection)) {
             return connection;
         }
-        var addr = addressBook.Find(id);
 
+        var addr = addressBook.Find(id);
         if (addr == null) {
             throw new NoAddressException(id);
         }

@@ -1,7 +1,7 @@
 ﻿namespace RaftNET.FailureDetectors;
 
 public class DiscreteFailureDetector : IFailureDetector {
-    private readonly ISet<ulong> _dead = new SortedSet<ulong>();
+    private readonly SortedSet<ulong> _dead = [];
     private bool _isAlive = true;
 
     public bool IsAlive(ulong id) {

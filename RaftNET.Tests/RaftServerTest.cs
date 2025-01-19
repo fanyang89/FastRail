@@ -65,8 +65,10 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
 
     [Test]
     public async Task TestRpcServerBasicAsync() {
-        var client = new RaftGrpcClient(2, _listenAddress);
-        await client.Ping();
+        const ulong myId = 2;
+        var client = new RaftGrpcClient(myId, _listenAddress);
+        var cts = new CancellationTokenSource();
+        await client.PingAsync(DateTime.Now + TimeSpan.FromSeconds(1), cts.Token);
     }
 
     [Test]

@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Grpc.Core;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RaftNET.Services;
 
 namespace RaftNET.FailureDetectors;
@@ -6,17 +8,17 @@ namespace RaftNET.FailureDetectors;
 public class RpcFailureDetector(
     ulong myId,
     AddressBook addressBook,
-    IClock clock,
-    ILoggerFactory loggerFactory,
     TimeSpan interval,
-    TimeSpan timeout
-) : IFailureDetector, IListener, IDisposable {
-    private readonly Dictionary<ulong, IPingWorker> _workers = new();
+    TimeSpan timeout,
+    IClock clock,
+    ILogger<RpcFailureDetector>? logger
+) : IFailureDetector {
+    private readonly Dictionary<ulong, CancellationTokenSource> _cancellationTokenSources = new();
+    private readonly Dictionary<ulong, Task> _workers = new();
     private readonly Dictionary<ulong, bool> _alive = new();
-
-    public void Dispose() {
-        RemoveAll();
-    }
+    private readonly ILogger<RpcFailureDetector> _logger = logger ?? new NullLogger<RpcFailureDetector>();
+    private readonly ConnectionManager _connectionManager = new(myId, addressBook);
+    private readonly IClock _clock = clock;
 
     public bool IsAlive(ulong server) {
         lock (_alive) {
@@ -24,56 +26,43 @@ public class RpcFailureDetector(
         }
     }
 
-    public void MarkAlive(ulong server) {
-        lock (_alive) {
-            _alive[server] = true;
-        }
-    }
-
-    public void MarkDead(ulong server) {
-        lock (_alive) {
-            _alive[server] = false;
-        }
-    }
-
-    public virtual IPingWorker CreateWorker(ulong serverId) {
-        return new PingWorker(myId, serverId, addressBook, interval, timeout,
-            loggerFactory.CreateLogger<PingWorker>(), this, clock);
-    }
-
     public void Add(ulong serverId) {
-        lock (_workers) {
-            var worker = CreateWorker(serverId);
-            _workers.Add(serverId, worker);
-            worker.Start();
+        lock (_workers)
+        lock (_cancellationTokenSources) {
+            var cts = new CancellationTokenSource();
+            _workers.Add(serverId, WorkerAsync(serverId, cts.Token));
+            _cancellationTokenSources.Add(serverId, cts);
         }
     }
 
     public void Remove(ulong serverId) {
-        lock (_workers) {
-            _workers.Remove(serverId, out var worker);
-
-            if (worker != null) {
-                worker.Stop();
-            }
+        lock (_workers)
+        lock (_cancellationTokenSources) {
+            _cancellationTokenSources.Remove(serverId, out var cts);
+            cts?.Cancel();
+            _workers.Remove(serverId);
         }
     }
 
-    public void RemoveAll() {
-        lock (_workers) {
-            foreach (var (_, worker) in _workers) {
-                worker.Stop();
+    private Task WorkerAsync(ulong to, CancellationToken cancellationToken) {
+        return Task.Run(async delegate {
+            _logger.LogInformation("[{}] PingWorker started, to={}", myId, to);
+            var lastAlive = _clock.Now;
+            while (!cancellationToken.IsCancellationRequested) {
+                var deadline = _clock.Now + timeout;
+                try {
+                    await _connectionManager.PingAsync(to, deadline, cancellationToken);
+                    lastAlive = _clock.Now;
+                }
+                catch (RpcException ex) {
+                    _logger.LogError("[{}] Ping failed, to={} code={} detail={}", myId, to, ex.StatusCode, ex.Status.Detail);
+                }
+                lock (_alive) {
+                    _alive[to] = _clock.Now - lastAlive < timeout;
+                }
+                await Task.Delay(interval, cancellationToken);
             }
-
-            _workers.Clear();
-        }
-    }
-
-    public void UpdateAddress() {
-        lock (_workers) {
-            foreach (var (_, worker) in _workers) {
-                worker.UpdateAddress();
-            }
-        }
+            _logger.LogInformation("[{}] PingWorker exiting, to={}", myId, to);
+        }, cancellationToken);
     }
 }
