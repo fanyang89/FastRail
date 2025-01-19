@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Grpc.Core;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OneOf;
 using RaftNET.Exceptions;
@@ -12,7 +11,7 @@ using RaftNET.StateMachines;
 
 namespace RaftNET.Services;
 
-public partial class RaftService : Raft.RaftBase, IHostedService {
+public class RaftService : IRaftRpcHandler {
     private record TermIdx(ulong Idx, ulong Term);
 
     private readonly FSM _fsm;
@@ -25,18 +24,19 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
     private readonly AddressBook _addressBook;
     private readonly ulong _myId;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly Config _config;
+    private readonly RaftServiceConfig _config;
 
     private readonly OrderedDictionary<TermIdx, Notifier> _applyNotifiers = new();
     private readonly OrderedDictionary<TermIdx, Notifier> _commitNotifiers = new();
     private ulong _appliedIdx;
     private ulong _snapshotDescIdx;
+    private readonly Dictionary<ulong, TaskCompletionSource<SnapshotResponse>> _snapshotResponsePromises = new();
 
     private Timer? _ticker;
     private Task? _applyTask;
     private Task? _ioTask;
 
-    public RaftService(Config config) {
+    public RaftService(RaftServiceConfig config) {
         _config = config;
         _loggerFactory = config.LoggerFactory;
         _stateMachine = config.StateMachine;
@@ -314,13 +314,37 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
         }
     }
 
-    private async Task SendMessage(ulong messageTo, Message message) {
+    private async Task SendMessage(ulong to, Message message) {
+        if (message.IsInstallSnapshotRequest) {
+            SnapshotResponse? response = null;
+            try {
+                response = await _connectionManager.SendInstallSnapshotRequest(to, message.InstallSnapshotRequest);
+            }
+            catch (RpcException ex) {
+                _logger.LogError("[{}] Failed to send snapshot, message={} to={} ex={} detail=\"{}\"",
+                    _myId, message.Name, to, ex.StatusCode, ex.Status.Detail);
+            }
+            lock (_fsm) {
+                _fsm.Step(to, response ?? new SnapshotResponse { CurrentTerm = _fsm.CurrentTerm, Success = false });
+            }
+            return;
+        }
+
+        if (message.IsSnapshotResponse) {
+            lock (_snapshotResponsePromises) {
+                Debug.Assert(_snapshotResponsePromises.ContainsKey(to));
+                _snapshotResponsePromises[to].SetResult(message.SnapshotResponse);
+                _snapshotResponsePromises.Remove(to);
+            }
+            return;
+        }
+
         try {
-            await _connectionManager.Send(messageTo, message);
+            await _connectionManager.Send(to, message);
         }
         catch (RpcException ex) {
             _logger.LogError("[{}] Failed to send message, message={} to={} ex={} detail=\"{}\"",
-                _myId, message.Name, messageTo, ex.StatusCode, ex.Status.Detail);
+                _myId, message.Name, to, ex.StatusCode, ex.Status.Detail);
         }
     }
 
@@ -392,5 +416,86 @@ public partial class RaftService : Raft.RaftBase, IHostedService {
                 _fsm.Tick();
             }
         }
+    }
+
+    public Task HandleVoteRequest(ulong from, VoteRequest message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleVoteResponse(ulong from, VoteResponse message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAppendRequest(ulong from, AppendRequest message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAppendResponse(ulong from, AppendResponse message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleReadQuorumRequest(ulong from, ReadQuorumRequest message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleReadQuorumResponse(ulong from, ReadQuorumResponse message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleTimeoutNow(ulong from, TimeoutNowRequest message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<PingResponse> HandlePingRequest(ulong from, PingRequest message) {
+        return Task.FromResult(new PingResponse());
+    }
+
+    public async Task<SnapshotResponse> HandleInstallSnapshotRequest(ulong from, InstallSnapshotRequest message) {
+        // tell the state machine to transfer snapshot
+        _stateMachine.TransferSnapshot(from, message.Snp);
+
+        var response = new SnapshotResponse { Success = false };
+
+        // step the fsm
+        TaskCompletionSource<SnapshotResponse>? promise = null;
+        lock (_fsm)
+        lock (_snapshotResponsePromises) {
+            if (!_snapshotResponsePromises.ContainsKey(from)) {
+                _fsm.Step(from, message);
+                promise = new TaskCompletionSource<SnapshotResponse>();
+                _snapshotResponsePromises.Add(from, promise);
+            } else {
+                response.CurrentTerm = _fsm.CurrentTerm;
+            }
+        }
+
+        // return the response
+        if (promise == null) {
+            return response;
+        }
+
+        // retrieve the response
+        return await promise.Task;
     }
 }

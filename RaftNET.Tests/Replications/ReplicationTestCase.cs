@@ -9,7 +9,7 @@ public record ReplicationTestCase {
     public int InitialLeader = 0;
     public List<List<LogEntrySlim>> InitialStates = [];
     public List<SnapshotDescriptor> InitialSnapshots = [];
-    public List<RaftService.Options> Config = [];
+    public List<RaftServiceOptions> Config = [];
     public List<Update> Updates = [];
     public bool CommutativeHash = false;
     public bool VerifyPersistedSnapshots = true;

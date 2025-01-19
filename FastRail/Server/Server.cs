@@ -108,6 +108,10 @@ public class Server : IDisposable, IStateMachine {
         throw new NotImplementedException();
     }
 
+    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {
+        throw new NotImplementedException();
+    }
+
     public void OnEvent(Event ev) {
         ev.Switch(e => { _logger.LogInformation("Role changed, id={} role={} ", e.ServerId, e.Role); });
     }

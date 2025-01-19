@@ -65,7 +65,7 @@ public class PingWorker : IPingWorker {
         _address = _addressBook.Find(_serverId);
     }
 
-    public void Ping(CancellationToken cancellationToken, IRaftClient client) {
+    public void Ping(CancellationToken cancellationToken, IRaftRpcClient client) {
         var ok = true;
 
         try {
@@ -91,7 +91,7 @@ public class PingWorker : IPingWorker {
         }
     }
 
-    public virtual IRaftClient? GetClient(ulong myId, string? address) {
+    public virtual IRaftRpcClient? GetClient(ulong myId, string? address) {
         if (address != null) {
             return new RaftClient(myId, address);
         }
@@ -101,7 +101,7 @@ public class PingWorker : IPingWorker {
 
     private void Work(CancellationToken cancellationToken) {
         using var guard = new SemaphoreGuard(_waitExit);
-        IRaftClient? client = null;
+        IRaftRpcClient? client = null;
 
         while (!cancellationToken.IsCancellationRequested) {
             client ??= GetClient(_myId, _address);

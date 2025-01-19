@@ -7,5 +7,6 @@ public interface IStateMachine {
     ulong TakeSnapshot();
     void DropSnapshot(ulong snapshot);
     void LoadSnapshot(ulong snapshot);
+    void TransferSnapshot(ulong from, SnapshotDescriptor snapshot);
     void OnEvent(Event e);
 }

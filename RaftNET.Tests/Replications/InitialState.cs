@@ -10,7 +10,7 @@ public record InitialState {
     public SnapshotDescriptor Snapshot;
     public SnapshotValue SnapshotValue;
 
-    public RaftService.Options ServerConfig = new() {
+    public RaftServiceOptions ServerConfig = new() {
         AppendRequestThreshold = 200
     };
 }

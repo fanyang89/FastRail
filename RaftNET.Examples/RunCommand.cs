@@ -34,7 +34,7 @@ class RunCommand : Command<RunCommand.Settings> {
             settings.DataDir = Directory.CreateTempSubdirectory("RaftNET.Examples").FullName;
         }
 
-        var config = new RaftService.Config {
+        var config = new RaftServiceConfig {
             MyId = settings.MyId,
             DataDir = settings.DataDir,
             LoggerFactory = LoggerFactory.Instance,

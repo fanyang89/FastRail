@@ -8,12 +8,11 @@ service Raft {
   rpc RespondVote(VoteResponse) returns (Void);
   rpc Append(AppendRequest) returns (Void);
   rpc RespondAppend(AppendResponse) returns (Void);
-  rpc SendSnapshot(InstallSnapshot) returns (Void);
-  rpc RespondSendSnapshot(SnapshotResponse) returns (Void);
-  rpc TimeoutNow(TimeoutNowRequest) returns (Void);
-  rpc Ping(PingRequest) returns (PingResponse);
   rpc ReadQuorum(ReadQuorumRequest) returns (Void);
   rpc RespondReadQuorum(ReadQuorumResponse) returns (Void);
+  rpc TimeoutNow(TimeoutNowRequest) returns (Void);
+  rpc SendSnapshot(InstallSnapshotRequest) returns (SnapshotResponse);
+  rpc Ping(PingRequest) returns (PingResponse);
 }
 
 message Void {}
@@ -132,7 +131,7 @@ message SnapshotDescriptor {
   uint64 id = 4;
 }
 
-message InstallSnapshot {
+message InstallSnapshotRequest {
   // Current term on a leader
   uint64 current_term = 1;
   // A snapshot to install

@@ -27,6 +27,8 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
 
     public void LoadSnapshot(ulong snapshot) {}
 
+    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {}
+
     public void OnEvent(Event e) {}
 
     [SetUp]
@@ -36,7 +38,7 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         _addressBook = new AddressBook();
         _addressBook.Add(MyId, _listenAddress);
         var tmpDir = Directory.CreateTempSubdirectory();
-        _server = new RaftServer(new RaftService.Config {
+        _server = new RaftServer(new RaftServiceConfig {
             MyId = MyId,
             DataDir = tmpDir.FullName,
             LoggerFactory = LoggerFactory,

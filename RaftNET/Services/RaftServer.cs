@@ -12,8 +12,10 @@ public class RaftServer {
     private readonly WebApplication _app;
     private readonly RaftService _raftService;
 
-    public RaftServer(RaftService.Config config) {
+    public RaftServer(RaftServiceConfig config) {
         _raftService = new RaftService(config);
+        var raftGrpcService = new RaftGrpcService(_raftService);
+
         var builder = WebApplication.CreateBuilder([]);
         builder.Logging.ClearProviders();
         builder.Logging.AddSimpleConsole(LoggerFactory.ConfigureAspNet());
@@ -21,12 +23,13 @@ public class RaftServer {
             serverOptions.Listen(config.Listen.Address, config.Listen.Port,
                 options => { options.Protocols = HttpProtocols.Http2; });
         });
-        builder.Services.AddHostedService<RaftService>(_ => _raftService);
-        builder.Services.AddSingleton<RaftService>(provider =>
-            provider.GetServices<IHostedService>().OfType<RaftService>().First());
+        builder.Services.AddHostedService<RaftGrpcService>(_ => raftGrpcService);
+        builder.Services.AddSingleton<RaftGrpcService>(provider =>
+            provider.GetServices<IHostedService>().OfType<RaftGrpcService>().First());
         builder.Services.AddGrpc();
+
         _app = builder.Build();
-        _app.MapGrpcService<RaftService>();
+        _app.MapGrpcService<RaftGrpcService>();
     }
 
     public bool IsLeader => _raftService.AcquireFSMLock(fsm => fsm.IsLeader);

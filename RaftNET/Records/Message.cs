@@ -3,10 +3,12 @@ using OneOf;
 
 namespace RaftNET.Records;
 
-public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshot, SnapshotResponse,
+public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshotRequest,
+    SnapshotResponse,
     TimeoutNowRequest, ReadQuorumRequest, ReadQuorumResponse> {
     public Message(
-        OneOf<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshot, SnapshotResponse, TimeoutNowRequest,
+        OneOf<VoteRequest, VoteResponse, AppendRequest, AppendResponse, InstallSnapshotRequest, SnapshotResponse,
+                TimeoutNowRequest,
                 ReadQuorumRequest, ReadQuorumResponse>
             input
     ) : base(input) {}
@@ -15,7 +17,7 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
     public Message(VoteResponse request) : base(request) {}
     public Message(AppendRequest request) : base(request) {}
     public Message(AppendResponse request) : base(request) {}
-    public Message(InstallSnapshot request) : base(request) {}
+    public Message(InstallSnapshotRequest request) : base(request) {}
     public Message(SnapshotResponse request) : base(request) {}
     public Message(TimeoutNowRequest request) : base(request) {}
     public Message(ReadQuorumRequest request) : base(request) {}
@@ -65,9 +67,9 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
         }
     }
 
-    public InstallSnapshot InstallSnapshot {
+    public InstallSnapshotRequest InstallSnapshotRequest {
         get {
-            Debug.Assert(IsInstallSnapshot);
+            Debug.Assert(IsInstallSnapshotRequest);
             return AsT4;
         }
     }
@@ -104,7 +106,7 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
     public bool IsVoteResponse => IsT1;
     public bool IsAppendRequest => IsT2;
     public bool IsAppendResponse => IsT3;
-    public bool IsInstallSnapshot => IsT4;
+    public bool IsInstallSnapshotRequest => IsT4;
     public bool IsSnapshotResponse => IsT5;
     public bool IsTimeoutNowRequest => IsT6;
     public bool IsReadQuorumRequest => IsT7;
@@ -124,7 +126,7 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
             if (IsAppendResponse) {
                 return "AppendResponse";
             }
-            if (IsInstallSnapshot) {
+            if (IsInstallSnapshotRequest) {
                 return "InstallSnapshot";
             }
             if (IsSnapshotResponse) {

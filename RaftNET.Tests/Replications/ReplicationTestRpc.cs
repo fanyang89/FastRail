@@ -1,6 +1,8 @@
+using RaftNET.Services;
+
 namespace RaftNET.Tests.Replications;
 
-public class TestRpc {
+public class ReplicationTestRpc : IRaftRpcClient {
     public int Id;
     public Connected Connected;
     public Snapshots Snapshots;
@@ -26,5 +28,33 @@ public class TestRpc {
 
     public TimeSpan RandExtraDelay() {
         return TimeSpan.FromMilliseconds(Random.Shared.NextInt64(0, RpcConfig.ExtraDelayMax.Milliseconds));
+    }
+
+    public Task Ping(DateTime deadline) {
+        throw new NotImplementedException();
+    }
+
+    public Task VoteRequest(VoteRequest request) {
+        throw new NotImplementedException();
+    }
+
+    public Task VoteResponse(VoteResponse response) {
+        throw new NotImplementedException();
+    }
+
+    public Task AppendRequest(AppendRequest request) {
+        throw new NotImplementedException();
+    }
+
+    public Task AppendResponse(AppendResponse request) {
+        throw new NotImplementedException();
+    }
+
+    public Task<SnapshotResponse> SendSnapshot(InstallSnapshotRequest request) {
+
+    }
+
+    public Task TimeoutNowRequest(TimeoutNowRequest request) {
+        throw new NotImplementedException();
     }
 }

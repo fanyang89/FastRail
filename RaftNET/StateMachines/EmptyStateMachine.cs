@@ -13,5 +13,7 @@ public class EmptyStateMachine : IStateMachine {
 
     public void LoadSnapshot(ulong snapshot) {}
 
+    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {}
+
     public void OnEvent(Event e) {}
 }

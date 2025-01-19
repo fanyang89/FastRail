@@ -14,7 +14,7 @@ public class RaftCluster {
 
         for (ulong i = 1; i <= serverCount; i++) {
             var tempDir = Directory.CreateTempSubdirectory("raftnet-data");
-            var serverConfig = new RaftService.Config {
+            var serverConfig = new RaftServiceConfig {
                 MyId = i,
                 DataDir = tempDir.FullName,
                 LoggerFactory = loggerFactory,

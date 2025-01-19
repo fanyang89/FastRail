@@ -13,8 +13,8 @@ public class LaunchConfig {
 
     public Server.Server.Config ServerConfig => new() { DataDir = DataDir, EndPoint = Listen };
 
-    public RaftService.Config GetRaftConfig(Server.Server server) {
-        return new RaftService.Config {
+    public RaftServiceConfig GetRaftConfig(Server.Server server) {
+        return new RaftServiceConfig {
             MyId = MyId,
             DataDir = RaftDataDir,
             LoggerFactory = LoggerFactory.Instance,

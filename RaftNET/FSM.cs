@@ -296,7 +296,7 @@ public partial class FSM {
         Step(from, new Message(msg));
     }
 
-    public void Step(ulong from, InstallSnapshot msg) {
+    public void Step(ulong from, InstallSnapshotRequest msg) {
         Step(from, new Message(msg));
     }
 
@@ -322,7 +322,7 @@ public partial class FSM {
         if (msg.CurrentTerm > CurrentTerm) {
             ulong leader = 0;
 
-            if (msg.IsAppendRequest || msg.IsInstallSnapshot || msg.IsReadQuorumRequest) {
+            if (msg.IsAppendRequest || msg.IsInstallSnapshotRequest || msg.IsReadQuorumRequest) {
                 leader = from;
             } else if (msg.IsReadQuorumResponse) {
                 _logger.LogError("[{}] ignore read barrier response with higher term={} current_term={}", _myID,
@@ -351,7 +351,7 @@ public partial class FSM {
                         CommitIdx = _commitIdx,
                         Rejected = new AppendRejected { LastIdx = Log.LastIdx(), NonMatchingIdx = 0 }
                     });
-            } else if (msg.IsInstallSnapshot) {
+            } else if (msg.IsInstallSnapshotRequest) {
                 SendTo(from, new SnapshotResponse { CurrentTerm = CurrentTerm, Success = false });
             } else if (msg.IsVoteRequest) {
                 if (msg.VoteRequest.IsPreVote) {
@@ -364,7 +364,7 @@ public partial class FSM {
             return;
         } else {
             // _current_term == msg.current_term
-            if (msg.IsAppendRequest || msg.IsInstallSnapshot || msg.IsReadQuorumRequest) {
+            if (msg.IsAppendRequest || msg.IsInstallSnapshotRequest || msg.IsReadQuorumRequest) {
                 if (IsCandidate) {
                     BecomeFollower(from);
                 } else if (CurrentLeader == 0) {
@@ -651,7 +651,7 @@ public partial class FSM {
         SendTo(to, new Message(response));
     }
 
-    private void SendTo(ulong to, InstallSnapshot request) {
+    private void SendTo(ulong to, InstallSnapshotRequest request) {
         SendTo(to, new Message(request));
     }
 
@@ -884,7 +884,7 @@ public partial class FSM {
             if (prevTerm == null) {
                 var snapshot = Log.GetSnapshot();
                 progress.BecomeSnapshot(snapshot.Idx);
-                SendTo(progress.Id, new InstallSnapshot { CurrentTerm = CurrentTerm, Snp = snapshot });
+                SendTo(progress.Id, new InstallSnapshotRequest { CurrentTerm = CurrentTerm, Snp = snapshot });
                 return;
             }
 

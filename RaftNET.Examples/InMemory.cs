@@ -25,6 +25,10 @@ class InMemory(ulong myId, ILogger<InMemory> logger) : IStateMachine {
         logger.LogInformation("[{}] LoadSnapshot() snapshot={}", myId, snapshot);
     }
 
+    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {
+        logger.LogInformation("[{}] TransferSnapshot() from={} snapshot={}", myId, from, snapshot);
+    }
+
     public void OnEvent(Event e) {
         if (e.IsT0) {
             logger.LogInformation("Role change, role={} server_id={}", e.AsT0.Role, e.AsT0.ServerId);

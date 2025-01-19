@@ -27,6 +27,10 @@ public sealed class TestStateMachine : IStateMachine {
         throw new NotImplementedException();
     }
 
+    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {
+        throw new NotImplementedException();
+    }
+
     public void OnEvent(Event e) {
         throw new NotImplementedException();
     }

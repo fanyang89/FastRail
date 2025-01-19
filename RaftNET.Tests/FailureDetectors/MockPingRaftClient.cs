@@ -4,7 +4,7 @@ using RaftNET.Services;
 
 namespace RaftNET.Tests.FailureDetectors;
 
-class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger) : IRaftClient {
+class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger) : IRaftRpcClient {
     private bool _injectedException;
 
     public Task Ping(DateTime deadline) {
@@ -33,7 +33,7 @@ class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger) : IRaft
         return Task.CompletedTask;
     }
 
-    public Task<SnapshotResponse> InstallSnapshot(InstallSnapshotRequest request) {
+    public Task<SnapshotResponse> SendSnapshot(InstallSnapshotRequest request) {
         return Task.FromResult(new SnapshotResponse());
     }
 
