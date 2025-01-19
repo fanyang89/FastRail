@@ -30,31 +30,31 @@ public class ReplicationTestRpc : IRaftRpcClient {
         return TimeSpan.FromMilliseconds(Random.Shared.NextInt64(0, RpcConfig.ExtraDelayMax.Milliseconds));
     }
 
-    public Task Ping(DateTime deadline) {
+    public Task PingAsync(DateTime deadline) {
         throw new NotImplementedException();
     }
 
-    public Task VoteRequest(VoteRequest request) {
+    public Task VoteRequestAsync(VoteRequest request) {
         throw new NotImplementedException();
     }
 
-    public Task VoteResponse(VoteResponse response) {
+    public Task VoteResponseAsync(VoteResponse response) {
         throw new NotImplementedException();
     }
 
-    public Task AppendRequest(AppendRequest request) {
+    public Task AppendRequestAsync(AppendRequest request) {
         throw new NotImplementedException();
     }
 
-    public Task AppendResponse(AppendResponse request) {
+    public Task AppendResponseAsync(AppendResponse request) {
         throw new NotImplementedException();
     }
 
-    public Task<SnapshotResponse> SendSnapshot(InstallSnapshotRequest request) {
+    public Task<SnapshotResponse> SendSnapshotAsync(InstallSnapshotRequest request) {
         throw new NotImplementedException();
     }
 
-    public Task TimeoutNowRequest(TimeoutNowRequest request) {
+    public Task TimeoutNowRequestAsync(TimeoutNowRequest request) {
         throw new NotImplementedException();
     }
 }

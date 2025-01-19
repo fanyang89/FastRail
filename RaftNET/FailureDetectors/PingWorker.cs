@@ -69,7 +69,7 @@ public class PingWorker : IPingWorker {
         var ok = true;
 
         try {
-            client.Ping(DeadLine).Wait(cancellationToken);
+            client.PingAsync(DeadLine).Wait(cancellationToken);
         }
         catch (RpcException ex) {
             _logger.LogTrace("PingWorker({}) ping to {} failed, ex: {}", _myId, _serverId, ex);
@@ -93,7 +93,7 @@ public class PingWorker : IPingWorker {
 
     public virtual IRaftRpcClient? GetClient(ulong myId, string? address) {
         if (address != null) {
-            return new RaftClient(myId, address);
+            return new RaftGrpcClient(myId, address);
         }
 
         return null;

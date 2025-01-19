@@ -7,7 +7,7 @@ namespace RaftNET.Tests.FailureDetectors;
 class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger) : IRaftRpcClient {
     private bool _injectedException;
 
-    public Task Ping(DateTime deadline) {
+    public Task PingAsync(DateTime deadline) {
         logger.LogInformation("Ping({})", myId);
 
         if (_injectedException) {
@@ -17,31 +17,27 @@ class MockPingRaftClient(ulong myId, ILogger<MockPingRaftClient> logger) : IRaft
         return Task.CompletedTask;
     }
 
-    public Task VoteRequest(VoteRequest request) {
+    public Task VoteRequestAsync(VoteRequest request) {
         return Task.CompletedTask;
     }
 
-    public Task VoteResponse(VoteResponse response) {
+    public Task VoteResponseAsync(VoteResponse response) {
         return Task.CompletedTask;
     }
 
-    public Task AppendRequest(AppendRequest request) {
+    public Task AppendRequestAsync(AppendRequest request) {
         return Task.CompletedTask;
     }
 
-    public Task AppendResponse(AppendResponse request) {
+    public Task AppendResponseAsync(AppendResponse request) {
         return Task.CompletedTask;
     }
 
-    public Task<SnapshotResponse> SendSnapshot(InstallSnapshotRequest request) {
+    public Task<SnapshotResponse> SendSnapshotAsync(InstallSnapshotRequest request) {
         return Task.FromResult(new SnapshotResponse());
     }
 
-    public Task SnapshotResponse(SnapshotResponse request) {
-        return Task.CompletedTask;
-    }
-
-    public Task TimeoutNowRequest(TimeoutNowRequest request) {
+    public Task TimeoutNowRequestAsync(TimeoutNowRequest request) {
         return Task.CompletedTask;
     }
 

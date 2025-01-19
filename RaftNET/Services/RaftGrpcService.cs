@@ -21,55 +21,55 @@ public class RaftGrpcService(RaftService handler) : Raft.RaftBase, IHostedServic
         return Convert.ToUInt64(entry.Value);
     }
 
-    public override Task<Void> Vote(VoteRequest request, ServerCallContext context) {
+    public override async Task<Void> Vote(VoteRequest request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        handler.HandleVoteRequest(from, request);
-        return Task.FromResult(new Void());
+        await handler.HandleVoteRequestAsync(from, request);
+        return new Void();
     }
 
-    public override Task<Void> RespondVote(VoteResponse request, ServerCallContext context) {
+    public override async Task<Void> RespondVote(VoteResponse request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        handler.HandleVoteResponse(from, request);
-        return Task.FromResult(new Void());
+        await handler.HandleVoteResponseAsync(from, request);
+        return new Void();
     }
 
-    public override Task<Void> Append(AppendRequest request, ServerCallContext context) {
+    public override async Task<Void> Append(AppendRequest request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        handler.HandleAppendRequest(from, request);
-        return Task.FromResult(new Void());
+        await handler.HandleAppendRequestAsync(from, request);
+        return new Void();
     }
 
-    public override Task<Void> RespondAppend(AppendResponse request, ServerCallContext context) {
+    public override async Task<Void> RespondAppend(AppendResponse request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        handler.HandleAppendResponse(from, request);
-        return Task.FromResult(new Void());
+        await handler.HandleAppendResponseAsync(from, request);
+        return new Void();
     }
 
-    public override Task<Void> ReadQuorum(ReadQuorumRequest request, ServerCallContext context) {
+    public override async Task<Void> ReadQuorum(ReadQuorumRequest request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        handler.HandleReadQuorumRequest(from, request);
-        return Task.FromResult(new Void());
+        await handler.HandleReadQuorumRequestAsync(from, request);
+        return new Void();
     }
 
-    public override Task<Void> RespondReadQuorum(ReadQuorumResponse request, ServerCallContext context) {
+    public override async Task<Void> RespondReadQuorum(ReadQuorumResponse request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        handler.HandleReadQuorumResponse(from, request);
-        return Task.FromResult(new Void());
+        await handler.HandleReadQuorumResponseAsync(from, request);
+        return new Void();
     }
 
-    public override Task<Void> TimeoutNow(TimeoutNowRequest request, ServerCallContext context) {
+    public override async Task<Void> TimeoutNow(TimeoutNowRequest request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        handler.HandleTimeoutNow(from, request);
-        return Task.FromResult(new Void());
+        await handler.HandleTimeoutNowAsync(from, request);
+        return new Void();
     }
 
-    public override Task<SnapshotResponse> SendSnapshot(InstallSnapshotRequest request, ServerCallContext context) {
+    public override async Task<SnapshotResponse> SendSnapshot(InstallSnapshotRequest request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        return handler.HandleInstallSnapshotRequest(from, request);
+        return await handler.HandleInstallSnapshotRequestAsync(from, request);
     }
 
-    public override Task<PingResponse> Ping(PingRequest request, ServerCallContext context) {
+    public override async Task<PingResponse> Ping(PingRequest request, ServerCallContext context) {
         var from = GetFromServerId(context.RequestHeaders);
-        return handler.HandlePingRequest(from, request);
+        return await handler.HandlePingRequestAsync(from, request);
     }
 }

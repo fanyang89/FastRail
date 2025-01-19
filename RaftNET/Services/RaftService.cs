@@ -418,60 +418,60 @@ public class RaftService : IRaftRpcHandler {
         }
     }
 
-    public Task HandleVoteRequest(ulong from, VoteRequest message) {
+    public Task HandleVoteRequestAsync(ulong from, VoteRequest message) {
         lock (_fsm) {
             _fsm.Step(from, message);
         }
         return Task.CompletedTask;
     }
 
-    public Task HandleVoteResponse(ulong from, VoteResponse message) {
+    public Task HandleVoteResponseAsync(ulong from, VoteResponse message) {
         lock (_fsm) {
             _fsm.Step(from, message);
         }
         return Task.CompletedTask;
     }
 
-    public Task HandleAppendRequest(ulong from, AppendRequest message) {
+    public Task HandleAppendRequestAsync(ulong from, AppendRequest message) {
         lock (_fsm) {
             _fsm.Step(from, message);
         }
         return Task.CompletedTask;
     }
 
-    public Task HandleAppendResponse(ulong from, AppendResponse message) {
+    public Task HandleAppendResponseAsync(ulong from, AppendResponse message) {
         lock (_fsm) {
             _fsm.Step(from, message);
         }
         return Task.CompletedTask;
     }
 
-    public Task HandleReadQuorumRequest(ulong from, ReadQuorumRequest message) {
+    public Task HandleReadQuorumRequestAsync(ulong from, ReadQuorumRequest message) {
         lock (_fsm) {
             _fsm.Step(from, message);
         }
         return Task.CompletedTask;
     }
 
-    public Task HandleReadQuorumResponse(ulong from, ReadQuorumResponse message) {
+    public Task HandleReadQuorumResponseAsync(ulong from, ReadQuorumResponse message) {
         lock (_fsm) {
             _fsm.Step(from, message);
         }
         return Task.CompletedTask;
     }
 
-    public Task HandleTimeoutNow(ulong from, TimeoutNowRequest message) {
+    public Task HandleTimeoutNowAsync(ulong from, TimeoutNowRequest message) {
         lock (_fsm) {
             _fsm.Step(from, message);
         }
         return Task.CompletedTask;
     }
 
-    public Task<PingResponse> HandlePingRequest(ulong from, PingRequest message) {
+    public Task<PingResponse> HandlePingRequestAsync(ulong from, PingRequest message) {
         return Task.FromResult(new PingResponse());
     }
 
-    public async Task<SnapshotResponse> HandleInstallSnapshotRequest(ulong from, InstallSnapshotRequest message) {
+    public async Task<SnapshotResponse> HandleInstallSnapshotRequestAsync(ulong from, InstallSnapshotRequest message) {
         // tell the state machine to transfer snapshot
         _stateMachine.TransferSnapshot(from, message.Snp);
 

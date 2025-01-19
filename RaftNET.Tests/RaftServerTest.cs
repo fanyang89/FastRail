@@ -46,7 +46,7 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
             AddressBook = _addressBook,
             Listen = new IPEndPoint(IPAddress.Loopback, Port)
         });
-        _server.Start();
+        _ = _server.Start();
         _logger.LogInformation("Raft server started at {}", _listenAddress);
     }
 
@@ -64,8 +64,8 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     }
 
     [Test]
-    public async Task TestRpcServerBasic() {
-        var client = new RaftClient(2, _listenAddress);
+    public async Task TestRpcServerBasicAsync() {
+        var client = new RaftGrpcClient(2, _listenAddress);
         await client.Ping();
     }
 

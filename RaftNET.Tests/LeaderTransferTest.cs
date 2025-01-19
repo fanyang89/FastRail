@@ -52,7 +52,7 @@ public class LeaderTransferTest : FSMTestBase {
 
         ElectionTimeout(fsm);
         Assert.That(fsm.IsCandidate, Is.True);
-        output = fsm.GetOutput();
+        fsm.GetOutput();
         fsm.Step(Id2, new VoteResponse {
             CurrentTerm = fsm.CurrentTerm,
             VoteGranted = true,
@@ -96,7 +96,7 @@ public class LeaderTransferTest : FSMTestBase {
         fsm.GetOutput();
         ElectionTimeout(fsm);
         Assert.That(fsm.IsCandidate, Is.True);
-        output = fsm.GetOutput();
+        fsm.GetOutput();
         fsm.Step(Id2, new VoteResponse {
             CurrentTerm = fsm.CurrentTerm,
             VoteGranted = true,

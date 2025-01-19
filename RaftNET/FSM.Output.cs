@@ -5,7 +5,7 @@ namespace RaftNET;
 public partial class FSM {
     public class Output {
         public IList<ToMessage> Messages = new List<ToMessage>();
-        public bool StateChanged { get; set; } = false;
+        public bool StateChanged { get; set; }
         public IList<LogEntry> LogEntries { get; set; } = new List<LogEntry>();
         public List<LogEntry> Committed { get; set; } = new();
         public TermVote? TermAndVote { get; set; }
