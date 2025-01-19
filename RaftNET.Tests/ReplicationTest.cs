@@ -1,4 +1,4 @@
-﻿using RaftNET.Tests.Replications;
+﻿using RaftNET.Tests.ReplicationTests;
 
 namespace RaftNET.Tests;
 
