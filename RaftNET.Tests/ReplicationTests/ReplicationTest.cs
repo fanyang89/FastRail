@@ -1,6 +1,4 @@
-﻿using RaftNET.Tests.ReplicationTests;
-
-namespace RaftNET.Tests;
+﻿namespace RaftNET.Tests.ReplicationTests;
 
 public class ReplicationTest : ReplicationTestBase {
     [TestCase(false, false)]
@@ -11,7 +9,7 @@ public class ReplicationTest : ReplicationTestBase {
         // 1 node, simple replication, empty, no updates
         var test = new ReplicationTestCase { Nodes = 1 };
         var rpcConfig = new RpcConfig { Drops = drops };
-        await RunReplicationTest(test, preVote, DefaultTickDelta, rpcConfig);
+        await RunReplicationTestAsync(test, preVote, DefaultTickDelta, rpcConfig);
     }
 
     [TestCase(false, false)]
@@ -33,6 +31,6 @@ public class ReplicationTest : ReplicationTestBase {
             Updates = [new Update(new Entries(4))]
         };
         var rpcConfig = new RpcConfig { Drops = drops };
-        await RunReplicationTest(test, preVote, DefaultTickDelta, rpcConfig);
+        await RunReplicationTestAsync(test, preVote, DefaultTickDelta, rpcConfig);
     }
 }

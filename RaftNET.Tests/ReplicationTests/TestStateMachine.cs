@@ -35,7 +35,7 @@ public sealed class TestStateMachine : IStateMachine {
         throw new NotImplementedException();
     }
 
-    public async Task Done() {
+    public async Task DoneAsync() {
         throw new NotImplementedException();
     }
 }

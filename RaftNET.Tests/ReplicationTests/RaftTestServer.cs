@@ -7,7 +7,7 @@ public class RaftTestServer {
     public ReplicationTestRpc Rpc { get; set; }
     public TestStateMachine StateMachine { get; set; }
 
-    public async Task Start() {
+    public async Task StartAsync() {
         await Task.CompletedTask;
     }
 }

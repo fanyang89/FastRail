@@ -11,38 +11,38 @@ public class ReplicationTestBase : RaftTestBase {
         Logger = LoggerFactory.CreateLogger<ReplicationTestBase>();
     }
 
-    protected async Task RunReplicationTest(ReplicationTestCase test, bool preVote, TimeSpan tickDelta,
+    protected async Task RunReplicationTestAsync(ReplicationTestCase test, bool preVote, TimeSpan tickDelta,
         RpcConfig rpcConfig) {
         Logger.LogInformation("Starting test with {}",
             rpcConfig.NetworkDelay > TimeSpan.Zero ? "delays" : "no delays");
 
         var raftCluster = new RaftCluster(test, ApplyChanges, test.TotalValues, test.GetFirstValue(), test.InitialLeader,
             preVote, tickDelta, rpcConfig);
-        await raftCluster.StartAll();
+        await raftCluster.StartAllAsync();
 
         Logger.LogInformation("Processing updates");
 
         foreach (var testUpdate in test.Updates) {
             await testUpdate.Match<Task>(
                 entries => entries.Concurrent
-                    ? raftCluster.AddEntriesConcurrent(entries.N, entries.Server)
-                    : raftCluster.AddEntries(entries.N, entries.Server),
-                newLeader => raftCluster.ElectNewLeader(newLeader.Id),
-                reset => raftCluster.Reset(reset),
-                waitLog => raftCluster.WaitLog(waitLog),
-                setConfig => raftCluster.ChangeConfiguration(setConfig),
-                tick => raftCluster.Tick(tick),
-                readValue => raftCluster.Read(readValue),
+                    ? raftCluster.AddEntriesConcurrentAsync(entries.N, entries.Server)
+                    : raftCluster.AddEntriesAsync(entries.N, entries.Server),
+                newLeader => raftCluster.ElectNewLeaderAsync(newLeader.Id),
+                reset => raftCluster.ResetAsync(reset),
+                waitLog => raftCluster.WaitLogAsync(waitLog),
+                setConfig => raftCluster.ChangeConfigurationAsync(setConfig),
+                tick => raftCluster.TickAsync(tick),
+                readValue => raftCluster.ReadAsync(readValue),
                 updateRpc => updateRpc.Match<Task>(
-                    checkRpcConfig => raftCluster.CheckRpcConfig(checkRpcConfig),
-                    checkRpcAdded => raftCluster.CheckRpcAdded(checkRpcAdded),
-                    checkRpcRemoved => raftCluster.CheckRpcRemoved(checkRpcRemoved),
-                    rpcResetCounters => raftCluster.RpcResetCounters(rpcResetCounters)),
+                    checkRpcConfig => raftCluster.CheckRpcConfigAsync(checkRpcConfig),
+                    checkRpcAdded => raftCluster.CheckRpcAddedAsync(checkRpcAdded),
+                    checkRpcRemoved => raftCluster.CheckRpcRemovedAsync(checkRpcRemoved),
+                    rpcResetCounters => raftCluster.RpcResetCountersAsync(rpcResetCounters)),
                 updateFault => updateFault.Match<Task>(
-                    partition => raftCluster.Partition(partition),
-                    isolate => raftCluster.Isolate(isolate),
-                    disconnect => raftCluster.Disconnect(disconnect),
-                    stop => raftCluster.Stop(stop))
+                    partition => raftCluster.PartitionAsync(partition),
+                    isolate => raftCluster.IsolateAsync(isolate),
+                    disconnect => raftCluster.DisconnectAsync(disconnect),
+                    stop => raftCluster.StopAsync(stop))
             );
         }
 
@@ -51,11 +51,11 @@ public class ReplicationTestBase : RaftTestBase {
 
         if (test.TotalValues > 0) {
             Logger.LogInformation("Appending remaining values");
-            raftCluster.AddRemainingEntries();
-            raftCluster.WaitAll();
+            raftCluster.AddRemainingEntriesAsync();
+            raftCluster.WaitAllAsync();
         }
 
-        raftCluster.StopAll();
+        raftCluster.StopAllAsync();
 
         if (test.TotalValues > 0) {
             raftCluster.Verify();

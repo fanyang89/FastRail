@@ -29,17 +29,17 @@ public class RaftCluster {
         _logger = logger ?? new NullLogger<RaftCluster>();
     }
 
-    public async Task StartAll() {
+    public async Task StartAllAsync() {
         foreach (var server in _servers) {
-            await server.Start();
+            await server.StartAsync();
         }
-        await InitRaftTickers();
+        await InitRaftTickersAsync();
         _logger.LogInformation("Electing first leader {}", _leader);
         _servers[_leader].Service.WaitUntilCandidate();
         await _servers[_leader].Service.WaitElectionDone();
     }
 
-    private async Task InitRaftTickers() {
+    private async Task InitRaftTickersAsync() {
         foreach (var s in _inConfiguration) {
             var ticker = new System.Timers.Timer(_tickDelta);
             ticker.AutoReset = true;
@@ -49,7 +49,7 @@ public class RaftCluster {
             ticker.Start();
             _tickers.Add(s, ticker);
         }
-        await RestartTickers();
+        await RestartTickersAsync();
     }
 
     public void InitTickDelays(int n) {
@@ -63,7 +63,7 @@ public class RaftCluster {
         return _servers[id].Service;
     }
 
-    private async Task RestartTickers() {
+    private async Task RestartTickersAsync() {
         if (_tickDelays.Count > 0) {
             await Task.WhenAll(_inConfiguration.Select(async s => {
                 await Task.Delay(_tickDelays[s]);
@@ -74,7 +74,7 @@ public class RaftCluster {
         }
     }
 
-    public async Task AddEntriesConcurrent(int n, int? server) {
+    public async Task AddEntriesConcurrentAsync(int n, int? server) {
         var start = _nextValue;
         _nextValue += n;
         var tasks = new List<Task>();
@@ -87,7 +87,7 @@ public class RaftCluster {
         await Task.WhenAll(tasks);
     }
 
-    public async Task AddEntries(int n, int? server = null) {
+    public async Task AddEntriesAsync(int n, int? server = null) {
         var end = _nextValue + n;
         while (_nextValue != end) {
             AddEntry(_nextValue, server);
@@ -109,7 +109,7 @@ public class RaftCluster {
         }
     }
 
-    public async Task ElectNewLeader(int newLeader) {
+    public async Task ElectNewLeaderAsync(int newLeader) {
         Debug.Assert(newLeader < _servers.Count, "wrong next leader: newLeader < _servers.Count");
         if (newLeader == _leader) {
             return;
@@ -119,7 +119,7 @@ public class RaftCluster {
             // pre-vote
             var bothConnected = _connected.IsConnected(_leader, newLeader);
             if (bothConnected) {
-                await WaitLog(newLeader);
+                await WaitLogAsync(newLeader);
             }
 
             PauseTickers();
@@ -143,13 +143,13 @@ public class RaftCluster {
             } while (!_servers[newLeader].Service.IsLeader());
 
             _connected = prevDisconnected;
-            await RestartTickers();
-            await WaitLogAll();
+            await RestartTickersAsync();
+            await WaitLogAllAsync();
         } else {
             // not pre-vote
             do {
                 if (_connected.IsConnected(_leader, newLeader)) {
-                    await WaitLog(newLeader);
+                    await WaitLogAsync(newLeader);
                 }
 
                 PauseTickers();
@@ -160,7 +160,7 @@ public class RaftCluster {
                 _servers[newLeader].Service.WaitUntilCandidate();
                 _connected.Connect(_leader);
                 _connected.Disconnect(_leader, newLeader);
-                await RestartTickers();
+                await RestartTickersAsync();
                 await _servers[newLeader].Service.WaitElectionDone();
 
                 _connected = prevDisconnected;
@@ -168,7 +168,7 @@ public class RaftCluster {
         }
     }
 
-    private async Task WaitLogAll() {
+    private async Task WaitLogAllAsync() {
         var leaderLogIdxTerm = _servers[_leader].Service.LogLastIdxTerm();
         for (var s = 0; s < _servers.Count; s++) {
             if (s != _leader && _connected.IsConnected(s, _leader) && _inConfiguration.Contains(s)) {
@@ -189,11 +189,11 @@ public class RaftCluster {
         }
     }
 
-    public async Task Reset(Reset reset) {
-        await ResetServer(reset.Id, reset.State);
+    public async Task ResetAsync(Reset reset) {
+        await ResetServerAsync(reset.Id, reset.State);
     }
 
-    private async Task ResetServer(int id, InitialState state) {
+    private async Task ResetServerAsync(int id, InitialState state) {
         _servers[id] = CreateService(id, state);
         await _servers[id].Service.StartAsync(_cts.Token);
         SetTickerCallback(id);
@@ -207,7 +207,7 @@ public class RaftCluster {
         throw new NotImplementedException();
     }
 
-    public async Task WaitLog(int follower) {
+    public async Task WaitLogAsync(int follower) {
         if (_connected.IsConnected(_leader, follower) && _inConfiguration.Contains(_leader) &&
             _inConfiguration.Contains(follower)) {
             var leaderLogIdxTerm = _servers[_leader].Service.LogLastIdxTerm();
@@ -215,26 +215,26 @@ public class RaftCluster {
         }
     }
 
-    public async Task WaitLog(WaitLog followers) {
+    public async Task WaitLogAsync(WaitLog followers) {
         var leaderLogIdxTerm = _servers[_leader].Service.LogLastIdxTerm();
         foreach (var s in followers.IntIds) {
             await _servers[s].Service.WaitLogIdxTerm(leaderLogIdxTerm);
         }
     }
 
-    public async Task ChangeConfiguration(SetConfig sc) {
+    public async Task ChangeConfigurationAsync(SetConfig sc) {
         Assert.That(sc, Is.Not.Empty, "Empty configuration change not supported");
     }
 
-    public async Task Tick(Tick tick) {
+    public async Task TickAsync(Tick tick) {
         throw new NotImplementedException();
     }
 
-    public async Task Read(ReadValue readValue) {
+    public async Task ReadAsync(ReadValue readValue) {
         throw new NotImplementedException();
     }
 
-    public async Task CheckRpcConfig(CheckRpcConfig cc) {
+    public async Task CheckRpcConfigAsync(CheckRpcConfig cc) {
         var addressSet = cc.Addresses;
         foreach (var node in cc.Nodes) {
             Assert.That(node.Id, Is.LessThan(_servers.Count));
@@ -243,44 +243,44 @@ public class RaftCluster {
         }
     }
 
-    public async Task CheckRpcAdded(CheckRpcAdded checkRpcAdded) {
+    public async Task CheckRpcAddedAsync(CheckRpcAdded checkRpcAdded) {
         throw new NotImplementedException();
     }
 
-    public async Task CheckRpcRemoved(CheckRpcRemoved checkRpcRemoved) {
+    public async Task CheckRpcRemovedAsync(CheckRpcRemoved checkRpcRemoved) {
         throw new NotImplementedException();
     }
 
-    public async Task RpcResetCounters(RpcResetCounters rpcResetCounters) {
+    public async Task RpcResetCountersAsync(RpcResetCounters rpcResetCounters) {
         throw new NotImplementedException();
     }
 
-    public async Task Partition(Partition partition) {
+    public async Task PartitionAsync(Partition partition) {
         throw new NotImplementedException();
     }
 
-    public async Task Isolate(Isolate isolate) {
+    public async Task IsolateAsync(Isolate isolate) {
         _logger.LogInformation("Disconnecting id={}", isolate.Id);
         _connected.Disconnect(isolate.Id);
         if (isolate.Id == _leader) {
             _servers[_leader].Service.ElapseElection();
-            await FreeElection();
+            await FreeElectionAsync();
         }
     }
 
-    private async Task FreeElection() {
+    private async Task FreeElectionAsync() {
         throw new NotImplementedException();
     }
 
-    public async Task Disconnect(Disconnect nodes) {
+    public async Task DisconnectAsync(Disconnect nodes) {
         _connected.Cut(nodes.First, nodes.Second);
     }
 
-    public async Task Stop(Stop stop) {
-        await StopServer(stop.Id);
+    public async Task StopAsync(Stop stop) {
+        await StopServerAsync(stop.Id);
     }
 
-    private async Task StopServer(int id, string reason = "") {
+    private async Task StopServerAsync(int id, string reason = "") {
         CancelTicker(id);
         await _servers[id].Service.StopAsync(_cts.Token);
         if (_snapshots.TryGetValue(id, out var snapshots)) {
@@ -302,19 +302,19 @@ public class RaftCluster {
         throw new NotImplementedException();
     }
 
-    public async Task AddRemainingEntries() {
-        await AddEntries(_applyEntries - _nextValue);
+    public async Task AddRemainingEntriesAsync() {
+        await AddEntriesAsync(_applyEntries - _nextValue);
     }
 
-    public async Task WaitAll() {
+    public async Task WaitAllAsync() {
         foreach (var s in _inConfiguration) {
-            await _servers[s].StateMachine.Done();
+            await _servers[s].StateMachine.DoneAsync();
         }
     }
 
-    public async Task StopAll() {
+    public async Task StopAllAsync() {
         foreach (var s in _inConfiguration) {
-            await StopServer(s);
+            await StopServerAsync(s);
         }
     }
 
