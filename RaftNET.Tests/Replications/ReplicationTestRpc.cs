@@ -51,7 +51,7 @@ public class ReplicationTestRpc : IRaftRpcClient {
     }
 
     public Task<SnapshotResponse> SendSnapshot(InstallSnapshotRequest request) {
-
+        throw new NotImplementedException();
     }
 
     public Task TimeoutNowRequest(TimeoutNowRequest request) {
