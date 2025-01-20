@@ -47,7 +47,7 @@ public class ReplicationTestBase : RaftTestBase {
         }
 
         raftCluster.ConnectAll();
-        raftCluster.ReconfigureAll();
+        raftCluster.ReconfigureAllAsync();
 
         if (test.TotalValues > 0) {
             Logger.LogInformation("Appending remaining values");

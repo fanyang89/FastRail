@@ -1,11 +1,30 @@
+using Microsoft.Extensions.Logging;
+using RaftNET.FailureDetectors;
+using RaftNET.Persistence;
 using RaftNET.Services;
+using RaftNET.StateMachines;
 
 namespace FastRail;
 
 public class Launcher : IDisposable {
     public Launcher(LaunchConfig config) {
         Server = new Server.Server(config.ServerConfig, LoggerFactory.Instance);
-        Raft = new RaftServer(config.GetRaftConfig(Server));
+
+        var loggerFactory = LoggerFactory.Instance;
+        var addressBook = new AddressBook();
+        var myId = config.MyId;
+        var rpc = new ConnectionManager(myId, addressBook);
+        var persistence = new RocksPersistence(config.DataDir);
+        var options = new RaftServiceOptions();
+        var clock = new SystemClock();
+        var fd = new RpcFailureDetector(myId, addressBook,
+            TimeSpan.FromMilliseconds(options.PingInterval),
+            TimeSpan.FromMilliseconds(options.PingTimeout),
+            clock,
+            loggerFactory.CreateLogger<RpcFailureDetector>());
+        var service = new RaftService(config.MyId, rpc, new EmptyStateMachine(), persistence, fd, addressBook, loggerFactory,
+            new RaftServiceOptions());
+        Raft = new RaftServer(service, config.Listen.Address, config.Listen.Port);
         Server.Raft = Raft;
     }
 

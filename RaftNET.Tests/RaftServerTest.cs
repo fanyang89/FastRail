@@ -1,5 +1,7 @@
 ﻿using System.Net;
 using Microsoft.Extensions.Logging;
+using RaftNET.FailureDetectors;
+using RaftNET.Persistence;
 using RaftNET.Services;
 using RaftNET.StateMachines;
 
@@ -37,15 +39,21 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         _listenAddress = $"http://127.0.0.1:{Port}";
         _addressBook = new AddressBook();
         _addressBook.Add(MyId, _listenAddress);
-        var tmpDir = Directory.CreateTempSubdirectory();
-        _server = new RaftServer(new RaftServiceConfig {
-            MyId = MyId,
-            DataDir = tmpDir.FullName,
-            LoggerFactory = LoggerFactory,
-            StateMachine = this,
-            AddressBook = _addressBook,
-            Listen = new IPEndPoint(IPAddress.Loopback, Port)
-        });
+
+        var tempDir = Directory.CreateTempSubdirectory();
+        var addressBook = new AddressBook();
+        var rpc = new ConnectionManager(MyId, addressBook);
+        var sm = new EmptyStateMachine();
+        var persistence = new RocksPersistence(tempDir.FullName);
+        var options = new RaftServiceOptions();
+        var clock = new SystemClock();
+        var fd = new RpcFailureDetector(MyId, addressBook,
+            TimeSpan.FromMilliseconds(options.PingInterval),
+            TimeSpan.FromMilliseconds(options.PingTimeout),
+            clock,
+            LoggerFactory.CreateLogger<RpcFailureDetector>());
+        var service = new RaftService(MyId, rpc, sm, persistence, fd, addressBook, LoggerFactory, new RaftServiceOptions());
+        _server = new RaftServer(service, IPAddress.Loopback, Port);
         _ = _server.Start();
         _logger.LogInformation("Raft server started at {}", _listenAddress);
     }

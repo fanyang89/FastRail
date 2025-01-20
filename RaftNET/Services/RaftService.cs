@@ -12,40 +12,36 @@ using RaftNET.StateMachines;
 namespace RaftNET.Services;
 
 public class RaftService : IRaftRpcHandler {
-    private record TermIdx(ulong Idx, ulong Term);
-
     private readonly FSM _fsm;
     private readonly Notifier _fsmEventNotify;
     private readonly ILogger<RaftService> _logger;
     private readonly IStateMachine _stateMachine;
     private readonly IPersistence _persistence;
     private readonly BlockingCollection<ApplyMessage> _applyMessages = new();
-    private readonly ConnectionManager _connectionManager;
+    private readonly IRaftRpcClient _connectionManager;
     private readonly AddressBook _addressBook;
     private readonly ulong _myId;
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly RaftServiceConfig _config;
-
+    private readonly RaftServiceOptions _options;
     private readonly OrderedDictionary<TermIdx, Notifier> _applyNotifiers = new();
     private readonly OrderedDictionary<TermIdx, Notifier> _commitNotifiers = new();
     private ulong _appliedIdx;
     private ulong _snapshotDescIdx;
     private readonly Dictionary<ulong, TaskCompletionSource<SnapshotResponse>> _snapshotResponsePromises = new();
-
     private Timer? _ticker;
     private Task? _applyTask;
     private Task? _ioTask;
+    private readonly ILoggerFactory _loggerFactory;
 
-    public RaftService(RaftServiceConfig config) {
-        _config = config;
-        _loggerFactory = config.LoggerFactory;
-        _stateMachine = config.StateMachine;
-        _addressBook = config.AddressBook;
-        _myId = config.MyId;
-        _logger = _loggerFactory.CreateLogger<RaftService>();
-        _connectionManager = new ConnectionManager(_myId, _addressBook, _loggerFactory.CreateLogger<ConnectionManager>());
-        _persistence = new RocksPersistence(config.DataDir);
+    public RaftService(ulong myId, IRaftRpcClient rpc, IStateMachine sm, IPersistence persistence,
+        IFailureDetector fd, AddressBook addressBook, ILoggerFactory loggerFactory, RaftServiceOptions options) {
+        _myId = myId;
+        _stateMachine = sm;
+        _addressBook = addressBook;
+        _logger = loggerFactory.CreateLogger<RaftService>();
+        _connectionManager = new ConnectionManager(_myId, _addressBook, loggerFactory.CreateLogger<ConnectionManager>());
+        _persistence = persistence;
         _fsmEventNotify = new Notifier();
+        _loggerFactory = loggerFactory;
 
         _logger.LogInformation("Raft service initializing");
 
@@ -69,19 +65,14 @@ public class RaftService : IRaftRpcHandler {
 
         var logEntries = _persistence.LoadLog();
         var log = new Log(snapshot, logEntries);
-        var fd = new RpcFailureDetector(config.MyId, _addressBook,
-            TimeSpan.FromMilliseconds(config.ServerOptions.PingInterval),
-            TimeSpan.FromMilliseconds(config.ServerOptions.PingTimeout),
-            new SystemClock(),
-            _loggerFactory.CreateLogger<RpcFailureDetector>());
         var fsmConfig = new FSM.Config(
-            config.ServerOptions.EnablePreVote,
-            config.ServerOptions.AppendRequestThreshold,
-            config.ServerOptions.MaxLogSize
+            options.EnablePreVote,
+            options.AppendRequestThreshold,
+            options.MaxLogSize
         );
         _fsm = new FSM(
-            config.MyId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify,
-            config.LoggerFactory.CreateLogger<FSM>());
+            _myId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify,
+            _loggerFactory.CreateLogger<FSM>());
 
         if (snapshot is { Id: > 0 }) {
             _stateMachine.LoadSnapshot(snapshot.Id);
@@ -132,8 +123,8 @@ public class RaftService : IRaftRpcHandler {
             buffer => buffer.Length,
             configuration => configuration.CalculateSize());
 
-        if (commandLength >= _config.ServerOptions.MaxCommandSize) {
-            throw new CommandTooLargeException(commandLength, _config.ServerOptions.MaxCommandSize);
+        if (commandLength >= _options.MaxCommandSize) {
+            throw new CommandTooLargeException(commandLength, _options.MaxCommandSize);
         }
 
         LogEntry entry;
@@ -366,7 +357,7 @@ public class RaftService : IRaftRpcHandler {
         }
     }
 
-    public void Tick(object? state) {
+    public void Tick(object? state = null) {
         lock (_fsm) {
             _fsm.Tick();
         }
@@ -515,5 +506,9 @@ public class RaftService : IRaftRpcHandler {
 
         // retrieve the response
         return await promise.Task;
+    }
+
+    public async Task ReadBarrier(object o) {
+        throw new NotImplementedException();
     }
 }

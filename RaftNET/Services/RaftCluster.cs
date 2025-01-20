@@ -1,5 +1,7 @@
 ﻿using System.Net;
 using Microsoft.Extensions.Logging;
+using RaftNET.FailureDetectors;
+using RaftNET.Persistence;
 using RaftNET.StateMachines;
 
 namespace RaftNET.Services;
@@ -10,19 +12,24 @@ public class RaftCluster {
     public RaftCluster(ILoggerFactory loggerFactory, ulong serverCount) {
         var addressBook = new AddressBook();
 
-        for (ulong i = 1; i <= serverCount; i++) addressBook.Add(i, $"http://127.0.0.1:{15000 + i}");
+        for (ulong i = 1; i <= serverCount; i++) {
+            addressBook.Add(i, $"http://127.0.0.1:{15000 + i}");
+        }
 
         for (ulong i = 1; i <= serverCount; i++) {
             var tempDir = Directory.CreateTempSubdirectory("raftnet-data");
-            var serverConfig = new RaftServiceConfig {
-                MyId = i,
-                DataDir = tempDir.FullName,
-                LoggerFactory = loggerFactory,
-                StateMachine = new EmptyStateMachine(),
-                AddressBook = addressBook,
-                Listen = new IPEndPoint(IPAddress.Loopback, 15000 + (int)i)
-            };
-            var server = new RaftServer(serverConfig);
+            var rpc = new ConnectionManager(i, addressBook);
+            var sm = new EmptyStateMachine();
+            var persistence = new RocksPersistence(tempDir.FullName);
+            var options = new RaftServiceOptions();
+            var clock = new SystemClock();
+            var fd = new RpcFailureDetector(i, addressBook,
+                TimeSpan.FromMilliseconds(options.PingInterval),
+                TimeSpan.FromMilliseconds(options.PingTimeout),
+                clock,
+                loggerFactory.CreateLogger<RpcFailureDetector>());
+            var service = new RaftService(i, rpc, sm, persistence, fd, addressBook, loggerFactory, new RaftServiceOptions());
+            var server = new RaftServer(service, IPAddress.Loopback, 15000 + (int)i);
             _servers.Add(i, server);
         }
     }

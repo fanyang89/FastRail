@@ -4,17 +4,23 @@ using RaftNET.Persistence;
 
 namespace RaftNET.Tests.ReplicationTests;
 
-public class MockPersistence(ulong id, InitialState state, ILogger<MockPersistence>? logger = null) : IPersistence {
-    private readonly PersistedSnapshots _persistedSnapshots = new();
-    private readonly Snapshots _snapshots = new();
+public class MockPersistence(
+    ulong id,
+    InitialState initialState,
+    Snapshots snapshots,
+    PersistedSnapshots persistedSnapshots,
+    ILogger<MockPersistence>? logger = null
+)
+    : IPersistence {
     private readonly ILogger<MockPersistence> _logger = logger ?? new NullLogger<MockPersistence>();
+    private readonly ulong _id = id;
 
     public void StoreTermVote(ulong term, ulong vote) {
         Thread.Sleep(TimeSpan.FromMicroseconds(1));
     }
 
     public TermVote LoadTermVote() {
-        return new TermVote { Term = state.Term, VotedFor = state.VotedFor };
+        return new TermVote { Term = initialState.Term, VotedFor = initialState.VotedFor };
     }
 
     public void StoreCommitIdx(ulong idx) {}
@@ -24,13 +30,13 @@ public class MockPersistence(ulong id, InitialState state, ILogger<MockPersisten
     }
 
     public void StoreSnapshotDescriptor(SnapshotDescriptor snapshot, ulong preserveLogEntries) {
-        var snp = _snapshots[id][snapshot.Id];
-        _persistedSnapshots[id] = (snapshot, snp);
+        var snp = snapshots[_id][snapshot.Id];
+        persistedSnapshots[_id] = (snapshot, snp);
         _logger.LogInformation("[{}] StateMachine() persist snapshot, hash={}", id, snp.Hasher.FinalizeUInt64());
     }
 
     public SnapshotDescriptor? LoadSnapshotDescriptor() {
-        return state.Snapshot;
+        return initialState.Snapshot;
     }
 
     public void StoreLogEntries(IEnumerable<LogEntry> entries) {
@@ -38,7 +44,7 @@ public class MockPersistence(ulong id, InitialState state, ILogger<MockPersisten
     }
 
     public List<LogEntry> LoadLog() {
-        return state.Log.Select(log => log.Clone()).ToList();
+        return initialState.Log.Select(log => log.Clone()).ToList();
     }
 
     public void TruncateLog(ulong idx) {}

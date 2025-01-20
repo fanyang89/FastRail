@@ -12,15 +12,4 @@ public class LaunchConfig {
     public required AddressBook AddressBook;
 
     public Server.Server.Config ServerConfig => new() { DataDir = DataDir, EndPoint = Listen };
-
-    public RaftServiceConfig GetRaftConfig(Server.Server server) {
-        return new RaftServiceConfig {
-            MyId = MyId,
-            DataDir = RaftDataDir,
-            LoggerFactory = LoggerFactory.Instance,
-            StateMachine = server,
-            AddressBook = AddressBook,
-            Listen = RaftListen
-        };
-    }
 }

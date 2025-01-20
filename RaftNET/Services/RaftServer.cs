@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Net;
+using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -12,16 +13,15 @@ public class RaftServer {
     private readonly WebApplication _app;
     private readonly RaftService _raftService;
 
-    public RaftServer(RaftServiceConfig config) {
-        _raftService = new RaftService(config);
+    public RaftServer(RaftService raftService, IPAddress address, int port) {
+        _raftService = raftService;
         var raftGrpcService = new RaftGrpcService(_raftService);
 
         var builder = WebApplication.CreateBuilder([]);
         builder.Logging.ClearProviders();
         builder.Logging.AddSimpleConsole(LoggerFactory.ConfigureAspNet());
         builder.WebHost.ConfigureKestrel((_, serverOptions) => {
-            serverOptions.Listen(config.Listen.Address, config.Listen.Port,
-                options => { options.Protocols = HttpProtocols.Http2; });
+            serverOptions.Listen(address, port, options => { options.Protocols = HttpProtocols.Http2; });
         });
         builder.Services.AddHostedService<RaftGrpcService>(_ => raftGrpcService);
         builder.Services.AddSingleton<RaftGrpcService>(provider =>

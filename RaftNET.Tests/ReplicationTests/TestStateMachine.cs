@@ -9,7 +9,14 @@ public sealed class TestStateMachine : IStateMachine {
     public ulong ApplyEntries;
     public ulong Seen = 0;
     public Dictionary<ulong, Dictionary<ulong, SnapshotValue>> Snapshots;
-    public HasherInt Hasher;
+    public readonly HasherInt Hasher = new();
+
+    public TestStateMachine(ulong id, ApplyFn apply, ulong applyEntries, Snapshots snapshots) {
+        Id = id;
+        OnApply = apply;
+        ApplyEntries = applyEntries;
+        Snapshots = snapshots;
+    }
 
     public void Apply(List<Command> commands) {
         throw new NotImplementedException();

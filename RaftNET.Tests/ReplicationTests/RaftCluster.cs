@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RaftNET.Services;
@@ -6,12 +7,12 @@ using RaftNET.Services;
 namespace RaftNET.Tests.ReplicationTests;
 
 public class RaftCluster {
-    private Dictionary<ulong, RaftTestServer> _servers;
+    private Dictionary<ulong, RaftTestServer> _servers = new();
     private ulong _leader;
-    private Dictionary<ulong, System.Timers.Timer> _tickers;
-    private ISet<ulong> _inConfiguration;
+    private Dictionary<ulong, System.Timers.Timer> _tickers = new();
+    private SortedSet<ulong> _inConfiguration = [];
     private readonly ILogger<RaftCluster> _logger;
-    private IList<TimeSpan> _tickDelays;
+    private List<TimeSpan> _tickDelays = [];
     private TimeSpan _tickDelta;
     private ulong _nextValue;
     private bool _preVote;
@@ -21,12 +22,114 @@ public class RaftCluster {
     private PersistedSnapshots _persistedSnapshots;
     private CancellationTokenSource _cts = new();
     private Snapshots _snapshots;
+    private readonly RpcConfig _rpcConfig;
+    private readonly ApplyFn _apply;
+    private RpcNet _rpcNet = new();
 
     public RaftCluster(
         ReplicationTestCase test, ApplyFn apply,
-        int applyEntries, int firstVal, int firstLeader, bool prevote, TimeSpan tickDelta,
+        ulong applyEntries, ulong firstVal, ulong firstLeader, bool preVote, TimeSpan tickDelta,
         RpcConfig rpcConfig, ILogger<RaftCluster>? logger = null) {
         _logger = logger ?? new NullLogger<RaftCluster>();
+
+        _connected = new Connected(test.Nodes);
+        _snapshots = new Snapshots();
+        _persistedSnapshots = new PersistedSnapshots();
+        _applyEntries = applyEntries;
+        _nextValue = firstVal;
+        _rpcConfig = rpcConfig;
+        _preVote = preVote;
+        _apply = apply;
+        _leader = firstLeader;
+        _tickDelta = tickDelta;
+        _verifyPersistedSnapshots = test.VerifyPersistedSnapshots;
+
+        var states = GetStates(test, preVote);
+        for (ulong s = 0; s < (ulong)states.Count; s++) {
+            _inConfiguration.Add(s);
+        }
+
+        var config = new Configuration();
+        for (var i = 0; i < states.Count; i++) {
+            states[i].Address = new ConfigMember {
+                ServerAddress = new ServerAddress {
+                    ServerId = (ulong)i
+                },
+                CanVote = true
+            };
+            config.Current.Add(states[i].Address);
+        }
+
+        if (_rpcConfig.NetworkDelay > TimeSpan.Zero) {
+            InitTickDelays(test.Nodes);
+        }
+
+        for (var i = 0; i < states.Count; i++) {
+            var s = states[i].Address;
+            states[i].Snapshot.Config = config;
+            _snapshots[s.ServerAddress.ServerId][states[i].Snapshot.Id] = states[i].SnapshotValue;
+            _servers.Add((ulong)i, CreateService((ulong)i, states[i]));
+        }
+    }
+
+    private List<InitialState> GetStates(ReplicationTestCase test, bool preVote) {
+        var states = new List<InitialState>();
+        for (ulong i = 0; i < test.Nodes; i++) {
+            states.Add(new InitialState());
+        }
+
+        var leader = test.InitialLeader;
+        states[(int)leader].Term = test.InitialTerm;
+
+        for (int i = 0; i < states.Count; i++) {
+            ulong startIdx = 1;
+            if (i < test.InitialSnapshots.Count) {
+                states[i].Snapshot = test.InitialSnapshots[i];
+                states[i].SnapshotValue.Hasher = HasherInt.HashRange(test.InitialSnapshots[i].Idx);
+                states[i].SnapshotValue.Idx = test.InitialSnapshots[i].Idx;
+                startIdx = states[i].Snapshot.Idx + 1;
+            }
+            if (i < test.InitialStates.Count) {
+                var state = test.InitialStates[i];
+                states[i].Log = CreateLog(state, startIdx);
+            } else {
+                states[i].Log = [];
+            }
+            if (i < test.Config.Count) {
+                states[i].ServerConfig = test.Config[i];
+            } else {
+                states[i].ServerConfig = new RaftServiceOptions {
+                    EnablePreVote = preVote
+                };
+            }
+        }
+        return states;
+    }
+
+    private IList<LogEntry> CreateLog(List<LogEntrySlim> list, ulong startIdx) {
+        var log = new List<LogEntry>();
+        var i = startIdx;
+        foreach (var e in list) {
+            if (e.Data.IsT0) {
+                var buffer = BitConverter.GetBytes(e.Data.AsT0);
+                log.Add(new LogEntry {
+                    Term = e.Term,
+                    Idx = i++,
+                    Command = new Command {
+                        Buffer = ByteString.CopyFrom(buffer)
+                    }
+                });
+            } else if (e.Data.IsT1) {
+                log.Add(new LogEntry {
+                    Term = e.Term,
+                    Idx = i++,
+                    Configuration = e.Data.AsT1
+                });
+            } else {
+                throw new UnreachableException();
+            }
+        }
+        return log;
     }
 
     public async Task StartAllAsync() {
@@ -52,8 +155,8 @@ public class RaftCluster {
         await RestartTickersAsync();
     }
 
-    public void InitTickDelays(int n) {
-        for (int s = 0; s < n; s++) {
+    public void InitTickDelays(ulong n) {
+        for (ulong s = 0; s < n; s++) {
             var delay = Random.Shared.Next(0, _tickDelta.Milliseconds);
             _tickDelays.Add(delay * _tickDelta / _tickDelta.Milliseconds);
         }
@@ -201,7 +304,13 @@ public class RaftCluster {
     }
 
     private RaftTestServer CreateService(ulong id, InitialState state) {
-        throw new NotImplementedException();
+        var sm = new TestStateMachine(id, _apply, _applyEntries, _snapshots);
+        var rpc = new MockRpc(id, _connected, _snapshots, _rpcNet, _rpcConfig);
+        var persistence = new MockPersistence(id, state, _snapshots, _persistedSnapshots);
+        var fd = new MockFailureDetector(id, _connected);
+        var addressBook = new AddressBook();
+        var raft = new RaftService(id, rpc, sm, persistence, fd, addressBook, LoggerFactory.Instance, state.ServerConfig);
+        return new RaftTestServer(raft, sm, rpc);
     }
 
     private void SetTickerCallback(ulong id) {
@@ -228,11 +337,18 @@ public class RaftCluster {
     }
 
     public async Task TickAsync(Tick tick) {
-        throw new NotImplementedException();
+        for (ulong i = 0; i < tick.Ticks; i++) {
+            foreach (var (_, s) in _servers) {
+                s.Service.Tick();
+            }
+        }
     }
 
-    public async Task ReadAsync(ReadValue readValue) {
-        throw new NotImplementedException();
+    public async Task ReadAsync(ReadValue r) {
+        await _servers[r.NodeIdx].Service.ReadBarrier(null);
+        var value = _servers[r.NodeIdx].StateMachine.Hasher.FinalizeUInt64();
+        var expected = HasherInt.HashRange(r.ExpectedIdx).FinalizeUInt64();
+        Assert.That(value, Is.EqualTo(expected), $"Read on server {r.NodeIdx} saw the wrong value {value} != {expected}");
     }
 
     public async Task CheckRpcConfigAsync(CheckRpcConfig cc) {
@@ -270,7 +386,17 @@ public class RaftCluster {
     }
 
     private async Task FreeElectionAsync() {
-        throw new NotImplementedException();
+        _logger.LogInformation("Running free election");
+        var loops = 0;
+        for (;; loops++) {
+            await Task.Delay(_tickDelta);
+            foreach (var s in _inConfiguration) {
+                if (!_servers[s].Service.IsLeader()) continue;
+                _logger.LogInformation("New leader, id={} loops={}", s, loops);
+                _leader = s;
+                return;
+            }
+        }
     }
 
     public async Task DisconnectAsync(Disconnect nodes) {
@@ -299,8 +425,14 @@ public class RaftCluster {
         _connected.ConnectAll();
     }
 
-    public void ReconfigureAll() {
-        throw new NotImplementedException();
+    public async Task ReconfigureAllAsync() {
+        if (_inConfiguration.Count < _servers.Count) {
+            var sc = new SetConfig();
+            foreach (var (id, s) in _servers) {
+                sc.Add(new SetConfigEntry(id, true));
+            }
+            await ChangeConfigurationAsync(sc);
+        }
     }
 
     public async Task AddRemainingEntriesAsync() {

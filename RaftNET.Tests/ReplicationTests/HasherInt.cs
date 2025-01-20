@@ -4,27 +4,27 @@ using System.IO.Hashing;
 namespace RaftNET.Tests.ReplicationTests;
 
 public class HasherInt {
-    private XxHash64? _hasher;
-    private ulong? _hasher_int = 0;
+    private readonly XxHash64? _hasher;
+    private ulong? _hasherInt = 0;
 
-    public HasherInt(bool commutative) {
+    public HasherInt(bool commutative = false) {
         if (commutative) {
-            _hasher_int = 0;
+            _hasherInt = 0;
         } else {
             _hasher = new XxHash64();
         }
     }
 
     public void Update(ulong val) {
-        if (_hasher_int != null) {
-            _hasher_int += val;
+        if (_hasherInt != null) {
+            _hasherInt += val;
         }
         _hasher?.Append(BitConverter.GetBytes(val));
     }
 
     public ulong FinalizeUInt64() {
-        if (_hasher_int != null) {
-            return _hasher_int.Value;
+        if (_hasherInt != null) {
+            return _hasherInt.Value;
         }
         if (_hasher != null) {
             var hash = _hasher.GetHashAndReset();
