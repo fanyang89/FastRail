@@ -106,14 +106,14 @@ public class Server : IDisposable, IStateMachine {
     }
 
     public void OnEvent(Event ev) {
-        ev.Switch(e => { Log.Information("Role changed, id={} role={} ", e.ServerId, e.Role); });
+        ev.Switch(e => { Log.Information("Role changed, id={id} role={role}", e.ServerId, e.Role); });
     }
 
     public void Start() {
         _ds.Start();
         _listener.Start();
         Task.Run(async () => {
-            Log.Information("Rail server started at {}", _listener.LocalEndpoint);
+            Log.Information("Rail server started at {listen}", _listener.LocalEndpoint);
             while (!_cts.Token.IsCancellationRequested) {
                 var conn = await _listener.AcceptTcpClientAsync();
                 _ = Task.Run(async () => {
@@ -154,7 +154,7 @@ public class Server : IDisposable, IStateMachine {
         await using var conn = client.GetStream();
 
         var connectRequest = await ReceiveConnectRequest(conn, token);
-        Log.Information("Incoming connection request, timeout={} session_id={}",
+        Log.Information("Incoming connection request, timeout={timeout} session_id={session_id}",
             connectRequest.Timeout, connectRequest.SessionId);
 
         var connectResponse = CreateSession(connectRequest);
@@ -172,7 +172,7 @@ public class Server : IDisposable, IStateMachine {
             }
         });
         await SendConnectResponse(conn, connectResponse, token);
-        Log.Information("New session created, id={} timeout={}", sessionId, connectResponse.Timeout);
+        Log.Information("New session created, id={session_id} timeout={timeout}", sessionId, connectResponse.Timeout);
 
         // we're good, handle client requests now
         var closing = false;
@@ -332,7 +332,7 @@ public class Server : IDisposable, IStateMachine {
                 await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid, err), token);
             }
         }
-        Log.Information("Client connection closed, sessionId={}", sessionId);
+        Log.Information("Client connection closed, sessionId={session_id}", sessionId);
         client.Close();
     }
 
@@ -371,10 +371,10 @@ public class Server : IDisposable, IStateMachine {
         };
         await Broadcast(new Transaction { Zxid = _ds.NextZxid, CreateNode = txn });
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new CreateResponse { Path = request.Path }, token);
-        Log.Information("TTL node created, path={} ttl={}ms", request.Path, request.Ttl);
+        Log.Information("TTL node created, path={path} ttl={ttl}ms", request.Path, request.Ttl);
         _ = Task.Run(async () => {
             await Task.Delay(TimeSpan.FromMilliseconds(request.Ttl), token);
-            Log.Information("Removing expired TTL node, path={} ttl={}ms", request.Path, request.Ttl);
+            Log.Information("Removing expired TTL node, path={path} ttl={ttl}ms", request.Path, request.Ttl);
             _ds.RemoveNode(_ds.NextZxid, new DeleteNodeTransaction { Path = null });
         }, token);
     }
@@ -592,7 +592,7 @@ public class Server : IDisposable, IStateMachine {
         // body
         var bodyBuffer = new byte[packetLength - RequestHeader.SizeOf];
         await stream.ReadExactlyAsync(bodyBuffer, 0, bodyBuffer.Length, token);
-        Log.Debug("Received request, xid={} op={} len={}", header.Xid, header.Type, bodyBuffer.Length);
+        Log.Debug("Received request, xid={xid} op={op} len={len}", header.Xid, header.Type, bodyBuffer.Length);
         return await Task.FromResult((header, bodyBuffer));
     }
 

@@ -5,7 +5,7 @@ namespace FastRail.Tests;
 
 public class LogWatcher() : Watcher {
     public override Task process(WatchedEvent @event) {
-        Log.Information("Process event={}", @event);
+        Log.Information("Process event={event}", @event);
         return Task.CompletedTask;
     }
 }

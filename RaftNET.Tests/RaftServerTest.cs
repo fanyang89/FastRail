@@ -51,7 +51,7 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         var service = new RaftService(MyId, rpc, sm, persistence, fd, _addressBook, new RaftServiceOptions());
         _server = new RaftServer(service, IPAddress.Loopback, Port);
         _ = _server.Start();
-        Log.Information("Raft server started at {}", _listenAddress);
+        Log.Information("Raft server started at {listen}", _listenAddress);
     }
 
     [TearDown]

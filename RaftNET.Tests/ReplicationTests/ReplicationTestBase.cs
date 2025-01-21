@@ -7,7 +7,7 @@ public class ReplicationTestBase : RaftTestBase {
 
     protected async Task RunReplicationTestAsync(ReplicationTestCase test, bool preVote, TimeSpan tickDelta,
         RpcConfig rpcConfig) {
-        Log.Information("Starting test with {}",
+        Log.Information("Starting test with {delays}",
             rpcConfig.NetworkDelay > TimeSpan.Zero ? "delays" : "no delays");
 
         var raftCluster = new RaftCluster(test, ApplyChanges, test.TotalValues, test.GetFirstValue(), test.InitialLeader,
@@ -57,14 +57,14 @@ public class ReplicationTestBase : RaftTestBase {
     }
 
     protected int ApplyChanges(ulong id, List<Command> commands, HasherInt hasher) {
-        Log.Information("[{}] ApplyChanges() got entries, count={}", id, commands.Count);
+        Log.Information("[{my_id}] ApplyChanges() got entries, count={count}", id, commands.Count);
         var entries = 0;
         foreach (var command in commands) {
             var n = BitConverter.ToUInt64(command.Buffer.Span);
             if (n != ulong.MinValue) {
                 entries++;
                 hasher.Update(n);
-                Log.Information("[{}] Apply changes, n={}", id, n);
+                Log.Information("[{my_id}] Apply changes, n={n}", id, n);
             }
         }
         return entries;

@@ -138,7 +138,7 @@ public class RaftCluster {
     public async Task StartAllAsync() {
         await Task.WhenAll(_servers.Values.Select(s => s.Service.StartAsync(_cts.Token)));
         await InitRaftTickersAsync();
-        Log.Information("Electing first leader {}", _leader);
+        Log.Information("Electing first leader {leader}", _leader);
         _servers[_leader].Service.WaitUntilCandidate();
         await _servers[_leader].Service.WaitElectionDone();
     }
@@ -378,7 +378,7 @@ public class RaftCluster {
     }
 
     public async Task IsolateAsync(Isolate isolate) {
-        Log.Information("Disconnecting id={}", isolate.Id);
+        Log.Information("Disconnecting id={id}", isolate.Id);
         _connected.Disconnect(isolate.Id);
         if (isolate.Id == _leader) {
             _servers[_leader].Service.ElapseElection();
@@ -393,7 +393,7 @@ public class RaftCluster {
             await Task.Delay(_tickDelta);
             foreach (var s in _inConfiguration) {
                 if (!_servers[s].Service.IsLeader()) continue;
-                Log.Information("New leader, id={} loops={}", s, loops);
+                Log.Information("New leader, id={id} loops={loops}", s, loops);
                 _leader = s;
                 return;
             }

@@ -42,7 +42,7 @@ public class RpcFailureDetector(
 
     private Task WorkerAsync(ulong to, CancellationToken cancellationToken) {
         return Task.Run(async delegate {
-            Log.Information("[{}] PingWorker started, to={}", myId, to);
+            Log.Information("[{my_id}] PingWorker started, to={to}", myId, to);
             var lastAlive = clock.Now;
             while (!cancellationToken.IsCancellationRequested) {
                 var deadline = clock.Now + timeout;
@@ -51,14 +51,15 @@ public class RpcFailureDetector(
                     lastAlive = clock.Now;
                 }
                 catch (RpcException ex) {
-                    Log.Error("[{}] Ping failed, to={} code={} detail={}", myId, to, ex.StatusCode, ex.Status.Detail);
+                    Log.Error("[{my_id}] Ping failed, to={to} code={code} detail={detail}", myId, to, ex.StatusCode,
+                        ex.Status.Detail);
                 }
                 lock (_alive) {
                     _alive[to] = clock.Now - lastAlive < timeout;
                 }
                 await Task.Delay(interval, cancellationToken);
             }
-            Log.Information("[{}] PingWorker exiting, to={}", myId, to);
+            Log.Information("[{my_id}] PingWorker exiting, to={to}", myId, to);
         }, cancellationToken);
     }
 }

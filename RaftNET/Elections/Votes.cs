@@ -44,7 +44,7 @@ public class Votes {
         // We can get an outdated vote from a node that is now non-voting member.
         // Such vote should be ignored.
         if (!registered) {
-            Log.Information("Got a vote from unregistered server {} during election", from);
+            Log.Information("Got a vote from unregistered server {from} during election", from);
         }
     }
 

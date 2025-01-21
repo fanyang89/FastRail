@@ -29,7 +29,7 @@ public class MockPersistence(
     public void StoreSnapshotDescriptor(SnapshotDescriptor snapshot, ulong preserveLogEntries) {
         var snp = snapshots[_id][snapshot.Id];
         persistedSnapshots[_id] = (snapshot, snp);
-        Log.Information("[{}] StateMachine() persist snapshot, hash={}", id, snp.Hasher.FinalizeUInt64());
+        Log.Information("[{my_id}] StateMachine() persist snapshot, hash={hash}", id, snp.Hasher.FinalizeUInt64());
     }
 
     public SnapshotDescriptor? LoadSnapshotDescriptor() {

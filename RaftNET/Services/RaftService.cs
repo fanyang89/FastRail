@@ -54,7 +54,7 @@ public class RaftService : IRaftRpcHandler {
 
         if (snapshot == null) {
             var members = addressBook.GetMembers();
-            Log.Information("Load empty snapshot, get {} initial members from current address book", members.Count);
+            Log.Information("Load empty snapshot, get {members} initial members from current address book", members.Count);
             snapshot = new SnapshotDescriptor { Config = Messages.ConfigFromIds(members) };
         }
 
@@ -78,7 +78,7 @@ public class RaftService : IRaftRpcHandler {
         _ticker = new Timer(Tick, null, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100));
         _applyTask = Task.Run(DoApply(token), token);
         _ioTask = Task.Run(DoIO(token, 0), token);
-        Log.Information("RaftService{{{}}} started", _myId);
+        Log.Information("[{my_id}] RaftService started", _myId);
         return Task.CompletedTask;
     }
 
@@ -97,7 +97,7 @@ public class RaftService : IRaftRpcHandler {
             await _ticker.DisposeAsync();
         }
 
-        Log.Information("RaftService{{{}}} stopped", _myId);
+        Log.Information("[{my_id}] RaftService stopped", _myId);
     }
 
     public T AcquireFSMLock<T>(Func<FSM, T> fn) {
@@ -146,7 +146,7 @@ public class RaftService : IRaftRpcHandler {
 
     private Action DoApply(CancellationToken cancellationToken) {
         return () => {
-            Log.Information("Apply{{{}}} started", _myId);
+            Log.Information("[{my_id}] Apply started", _myId);
 
             while (!cancellationToken.IsCancellationRequested) {
                 var message = _applyMessages.Take();
@@ -157,13 +157,13 @@ public class RaftService : IRaftRpcHandler {
 
                 message.Switch(
                     entries => {
-                        Log.Debug("Apply{{{}}} on apply {} entries", _myId, entries.Count);
+                        Log.Debug("[{my_id}] Apply on apply {entries} entries", _myId, entries.Count);
 
                         lock (_commitNotifiers) {
                             NotifyWaiters(_commitNotifiers, entries);
                         }
 
-                        Log.Debug("Apply({}) applying...", _myId);
+                        Log.Debug("[{my_id}] Apply applying...", _myId);
                         _stateMachine.Apply(entries
                             .Where(x => x.DataCase == LogEntry.DataOneofCase.Command)
                             .Select(x => x.Command)
@@ -178,14 +178,14 @@ public class RaftService : IRaftRpcHandler {
                     },
                     snapshot => {
                         Debug.Assert(snapshot.Idx >= _appliedIdx);
-                        Log.Information("Applying snapshot {}", snapshot.Id);
+                        Log.Information("[{my_id}] Applying snapshot {id}", _myId, snapshot.Id);
                         _stateMachine.LoadSnapshot(snapshot.Id);
                         _appliedIdx = snapshot.Idx;
                     },
                     _ => {}
                 );
             }
-            Log.Information("Apply{{{}}} stopped", _myId);
+            Log.Information("[{my_id}] Apply stopped", _myId);
         };
     }
 
@@ -226,7 +226,7 @@ public class RaftService : IRaftRpcHandler {
 
     private Func<Task> DoIO(CancellationToken cancellationToken, ulong stableIdx) {
         return async () => {
-            Log.Information("IO{{{}}} started", _myId);
+            Log.Information("[{my_id}] IO started", _myId);
 
             while (!cancellationToken.IsCancellationRequested) {
                 _fsmEventNotify.Wait();
@@ -241,11 +241,11 @@ public class RaftService : IRaftRpcHandler {
                 }
 
                 if (batch != null) {
-                    Log.Information("Processing fsm output, count={}", batch.LogEntries.Count);
+                    Log.Information("[{my_id}] Processing fsm output, count={count}", _myId, batch.LogEntries.Count);
                     await ProcessFSMOutput(stableIdx, batch);
                 }
             }
-            Log.Information("IO{{{}}} started", _myId);
+            Log.Information("[{my_id}] IO started", _myId);
         };
     }
 
@@ -300,7 +300,7 @@ public class RaftService : IRaftRpcHandler {
                 response = await _connectionManager.SendSnapshotAsync(to, message.InstallSnapshotRequest);
             }
             catch (RpcException ex) {
-                Log.Error("[{}] Failed to send snapshot, to={} ex={} detail=\"{}\"",
+                Log.Error("[{my_id}] Failed to send snapshot, to={to} ex={ex} detail=\"{detail}\"",
                     _myId, to, ex.StatusCode, ex.Status.Detail);
             }
             lock (_fsm) {
@@ -338,7 +338,7 @@ public class RaftService : IRaftRpcHandler {
             }
         }
         catch (RpcException ex) {
-            Log.Error("[{}] Failed to send message, message={} to={} ex={} detail=\"{}\"",
+            Log.Error("[{my_id}] Failed to send message, message={message} to={to} ex={ex} detail=\"{detail}\"",
                 _myId, message.Name, to, ex.StatusCode, ex.Status.Detail);
         }
     }

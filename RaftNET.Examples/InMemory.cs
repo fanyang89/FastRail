@@ -7,31 +7,31 @@ namespace RaftNET.Examples;
 class InMemory(ulong myId) : IStateMachine {
     public void Apply(List<Command> commands) {
         foreach (var command in commands) {
-            Log.Information("[{}] Applying command: {}", myId, command.Buffer);
+            Log.Information("[{my_id}] Applying command: {buffer}", myId, command.Buffer);
         }
     }
 
     public ulong TakeSnapshot() {
         const ulong id = 123;
-        Log.Information("[{}] TakeSnapshot() id={}", myId, id);
+        Log.Information("[{my_id}] TakeSnapshot() id={id}", myId, id);
         return id;
     }
 
     public void DropSnapshot(ulong snapshot) {
-        Log.Information("[{}] DropSnapshot() snapshot={}", myId, snapshot);
+        Log.Information("[{my_id}] DropSnapshot() snapshot={snapshot}", myId, snapshot);
     }
 
     public void LoadSnapshot(ulong snapshot) {
-        Log.Information("[{}] LoadSnapshot() snapshot={}", myId, snapshot);
+        Log.Information("[{my_id}] LoadSnapshot() snapshot={snapshot}", myId, snapshot);
     }
 
     public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {
-        Log.Information("[{}] TransferSnapshot() from={} snapshot={}", myId, from, snapshot);
+        Log.Information("[{my_id}] TransferSnapshot() from={from} snapshot={snapshot}", myId, from, snapshot);
     }
 
     public void OnEvent(Event e) {
         if (e.IsT0) {
-            Log.Information("Role change, role={} server_id={}", e.AsT0.Role, e.AsT0.ServerId);
+            Log.Information("Role change, role={role} server_id={server_id}", e.AsT0.Role, e.AsT0.ServerId);
         }
     }
 }

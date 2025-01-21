@@ -23,12 +23,12 @@ public sealed class TestStateMachine(
         _seen += (ulong)n;
         if (n > 0 && _seen >= _applyEntries) {
             if (_seen > _applyEntries) {
-                Log.Warning("[{}] Apply() seen overshot apply entries, seen={} apply_entries={}",
+                Log.Warning("[{my_id}] Apply() seen overshot apply entries, seen={seen} apply_entries={apply_entries}",
                     _id, _seen, _applyEntries);
             }
             _done.Release(1);
         }
-        Log.Debug("[{}] Apply() got {}/{} entries", _id, _seen, _applyEntries);
+        Log.Debug("[{my_id}] Apply() got {seen}/{apply_entries} entries", _id, _seen, _applyEntries);
     }
 
     public ulong TakeSnapshot() {
@@ -43,7 +43,7 @@ public sealed class TestStateMachine(
         var snapshot = _snapshots[_id][snapshotId];
         Hasher = snapshot.Hasher;
         var hash = Hasher.FinalizeUInt64();
-        Log.Debug("[{}] LoadSnapshot(), id={} idx={} hash={}", _id, snapshotId, snapshot.Idx, hash);
+        Log.Debug("[{my_id}] LoadSnapshot(), id={id} idx={idx} hash={hash}", _id, snapshotId, snapshot.Idx, hash);
         _seen = snapshot.Idx;
         if (_seen >= _applyEntries) {
             _done.Release(1);
@@ -52,12 +52,12 @@ public sealed class TestStateMachine(
     }
 
     public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {
-        Log.Information("[{}] Should transfer snapshot, from={} id={}", _id, from, snapshot.Id);
+        Log.Information("[{my_id}] Should transfer snapshot, from={from} id={id}", _id, from, snapshot.Id);
     }
 
     public void OnEvent(Event e) {
         e.Switch(ev => {
-            Log.Information("[{}] Role changed, role={}, id={}", _id, ev.Role, ev.ServerId);
+            Log.Information("[{my_id}] Role changed, role={role}, id={id}", _id, ev.Role, ev.ServerId);
         });
     }
 

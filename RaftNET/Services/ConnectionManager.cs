@@ -12,51 +12,51 @@ public class ConnectionManager(ulong myId, AddressBook addressBook) : IRaftRpcCl
 
     public async Task VoteRequestAsync(ulong to, VoteRequest request) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({}->{}) VoteRequest={}", myId, to, request);
+        Log.Debug("Send({from}->{to}) VoteRequest={request}", myId, to, request);
         await conn.VoteAsync(request);
     }
 
     public async Task VoteResponseAsync(ulong to, VoteResponse response) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({}->{}) VoteResponse={}", myId, to, response);
+        Log.Debug("Send({from}->{to}) VoteResponse={response}", myId, to, response);
         await conn.RespondVoteAsync(response);
     }
 
     public async Task AppendRequestAsync(ulong to, AppendRequest request) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({}->{}) AppendRequest={}", myId, to, request);
+        Log.Debug("Send({from}->{to}) AppendRequest={request}", myId, to, request);
         await conn.AppendAsync(request);
     }
 
     public async Task AppendResponseAsync(ulong to, AppendResponse response) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({}->{}) AppendResponse={}", myId, to, response);
+        Log.Debug("Send({from}->{to}) AppendResponse={response}", myId, to, response);
         await conn.RespondAppendAsync(response);
     }
 
     public async Task<SnapshotResponse> SendSnapshotAsync(ulong to, InstallSnapshotRequest request) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({}->{}) SendSnapshot={}", myId, to, request);
+        Log.Debug("Send({from}->{to}) SendSnapshot={request}", myId, to, request);
         var response = await conn.SendSnapshotAsync(request);
-        Log.Debug("Send({}->{}) SendSnapshot success, response={}", myId, to, response);
+        Log.Debug("Send({from}->{to}) SendSnapshot success, response={response}", myId, to, response);
         return response;
     }
 
     public async Task TimeoutNowRequestAsync(ulong to, TimeoutNowRequest request) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({}->{}) TimeoutNowRequest={}", myId, to, request);
+        Log.Debug("Send({from}->{to}) TimeoutNowRequest={request}", myId, to, request);
         await conn.TimeoutNowAsync(request);
     }
 
     public async Task ReadQuorumRequestAsync(ulong to, ReadQuorumRequest request) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({}->{}) ReadQuorumRequest={}", myId, to, request);
+        Log.Debug("Send({from}->{to}) ReadQuorumRequest={request}", myId, to, request);
         await conn.ReadQuorumAsync(request);
     }
 
     public async Task ReadQuorumResponseAsync(ulong to, ReadQuorumResponse response) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({}->{}) ReadQuorumResponse={}", myId, to, response);
+        Log.Debug("Send({from}->{to}) ReadQuorumResponse={response}", myId, to, response);
         await conn.RespondReadQuorumAsync(response);
     }
 
