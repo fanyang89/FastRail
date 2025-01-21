@@ -3,7 +3,7 @@ using RaftNET.Tests.Exceptions;
 
 namespace RaftNET.Tests.ReplicationTests;
 
-public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
+public sealed class MockRpc : IRaftRpcClient {
     public uint ServersAdded = 0;
     public uint ServersRemoved = 0;
     private readonly Connected _connected;
@@ -24,7 +24,6 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         _net = net;
         _rpcConfig = rpcConfig;
         _delays = _rpcConfig.NetworkDelay > TimeSpan.Zero;
-        _net[id] = this;
         _sameNodePrefix = (1 << sizeof(uint)) - 1;
     }
 
@@ -48,7 +47,8 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         }
 
         if (_connected.IsConnected(_id, to)) {
-            await toRpc.HandleAppendRequestAsync(_id, request);
+            var handler = toRpc.Item2;
+            await handler.HandleAppendRequestAsync(_id, request);
         }
     }
 
@@ -70,7 +70,8 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         }
 
         if (_connected.IsConnected(_id, to)) {
-            await toRpc.HandleAppendResponseAsync(_id, response);
+            var handler = toRpc.Item2;
+            await handler.HandleAppendResponseAsync(_id, response);
         }
     }
 
@@ -88,7 +89,8 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         if (DropPackets()) {
             return;
         }
-        await toRpc.HandleReadQuorumRequestAsync(_id, request);
+        var handler = toRpc.Item2;
+        await handler.HandleReadQuorumRequestAsync(_id, request);
     }
 
     public async Task ReadQuorumResponseAsync(ulong to, ReadQuorumResponse response) {
@@ -101,7 +103,8 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         if (DropPackets()) {
             return;
         }
-        await toRpc.HandleReadQuorumResponseAsync(_id, response);
+        var handler = toRpc.Item2;
+        await handler.HandleReadQuorumResponseAsync(_id, response);
     }
 
     public async Task<SnapshotResponse> SendSnapshotAsync(ulong to, InstallSnapshotRequest request) {
@@ -121,7 +124,8 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
             _delaySnapshot.Release(1);
         }
 
-        var response = await toRpc.HandleInstallSnapshotRequestAsync(_id, request);
+        var handler = toRpc.Item2;
+        var response = await handler.HandleInstallSnapshotRequestAsync(_id, request);
         return response;
     }
 
@@ -132,7 +136,8 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         if (!_connected.IsConnected(_id, to)) {
             throw new DisconnectedException(_id, to);
         }
-        await toRpc.HandleTimeoutNowAsync(_id, request);
+        var handler = toRpc.Item2;
+        await handler.HandleTimeoutNowAsync(_id, request);
     }
 
     public async Task VoteRequestAsync(ulong to, VoteRequest request) {
@@ -153,7 +158,8 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         }
 
         if (_connected.IsConnected(_id, to)) {
-            await toRpc.HandleVoteRequestAsync(_id, request);
+            var handler = toRpc.Item2;
+            await handler.HandleVoteRequestAsync(_id, request);
         }
     }
 
@@ -175,44 +181,9 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         }
 
         if (_connected.IsConnected(_id, to)) {
-            await toRpc.HandleVoteResponseAsync(_id, response);
+            var handler = toRpc.Item2;
+            await handler.HandleVoteResponseAsync(_id, response);
         }
-    }
-
-    public Task HandleAppendRequestAsync(ulong from, AppendRequest message) {
-        throw new NotImplementedException();
-    }
-
-    public Task HandleAppendResponseAsync(ulong from, AppendResponse message) {
-        throw new NotImplementedException();
-    }
-
-    public Task<SnapshotResponse> HandleInstallSnapshotRequestAsync(ulong from, InstallSnapshotRequest message) {
-        throw new NotImplementedException();
-    }
-
-    public Task<PingResponse> HandlePingRequestAsync(ulong from, PingRequest message) {
-        throw new NotImplementedException();
-    }
-
-    public Task HandleReadQuorumRequestAsync(ulong from, ReadQuorumRequest message) {
-        throw new NotImplementedException();
-    }
-
-    public Task HandleReadQuorumResponseAsync(ulong from, ReadQuorumResponse message) {
-        throw new NotImplementedException();
-    }
-
-    public Task HandleTimeoutNowAsync(ulong from, TimeoutNowRequest message) {
-        throw new NotImplementedException();
-    }
-
-    public Task HandleVoteRequestAsync(ulong from, VoteRequest message) {
-        throw new NotImplementedException();
-    }
-
-    public Task HandleVoteResponseAsync(ulong from, VoteResponse message) {
-        throw new NotImplementedException();
     }
 
     public void DelaySendSnapshot(ulong snapshotId) {

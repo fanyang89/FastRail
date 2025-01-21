@@ -358,6 +358,7 @@ public class RaftCluster {
         var fd = new MockFailureDetector(id, _connected);
         var addressBook = new AddressBook();
         var raft = new RaftService(id, rpc, sm, persistence, fd, addressBook, state.ServerConfig);
+        _rpcNet.Add(id, new ValueTuple<MockRpc, IRaftRpcHandler>(rpc, raft));
         return new RaftTestServer(raft, sm, rpc);
     }
 

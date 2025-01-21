@@ -382,8 +382,14 @@ public class RaftService : IRaftRpcHandler {
                 }
 
                 if (batch != null) {
-                    Log.Information("[{my_id}] Processing fsm output with {log_entries_count} log entries", _myId, batch.LogEntries.Count);
-                    await ProcessFSMOutput(stableIdx, batch);
+                    try {
+                        Log.Information("[{my_id}] Processing fsm output with {log_entries_count} log entries", _myId,
+                            batch.LogEntries.Count);
+                        await ProcessFSMOutput(stableIdx, batch);
+                    }
+                    catch (Exception ex) {
+                        Log.Error(ex, "Error while processing FSM output");
+                    }
                 }
             }
             Log.Information("[{my_id}] IO started", _myId);
