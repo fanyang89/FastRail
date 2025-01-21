@@ -456,6 +456,8 @@ public class RaftCluster {
     }
 
     private async Task StopServerAsync(ulong id, string reason = "") {
+        Log.Information("Stopping server {id}, reason: {reason}", id, reason);
+
         CancelTicker(id);
         await _startCancellationTokenSource.CancelAsync();
         var cancelStop = new CancellationTokenSource();

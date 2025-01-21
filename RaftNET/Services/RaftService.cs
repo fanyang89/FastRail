@@ -211,6 +211,7 @@ public class RaftService : IRaftRpcHandler {
     }
 
     public async Task StopAsync(CancellationToken cancellationToken) {
+        _fsmEventNotify.Signal();
         if (_ioTask != null) {
             await _ioTask.WaitAsync(cancellationToken);
         }
