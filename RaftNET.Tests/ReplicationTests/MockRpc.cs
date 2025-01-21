@@ -4,7 +4,6 @@ using RaftNET.Tests.Exceptions;
 namespace RaftNET.Tests.ReplicationTests;
 
 public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
-    public bool Delays;
     public uint ServersAdded = 0;
     public uint ServersRemoved = 0;
     private readonly Connected _connected;
@@ -13,9 +12,10 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
     private readonly ulong _id;
     private readonly RpcNet _net;
     private readonly RpcConfig _rpcConfig;
+    private readonly ulong _sameNodePrefix;
     private readonly Snapshots _snapshots;
     private ulong? _delaySnapshotId;
-    private ulong _sameNodePrefix;
+    private bool delays;
 
     public MockRpc(ulong id, Connected connected, Snapshots snapshots, RpcNet net, RpcConfig rpcConfig) {
         _id = id;
@@ -205,10 +205,6 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         }
         await toRpc.HandleReadQuorumResponseAsync(_id, response);
     }
-
-    #endregion
-
-    #region IRaftRpcHandler Members
 
     public Task HandleVoteRequestAsync(ulong from, VoteRequest message) {
         throw new NotImplementedException();

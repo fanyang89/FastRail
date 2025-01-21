@@ -12,30 +12,30 @@ using Serilog;
 namespace RaftNET.Services;
 
 public class RaftService : IRaftRpcHandler {
+    private const int MaxElectionRounds = 100;
     private readonly BlockingCollection<ApplyMessage> _applyMessages = new();
     private readonly OrderedDictionary<TermIdx, Notifier> _applyNotifiers = new();
     private readonly OrderedDictionary<TermIdx, Notifier> _commitNotifiers = new();
-    private readonly IRaftRpcClient _connectionManager;
     private readonly FSM _fsm;
     private readonly Notifier _fsmEventNotify;
     private readonly ulong _myId;
     private readonly RaftServiceOptions _options;
     private readonly IPersistence _persistence;
+    private readonly IRaftRpcClient _rpcClient;
     private readonly Dictionary<ulong, TaskCompletionSource<SnapshotResponse>> _snapshotResponsePromises = new();
     private readonly IStateMachine _stateMachine;
+    private readonly TimeSpan _waitElectionInterval = TimeSpan.FromMilliseconds(100);
     private ulong _appliedIdx;
     private Task? _applyTask;
     private Task? _ioTask;
     private ulong _snapshotDescIdx;
     private Timer? _ticker;
-    private const int MaxElectionRounds = 100;
-    private readonly TimeSpan _waitElectionInterval = TimeSpan.FromMilliseconds(100);
 
     public RaftService(ulong myId, IRaftRpcClient rpc, IStateMachine sm, IPersistence persistence,
         IFailureDetector fd, AddressBook addressBook, RaftServiceOptions options) {
         _myId = myId;
         _stateMachine = sm;
-        _connectionManager = new ConnectionManager(_myId, addressBook);
+        _rpcClient = rpc;
         _persistence = persistence;
         _fsmEventNotify = new Notifier();
         _options = options;
@@ -382,7 +382,7 @@ public class RaftService : IRaftRpcHandler {
                 }
 
                 if (batch != null) {
-                    Log.Information("[{my_id}] Processing fsm output, count={count}", _myId, batch.LogEntries.Count);
+                    Log.Information("[{my_id}] Processing fsm output with {log_entries_count} log entries", _myId, batch.LogEntries.Count);
                     await ProcessFSMOutput(stableIdx, batch);
                 }
             }
@@ -438,7 +438,7 @@ public class RaftService : IRaftRpcHandler {
         if (message.IsInstallSnapshotRequest) {
             SnapshotResponse? response = null;
             try {
-                response = await _connectionManager.SendSnapshotAsync(to, message.InstallSnapshotRequest);
+                response = await _rpcClient.SendSnapshotAsync(to, message.InstallSnapshotRequest);
             }
             catch (RpcException ex) {
                 Log.Error("[{my_id}] Failed to send snapshot, to={to} ex={ex} detail=\"{detail}\"",
@@ -461,19 +461,19 @@ public class RaftService : IRaftRpcHandler {
 
         try {
             if (message.IsVoteRequest) {
-                await _connectionManager.VoteRequestAsync(to, message.VoteRequest);
+                await _rpcClient.VoteRequestAsync(to, message.VoteRequest);
             } else if (message.IsVoteResponse) {
-                await _connectionManager.VoteResponseAsync(to, message.VoteResponse);
+                await _rpcClient.VoteResponseAsync(to, message.VoteResponse);
             } else if (message.IsAppendRequest) {
-                await _connectionManager.AppendRequestAsync(to, message.AppendRequest);
+                await _rpcClient.AppendRequestAsync(to, message.AppendRequest);
             } else if (message.IsAppendResponse) {
-                await _connectionManager.AppendResponseAsync(to, message.AppendResponse);
+                await _rpcClient.AppendResponseAsync(to, message.AppendResponse);
             } else if (message.IsReadQuorumRequest) {
-                await _connectionManager.ReadQuorumRequestAsync(to, message.ReadQuorumRequest);
+                await _rpcClient.ReadQuorumRequestAsync(to, message.ReadQuorumRequest);
             } else if (message.IsReadQuorumResponse) {
-                await _connectionManager.ReadQuorumResponseAsync(to, message.ReadQuorumResponse);
+                await _rpcClient.ReadQuorumResponseAsync(to, message.ReadQuorumResponse);
             } else if (message.IsTimeoutNowRequest) {
-                await _connectionManager.TimeoutNowRequestAsync(to, message.TimeoutNowRequest);
+                await _rpcClient.TimeoutNowRequestAsync(to, message.TimeoutNowRequest);
             } else {
                 throw new UnreachableException("Unknown message type");
             }
