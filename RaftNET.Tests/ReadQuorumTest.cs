@@ -14,7 +14,7 @@ public class ReadQuorumTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = D_ID }, CanVote = false },
             }
         };
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = cfg
         });
         var a = CreateFollower(A_ID, log.Clone(), fd);

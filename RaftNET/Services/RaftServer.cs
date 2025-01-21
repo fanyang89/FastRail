@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace RaftNET.Services;
 
@@ -18,8 +18,7 @@ public class RaftServer {
         var raftGrpcService = new RaftGrpcService(_raftService);
 
         var builder = WebApplication.CreateBuilder([]);
-        builder.Logging.ClearProviders();
-        builder.Logging.AddSimpleConsole(LoggerFactory.ConfigureAspNet());
+        builder.Services.AddSerilog();
         builder.WebHost.ConfigureKestrel((_, serverOptions) => {
             serverOptions.Listen(address, port, options => { options.Protocols = HttpProtocols.Http2; });
         });

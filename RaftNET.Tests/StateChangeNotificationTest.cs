@@ -7,7 +7,7 @@ public class StateChangeNotificationTest : FSMTestBase {
     public void TestStateChangeNotification() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = CreateFollower(Id1, log.Clone(), fd);
         Assert.That(fsm.IsFollower, Is.True);
 

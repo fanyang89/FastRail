@@ -1,37 +1,37 @@
-﻿using Microsoft.Extensions.Logging;
-using RaftNET.Services;
+﻿using RaftNET.Services;
 using RaftNET.StateMachines;
+using Serilog;
 
 namespace RaftNET.Examples;
 
-class InMemory(ulong myId, ILogger<InMemory> logger) : IStateMachine {
+class InMemory(ulong myId) : IStateMachine {
     public void Apply(List<Command> commands) {
         foreach (var command in commands) {
-            logger.LogInformation("[{}] Applying command: {}", myId, command.Buffer);
+            Log.Information("[{}] Applying command: {}", myId, command.Buffer);
         }
     }
 
     public ulong TakeSnapshot() {
         const ulong id = 123;
-        logger.LogInformation("[{}] TakeSnapshot() id={}", myId, id);
+        Log.Information("[{}] TakeSnapshot() id={}", myId, id);
         return id;
     }
 
     public void DropSnapshot(ulong snapshot) {
-        logger.LogInformation("[{}] DropSnapshot() snapshot={}", myId, snapshot);
+        Log.Information("[{}] DropSnapshot() snapshot={}", myId, snapshot);
     }
 
     public void LoadSnapshot(ulong snapshot) {
-        logger.LogInformation("[{}] LoadSnapshot() snapshot={}", myId, snapshot);
+        Log.Information("[{}] LoadSnapshot() snapshot={}", myId, snapshot);
     }
 
     public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {
-        logger.LogInformation("[{}] TransferSnapshot() from={} snapshot={}", myId, from, snapshot);
+        Log.Information("[{}] TransferSnapshot() from={} snapshot={}", myId, from, snapshot);
     }
 
     public void OnEvent(Event e) {
         if (e.IsT0) {
-            logger.LogInformation("Role change, role={} server_id={}", e.AsT0.Role, e.AsT0.ServerId);
+            Log.Information("Role change, role={} server_id={}", e.AsT0.Role, e.AsT0.ServerId);
         }
     }
 }

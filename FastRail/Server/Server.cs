@@ -7,10 +7,10 @@ using FastRail.Jutes;
 using FastRail.Jutes.Proto;
 using FastRail.Protos;
 using Google.Protobuf;
-using Microsoft.Extensions.Logging;
 using RaftNET;
 using RaftNET.Services;
 using RaftNET.StateMachines;
+using Serilog;
 using SystemException = FastRail.Exceptions.SystemException;
 using WatcherEvent = FastRail.Jutes.Proto.WatcherEvent;
 
@@ -27,23 +27,16 @@ public class Server : IDisposable, IStateMachine {
     }
 
     private const long SuperSecret = 0XB3415C00L;
-    private readonly ILogger<Server> _logger;
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly DataStore _ds;
     private readonly Config _config;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly WatcherManager _watcherManager = new();
 
-    public Server(
-        Config config,
-        ILoggerFactory loggerFactory
-    ) {
+    public Server(Config config) {
         _config = config;
-        _loggerFactory = loggerFactory;
-        _logger = loggerFactory.CreateLogger<Server>();
         _listener = new TcpListener(config.EndPoint);
-        _ds = new DataStore(config.DataDir, _loggerFactory.CreateLogger<DataStore>());
+        _ds = new DataStore(config.DataDir);
     }
 
     public RaftServer? Raft { get; set; }
@@ -113,14 +106,14 @@ public class Server : IDisposable, IStateMachine {
     }
 
     public void OnEvent(Event ev) {
-        ev.Switch(e => { _logger.LogInformation("Role changed, id={} role={} ", e.ServerId, e.Role); });
+        ev.Switch(e => { Log.Information("Role changed, id={} role={} ", e.ServerId, e.Role); });
     }
 
     public void Start() {
         _ds.Start();
         _listener.Start();
         Task.Run(async () => {
-            _logger.LogInformation("Rail server started at {}", _listener.LocalEndpoint);
+            Log.Information("Rail server started at {}", _listener.LocalEndpoint);
             while (!_cts.Token.IsCancellationRequested) {
                 var conn = await _listener.AcceptTcpClientAsync();
                 _ = Task.Run(async () => {
@@ -131,11 +124,11 @@ public class Server : IDisposable, IStateMachine {
                         // ignored
                     }
                     catch (Exception e) {
-                        _logger.LogError(e, "Handle connection failed");
+                        Log.Error(e, "Handle connection failed");
                     }
                 });
             }
-            _logger.LogInformation("Rail server exited");
+            Log.Information("Rail server exited");
         }, _cts.Token);
     }
 
@@ -147,7 +140,7 @@ public class Server : IDisposable, IStateMachine {
 
     private async Task Broadcast(Transaction transaction) {
         if (Raft == null) {
-            _logger.LogWarning("Raft server is not running, can't broadcast TXNs");
+            Log.Warning("Raft server is not running, can't broadcast TXNs");
             return;
         }
         transaction.Zxid = _ds.NextZxid;
@@ -157,11 +150,11 @@ public class Server : IDisposable, IStateMachine {
 
     private async Task HandleConnection(TcpClient client, CancellationToken token) {
         // by now, only leader can handle connections
-        _logger.LogInformation("Incoming client connection");
+        Log.Information("Incoming client connection");
         await using var conn = client.GetStream();
 
         var connectRequest = await ReceiveConnectRequest(conn, token);
-        _logger.LogInformation("Incoming connection request, timeout={} session_id={}",
+        Log.Information("Incoming connection request, timeout={} session_id={}",
             connectRequest.Timeout, connectRequest.SessionId);
 
         var connectResponse = CreateSession(connectRequest);
@@ -179,7 +172,7 @@ public class Server : IDisposable, IStateMachine {
             }
         });
         await SendConnectResponse(conn, connectResponse, token);
-        _logger.LogInformation("New session created, id={} timeout={}", sessionId, connectResponse.Timeout);
+        Log.Information("New session created, id={} timeout={}", sessionId, connectResponse.Timeout);
 
         // we're good, handle client requests now
         var closing = false;
@@ -189,7 +182,7 @@ public class Server : IDisposable, IStateMachine {
             var xid = requestHeader.Xid;
 
             if (requestType == null) {
-                _logger.LogError("Invalid request, type is null");
+                Log.Error("Invalid request, type is null");
                 throw new RailException(ErrorCodes.BadArguments);
             }
 
@@ -339,7 +332,7 @@ public class Server : IDisposable, IStateMachine {
                 await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid, err), token);
             }
         }
-        _logger.LogInformation("Client connection closed, sessionId={}", sessionId);
+        Log.Information("Client connection closed, sessionId={}", sessionId);
         client.Close();
     }
 
@@ -378,10 +371,10 @@ public class Server : IDisposable, IStateMachine {
         };
         await Broadcast(new Transaction { Zxid = _ds.NextZxid, CreateNode = txn });
         await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid), new CreateResponse { Path = request.Path }, token);
-        _logger.LogInformation("TTL node created, path={} ttl={}ms", request.Path, request.Ttl);
+        Log.Information("TTL node created, path={} ttl={}ms", request.Path, request.Ttl);
         _ = Task.Run(async () => {
             await Task.Delay(TimeSpan.FromMilliseconds(request.Ttl), token);
-            _logger.LogInformation("Removing expired TTL node, path={} ttl={}ms", request.Path, request.Ttl);
+            Log.Information("Removing expired TTL node, path={} ttl={}ms", request.Path, request.Ttl);
             _ds.RemoveNode(_ds.NextZxid, new DeleteNodeTransaction { Path = null });
         }, token);
     }
@@ -557,7 +550,7 @@ public class Server : IDisposable, IStateMachine {
             case OpCode.Create2: {
                 var stat = _ds.GetNodeStat(request.Path);
                 if (stat == null) {
-                    _logger.LogError("Node created just now but not found");
+                    Log.Error("Node created just now but not found");
                     throw new RailException(ErrorCodes.SystemError);
                 }
                 await SendResponse(conn, new ReplyHeader(xid, _ds.LastZxid),
@@ -570,7 +563,7 @@ public class Server : IDisposable, IStateMachine {
     }
 
     private ConnectResponse CreateSession(ConnectRequest request) {
-        _logger.LogInformation("Client attempting to establish new session");
+        Log.Information("Client attempting to establish new session");
         var sessionTimeout = int.Min(int.Max(request.Timeout, _config.MinSessionTimeout), _config.MaxSessionTimeout);
         var sessionId = _ds.CreateSession(TimeSpan.FromMilliseconds(sessionTimeout));
         var passwd = request.Passwd ?? [];
@@ -599,7 +592,7 @@ public class Server : IDisposable, IStateMachine {
         // body
         var bodyBuffer = new byte[packetLength - RequestHeader.SizeOf];
         await stream.ReadExactlyAsync(bodyBuffer, 0, bodyBuffer.Length, token);
-        _logger.LogTrace("Received request, xid={} op={} len={}", header.Xid, header.Type, bodyBuffer.Length);
+        Log.Debug("Received request, xid={} op={} len={}", header.Xid, header.Type, bodyBuffer.Length);
         return await Task.FromResult((header, bodyBuffer));
     }
 

@@ -6,7 +6,7 @@ public class LogReplicationTest : FSMTestBase {
     [Test]
     public void TestLogReplication1() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), FSMConfig);
 
         ElectionTimeout(fsm);
@@ -92,7 +92,7 @@ public class LogReplicationTest : FSMTestBase {
     [Test]
     public void TestLogReplication2() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), FSMConfig);
 
         ElectionTimeout(fsm);

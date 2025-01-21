@@ -4,7 +4,7 @@ public class SnapshotTest : FSMTestBase {
     [Test]
     public void RejectOutdatedRemoteSnapshotTest() {
         var cfg = Messages.ConfigFromIds(A_ID, B_ID);
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = cfg
         });
         var a = CreateFollower(A_ID, log.Clone());
@@ -19,7 +19,7 @@ public class SnapshotTest : FSMTestBase {
 
         ulong snpIdx = 1;
         Assert.That(b.LogLastIdx, Is.GreaterThan(snpIdx));
-        var snpTerm = b.Log.TermFor(snpIdx);
+        var snpTerm = b.RaftLog.TermFor(snpIdx);
         Assert.That(snpTerm, Is.Not.Null);
         var snp = new SnapshotDescriptor {
             Idx = snpIdx, Term = snpTerm.Value, Config = cfg

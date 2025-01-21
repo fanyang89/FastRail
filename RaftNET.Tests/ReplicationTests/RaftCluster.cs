@@ -1,37 +1,34 @@
 ﻿using System.Diagnostics;
 using Google.Protobuf;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using RaftNET.Services;
+using Serilog;
 
 namespace RaftNET.Tests.ReplicationTests;
 
 public class RaftCluster {
-    private Dictionary<ulong, RaftTestServer> _servers = new();
-    private ulong _leader;
-    private Dictionary<ulong, System.Timers.Timer> _tickers = new();
-    private SortedSet<ulong> _inConfiguration = [];
-    private readonly ILogger<RaftCluster> _logger;
-    private List<TimeSpan> _tickDelays = [];
-    private TimeSpan _tickDelta;
-    private ulong _nextValue;
-    private bool _preVote;
-    private Connected _connected;
-    private ulong _applyEntries;
-    private bool _verifyPersistedSnapshots;
-    private PersistedSnapshots _persistedSnapshots;
-    private CancellationTokenSource _cts = new();
-    private Snapshots _snapshots;
-    private readonly RpcConfig _rpcConfig;
     private readonly ApplyFn _apply;
-    private RpcNet _rpcNet = new();
+    private readonly CancellationTokenSource _cts = new();
+    private readonly Dictionary<ulong, RaftTestServer> _servers = new();
+    private readonly Dictionary<ulong, System.Timers.Timer> _tickers = new();
+    private readonly List<TimeSpan> _tickDelays = [];
+    private readonly PersistedSnapshots _persistedSnapshots;
+    private readonly RpcConfig _rpcConfig;
+    private readonly RpcNet _rpcNet = new();
+    private readonly Snapshots _snapshots;
+    private readonly SortedSet<ulong> _inConfiguration = [];
+    private readonly TimeSpan _tickDelta;
+    private readonly bool _preVote;
+    private readonly bool _verifyPersistedSnapshots;
+    private readonly ulong _applyEntries;
+
+    private Connected _connected;
+    private ulong _leader;
+    private ulong _nextValue;
 
     public RaftCluster(
         ReplicationTestCase test, ApplyFn apply,
         ulong applyEntries, ulong firstVal, ulong firstLeader, bool preVote, TimeSpan tickDelta,
-        RpcConfig rpcConfig, ILogger<RaftCluster>? logger = null) {
-        _logger = logger ?? new NullLogger<RaftCluster>();
-
+        RpcConfig rpcConfig) {
         _connected = new Connected(test.Nodes);
         _snapshots = new Snapshots();
         _persistedSnapshots = new PersistedSnapshots();
@@ -45,15 +42,15 @@ public class RaftCluster {
         _verifyPersistedSnapshots = test.VerifyPersistedSnapshots;
 
         var states = GetStates(test, preVote);
-        for (ulong s = 0; s < (ulong)states.Count; s++) {
+        for (ulong s = 1; s <= (ulong)states.Count; s++) {
             _inConfiguration.Add(s);
         }
 
         var config = new Configuration();
-        for (var i = 0; i < states.Count; i++) {
+        for (ulong i = 1; i <= (ulong)states.Count; i++) {
             states[i].Address = new ConfigMember {
                 ServerAddress = new ServerAddress {
-                    ServerId = (ulong)i
+                    ServerId = i
                 },
                 CanVote = true
             };
@@ -64,38 +61,44 @@ public class RaftCluster {
             InitTickDelays(test.Nodes);
         }
 
-        for (var i = 0; i < states.Count; i++) {
+        for (ulong i = 1; i <= (ulong)states.Count; i++) {
             var s = states[i].Address;
             states[i].Snapshot.Config = config;
-            _snapshots[s.ServerAddress.ServerId][states[i].Snapshot.Id] = states[i].SnapshotValue;
-            _servers.Add((ulong)i, CreateService((ulong)i, states[i]));
+            var serverId = s.ServerAddress.ServerId;
+            if (!_snapshots.TryGetValue(serverId, out var snapshots)) {
+                snapshots = new Dictionary<ulong, SnapshotValue>();
+                _snapshots.Add(serverId, snapshots);
+            }
+            var snapshotId = states[i].Snapshot.Id;
+            snapshots[snapshotId] = states[i].SnapshotValue;
+            _servers.Add(i, CreateService(i, states[i]));
         }
     }
 
-    private List<InitialState> GetStates(ReplicationTestCase test, bool preVote) {
-        var states = new List<InitialState>();
-        for (ulong i = 0; i < test.Nodes; i++) {
-            states.Add(new InitialState());
+    private Dictionary<ulong, InitialState> GetStates(ReplicationTestCase test, bool preVote) {
+        var states = new Dictionary<ulong, InitialState>();
+        for (ulong i = 1; i <= test.Nodes; i++) {
+            states.Add(i, new InitialState());
         }
 
         var leader = test.InitialLeader;
-        states[(int)leader].Term = test.InitialTerm;
+        states[leader].Term = test.InitialTerm;
 
-        for (int i = 0; i < states.Count; i++) {
+        for (ulong i = 1; i <= (ulong)states.Count; i++) {
             ulong startIdx = 1;
-            if (i < test.InitialSnapshots.Count) {
+            if (i < (ulong)test.InitialSnapshots.Count) {
                 states[i].Snapshot = test.InitialSnapshots[i];
                 states[i].SnapshotValue.Hasher = HasherInt.HashRange(test.InitialSnapshots[i].Idx);
                 states[i].SnapshotValue.Idx = test.InitialSnapshots[i].Idx;
                 startIdx = states[i].Snapshot.Idx + 1;
             }
-            if (i < test.InitialStates.Count) {
+            if (i < (ulong)test.InitialStates.Count) {
                 var state = test.InitialStates[i];
                 states[i].Log = CreateLog(state, startIdx);
             } else {
                 states[i].Log = [];
             }
-            if (i < test.Config.Count) {
+            if (i < (ulong)test.Config.Count) {
                 states[i].ServerConfig = test.Config[i];
             } else {
                 states[i].ServerConfig = new RaftServiceOptions {
@@ -133,11 +136,9 @@ public class RaftCluster {
     }
 
     public async Task StartAllAsync() {
-        foreach (var (_, server) in _servers) {
-            await server.StartAsync();
-        }
+        await Task.WhenAll(_servers.Values.Select(s => s.Service.StartAsync(_cts.Token)));
         await InitRaftTickersAsync();
-        _logger.LogInformation("Electing first leader {}", _leader);
+        Log.Information("Electing first leader {}", _leader);
         _servers[_leader].Service.WaitUntilCandidate();
         await _servers[_leader].Service.WaitElectionDone();
     }
@@ -309,7 +310,7 @@ public class RaftCluster {
         var persistence = new MockPersistence(id, state, _snapshots, _persistedSnapshots);
         var fd = new MockFailureDetector(id, _connected);
         var addressBook = new AddressBook();
-        var raft = new RaftService(id, rpc, sm, persistence, fd, addressBook, LoggerFactory.Instance, state.ServerConfig);
+        var raft = new RaftService(id, rpc, sm, persistence, fd, addressBook, state.ServerConfig);
         return new RaftTestServer(raft, sm, rpc);
     }
 
@@ -377,7 +378,7 @@ public class RaftCluster {
     }
 
     public async Task IsolateAsync(Isolate isolate) {
-        _logger.LogInformation("Disconnecting id={}", isolate.Id);
+        Log.Information("Disconnecting id={}", isolate.Id);
         _connected.Disconnect(isolate.Id);
         if (isolate.Id == _leader) {
             _servers[_leader].Service.ElapseElection();
@@ -386,13 +387,13 @@ public class RaftCluster {
     }
 
     private async Task FreeElectionAsync() {
-        _logger.LogInformation("Running free election");
+        Log.Information("Running free election");
         var loops = 0;
         for (;; loops++) {
             await Task.Delay(_tickDelta);
             foreach (var s in _inConfiguration) {
                 if (!_servers[s].Service.IsLeader()) continue;
-                _logger.LogInformation("New leader, id={} loops={}", s, loops);
+                Log.Information("New leader, id={} loops={}", s, loops);
                 _leader = s;
                 return;
             }

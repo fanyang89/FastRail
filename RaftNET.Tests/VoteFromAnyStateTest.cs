@@ -7,7 +7,7 @@ public class VoteFromAnyStateTest : FSMTestBase {
     public void TestVoteFromAnyState() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 0, 0, log, fd, FSMConfig);
 
         // Follower

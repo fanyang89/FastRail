@@ -3,7 +3,7 @@ namespace RaftNET.Tests;
 public class AppendEntryInsideSnapshotTest : FSMTestBase {
     [Test]
     public void TestAppendEntryInsideSnapshot() {
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID)
         });
 
@@ -49,11 +49,11 @@ public class AppendEntryInsideSnapshotTest : FSMTestBase {
 
         c.Step(A_ID, append);
         c.GetOutput();
-        c.ApplySnapshot(Messages.LogSnapshot(c.Log, c.LogLastIdx), 0, 0, true);
+        c.ApplySnapshot(Messages.LogSnapshot(c.RaftLog, c.LogLastIdx), 0, 0, true);
 
         a.AddEntry(new Void());
         a.Tick();
         Communicate(a, b, c);
-        Assert.That(c.Log.Empty, Is.False);
+        Assert.That(c.RaftLog.Empty, Is.False);
     }
 }

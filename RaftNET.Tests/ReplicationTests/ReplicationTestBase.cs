@@ -1,26 +1,20 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Serilog;
 
 namespace RaftNET.Tests.ReplicationTests;
 
 public class ReplicationTestBase : RaftTestBase {
     protected TimeSpan DefaultTickDelta = TimeSpan.FromMilliseconds(10);
-    protected ILogger<ReplicationTestBase> Logger;
-
-    [SetUp]
-    public new void Setup() {
-        Logger = LoggerFactory.CreateLogger<ReplicationTestBase>();
-    }
 
     protected async Task RunReplicationTestAsync(ReplicationTestCase test, bool preVote, TimeSpan tickDelta,
         RpcConfig rpcConfig) {
-        Logger.LogInformation("Starting test with {}",
+        Log.Information("Starting test with {}",
             rpcConfig.NetworkDelay > TimeSpan.Zero ? "delays" : "no delays");
 
         var raftCluster = new RaftCluster(test, ApplyChanges, test.TotalValues, test.GetFirstValue(), test.InitialLeader,
             preVote, tickDelta, rpcConfig);
         await raftCluster.StartAllAsync();
 
-        Logger.LogInformation("Processing updates");
+        Log.Information("Processing updates");
 
         foreach (var testUpdate in test.Updates) {
             await testUpdate.Match<Task>(
@@ -47,15 +41,15 @@ public class ReplicationTestBase : RaftTestBase {
         }
 
         raftCluster.ConnectAll();
-        raftCluster.ReconfigureAllAsync();
+        await raftCluster.ReconfigureAllAsync();
 
         if (test.TotalValues > 0) {
-            Logger.LogInformation("Appending remaining values");
-            raftCluster.AddRemainingEntriesAsync();
-            raftCluster.WaitAllAsync();
+            Log.Information("Appending remaining values");
+            await raftCluster.AddRemainingEntriesAsync();
+            await raftCluster.WaitAllAsync();
         }
 
-        raftCluster.StopAllAsync();
+        await raftCluster.StopAllAsync();
 
         if (test.TotalValues > 0) {
             raftCluster.Verify();
@@ -63,14 +57,14 @@ public class ReplicationTestBase : RaftTestBase {
     }
 
     protected int ApplyChanges(ulong id, List<Command> commands, HasherInt hasher) {
-        Logger.LogInformation("[{}] ApplyChanges() got entries, count={}", id, commands.Count);
+        Log.Information("[{}] ApplyChanges() got entries, count={}", id, commands.Count);
         var entries = 0;
         foreach (var command in commands) {
             var n = BitConverter.ToUInt64(command.Buffer.Span);
             if (n != ulong.MinValue) {
                 entries++;
                 hasher.Update(n);
-                Logger.LogInformation("[{}] Apply changes, n={}", id, n);
+                Log.Information("[{}] Apply changes, n={}", id, n);
             }
         }
         return entries;

@@ -1,7 +1,6 @@
 ﻿using Grpc.Core;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using RaftNET.Services;
+using Serilog;
 
 namespace RaftNET.FailureDetectors;
 
@@ -10,15 +9,12 @@ public class RpcFailureDetector(
     AddressBook addressBook,
     TimeSpan interval,
     TimeSpan timeout,
-    IClock clock,
-    ILogger<RpcFailureDetector>? logger
+    IClock clock
 ) : IFailureDetector {
     private readonly Dictionary<ulong, CancellationTokenSource> _cancellationTokenSources = new();
     private readonly Dictionary<ulong, Task> _workers = new();
     private readonly Dictionary<ulong, bool> _alive = new();
-    private readonly ILogger<RpcFailureDetector> _logger = logger ?? new NullLogger<RpcFailureDetector>();
     private readonly ConnectionManager _connectionManager = new(myId, addressBook);
-    private readonly IClock _clock = clock;
 
     public bool IsAlive(ulong server) {
         lock (_alive) {
@@ -46,23 +42,23 @@ public class RpcFailureDetector(
 
     private Task WorkerAsync(ulong to, CancellationToken cancellationToken) {
         return Task.Run(async delegate {
-            _logger.LogInformation("[{}] PingWorker started, to={}", myId, to);
-            var lastAlive = _clock.Now;
+            Log.Information("[{}] PingWorker started, to={}", myId, to);
+            var lastAlive = clock.Now;
             while (!cancellationToken.IsCancellationRequested) {
-                var deadline = _clock.Now + timeout;
+                var deadline = clock.Now + timeout;
                 try {
                     await _connectionManager.PingAsync(to, deadline, cancellationToken);
-                    lastAlive = _clock.Now;
+                    lastAlive = clock.Now;
                 }
                 catch (RpcException ex) {
-                    _logger.LogError("[{}] Ping failed, to={} code={} detail={}", myId, to, ex.StatusCode, ex.Status.Detail);
+                    Log.Error("[{}] Ping failed, to={} code={} detail={}", myId, to, ex.StatusCode, ex.Status.Detail);
                 }
                 lock (_alive) {
-                    _alive[to] = _clock.Now - lastAlive < timeout;
+                    _alive[to] = clock.Now - lastAlive < timeout;
                 }
                 await Task.Delay(interval, cancellationToken);
             }
-            _logger.LogInformation("[{}] PingWorker exiting, to={}", myId, to);
+            Log.Information("[{}] PingWorker exiting, to={}", myId, to);
         }, cancellationToken);
     }
 }

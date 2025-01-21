@@ -1,5 +1,4 @@
 using System.Net;
-using Microsoft.Extensions.Logging;
 using org.apache.zookeeper;
 using RaftNET.Services;
 
@@ -34,14 +33,13 @@ public class SingleServerTestBase : TestBase {
     }
 
     [TearDown]
-    public new async Task TearDown() {
+    public async Task TearDown() {
         await Client.closeAsync();
         Launcher.Stop();
         Launcher.Dispose();
     }
 
     protected ZooKeeper CreateClient() {
-        return new ZooKeeper($"127.0.0.1:{Port}", SessionTimeout,
-            new LogWatcher(LoggerFactory.CreateLogger<LogWatcher>()));
+        return new ZooKeeper($"127.0.0.1:{Port}", SessionTimeout, new LogWatcher());
     }
 }

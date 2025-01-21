@@ -4,8 +4,6 @@ using System.Text;
 using FastRail.Exceptions;
 using FastRail.Protos;
 using Google.Protobuf;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using RaftNET;
 using RocksDbSharp;
 using SystemException = FastRail.Exceptions.SystemException;
@@ -18,14 +16,12 @@ public class DataStore : IDisposable {
     private static readonly byte[] KeySessionPrefix = "/sess/"u8.ToArray();
     private static readonly byte[] KeyZxid = "/zxid"u8.ToArray();
     private readonly RocksDb _db;
-    private readonly ILogger<DataStore> _logger;
     private readonly Lock _sessionLock = new();
     private readonly Dictionary<long, InMemorySession> _sessions = new();
     private readonly WatcherManager _watcherManager = new();
     private long _nextSessionId;
 
-    public DataStore(string dataDir, ILogger<DataStore>? logger = null) {
-        _logger = logger ?? new NullLogger<DataStore>();
+    public DataStore(string dataDir) {
         var options = new DbOptions().SetCreateIfMissing();
         _db = RocksDb.Open(options, dataDir);
     }

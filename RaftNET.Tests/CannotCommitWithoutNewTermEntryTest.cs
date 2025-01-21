@@ -8,15 +8,15 @@ public class CannotCommitWithoutNewTermEntryTest : FSMTestBase {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4, Id5);
 
-        var log1 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log1 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm1 = new FSMDebug(Id1, 0, 0, log1, fd, FSMConfig);
-        var log2 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log2 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm2 = new FSMDebug(Id2, 0, 0, log2, fd, FSMConfig);
-        var log3 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log3 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm3 = new FSMDebug(Id3, 0, 0, log3, fd, FSMConfig);
-        var log4 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log4 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm4 = new FSMDebug(Id4, 0, 0, log4, fd, FSMConfig);
-        var log5 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log5 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm5 = new FSMDebug(Id5, 0, 0, log5, fd, FSMConfig);
 
         MakeCandidate(fsm1);
@@ -42,10 +42,10 @@ public class CannotCommitWithoutNewTermEntryTest : FSMTestBase {
         fsm2.AddEntry("5");
         Communicate(fsm2, fsm1, fsm3, fsm4, fsm5);
         Assert.Multiple(() => {
-            Assert.That(CompareLogEntries(fsm2.Log, fsm1.Log, 1, 5));
-            Assert.That(CompareLogEntries(fsm2.Log, fsm3.Log, 1, 5));
-            Assert.That(CompareLogEntries(fsm2.Log, fsm4.Log, 1, 5));
-            Assert.That(CompareLogEntries(fsm2.Log, fsm5.Log, 1, 5));
+            Assert.That(CompareLogEntries(fsm2.RaftLog, fsm1.RaftLog, 1, 5));
+            Assert.That(CompareLogEntries(fsm2.RaftLog, fsm3.RaftLog, 1, 5));
+            Assert.That(CompareLogEntries(fsm2.RaftLog, fsm4.RaftLog, 1, 5));
+            Assert.That(CompareLogEntries(fsm2.RaftLog, fsm5.RaftLog, 1, 5));
         });
     }
 }

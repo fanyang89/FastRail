@@ -1,17 +1,9 @@
-using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Replication;
 
 namespace RaftNET.Tests;
 
 public class NonVoterTest : FSMTestBase {
-    private ILogger<NonVoterTest> _logger;
-
-    [SetUp]
-    public new void Setup() {
-        _logger = LoggerFactory.CreateLogger<NonVoterTest>();
-    }
-
     [Test]
     public void TestNonVoterStaysPipeline() {
         // Check that a node stays in PIPELINE mode through configuration changes
@@ -21,7 +13,7 @@ public class NonVoterTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = B_ID }, CanVote = false }
             }
         };
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
         ElectionTimeout(a);
@@ -71,7 +63,7 @@ public class NonVoterTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = B_ID }, CanVote = false },
             }
         };
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
         ElectionTimeout(a);
@@ -114,7 +106,7 @@ public class NonVoterTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = C_ID }, CanVote = false },
             }
         };
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
         var c = CreateFollower(C_ID, log.Clone());
@@ -150,7 +142,7 @@ public class NonVoterTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = C_ID }, CanVote = false },
             }
         };
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
 
         var a = CreateFollower(A_ID, log.Clone(), fd);
         var b = CreateFollower(B_ID, log.Clone(), fd);
@@ -181,7 +173,7 @@ public class NonVoterTest : FSMTestBase {
             }
         };
 
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfgWithNonVoter });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfgWithNonVoter });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
         var c = CreateFollower(C_ID, log.Clone());
@@ -200,13 +192,13 @@ public class NonVoterTest : FSMTestBase {
                 Communicate(a, b, c);
             }
             if (RollDice(1.0f / 1000)) {
-                a.Log.ApplySnapshot(Messages.LogSnapshot(a.Log, a.LogLastIdx), 0, 0);
+                a.RaftLog.ApplySnapshot(Messages.LogSnapshot(a.RaftLog, a.LogLastIdx), 0, 0);
             }
             if (RollDice(1.0f / 100)) {
-                b.Log.ApplySnapshot(Messages.LogSnapshot(a.Log, b.LogLastIdx), 0, 0);
+                b.RaftLog.ApplySnapshot(Messages.LogSnapshot(a.RaftLog, b.LogLastIdx), 0, 0);
             }
             if (RollDice(1.0f / 5000)) {
-                c.Log.ApplySnapshot(Messages.LogSnapshot(a.Log, b.LogLastIdx), 0, 0);
+                c.RaftLog.ApplySnapshot(Messages.LogSnapshot(a.RaftLog, b.LogLastIdx), 0, 0);
             }
         }
 
@@ -221,7 +213,7 @@ public class NonVoterTest : FSMTestBase {
     public void TestNonVoterConfigurationChangeInSnapshot() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(A_ID, B_ID, C_ID);
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
         var a = CreateFollower(A_ID, log.Clone(), fd);
         var b = CreateFollower(B_ID, log.Clone(), fd);
         var c = CreateFollower(C_ID, log.Clone(), fd);
@@ -306,7 +298,7 @@ public class NonVoterTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = C_ID }, CanVote = false },
             }
         };
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = cfg
         });
         var a = CreateFollower(A_ID, log.Clone(), fd);

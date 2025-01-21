@@ -6,11 +6,11 @@ public class DuelingCandidatesTest : FSMTestBase {
     [Test]
     public void TestDuelingCandidates() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log1 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log1 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm1 = new FSMDebug(Id1, 0, 0, log1, new TrivialFailureDetector(), FSMConfig);
-        var log2 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log2 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm2 = new FSMDebug(Id2, 0, 0, log2, new TrivialFailureDetector(), FSMConfig);
-        var log3 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log3 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm3 = new FSMDebug(Id3, 0, 0, log3, new TrivialFailureDetector(), FSMConfig);
 
         MakeCandidate(fsm1);
@@ -38,11 +38,11 @@ public class DuelingCandidatesTest : FSMTestBase {
     [Test]
     public void TestDuelingPreCandidates() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log1 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log1 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm1 = new FSMDebug(Id1, 0, 0, log1, new TrivialFailureDetector(), FSMPreVoteConfig);
-        var log2 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log2 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm2 = new FSMDebug(Id2, 0, 0, log2, new TrivialFailureDetector(), FSMPreVoteConfig);
-        var log3 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log3 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm3 = new FSMDebug(Id3, 0, 0, log3, new TrivialFailureDetector(), FSMPreVoteConfig);
 
         MakeCandidate(fsm1);

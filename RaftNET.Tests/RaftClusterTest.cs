@@ -1,20 +1,18 @@
-﻿using Microsoft.Extensions.Logging;
-using RaftNET.Services;
+﻿using RaftNET.Services;
+using Serilog;
 
 namespace RaftNET.Tests;
 
 public class RaftClusterTest : RaftTestBase {
     private const ulong ServerCount = 3;
-    private ILogger<RaftServerTest> _logger;
     private RaftCluster _cluster;
 
     [SetUp]
     public new void Setup() {
-        _logger = LoggerFactory.CreateLogger<RaftServerTest>();
-        _cluster = new RaftCluster(LoggerFactory, ServerCount);
+        _cluster = new RaftCluster(ServerCount);
         _cluster.Start();
         Thread.Sleep((int)(FSM.ElectionTimeout * 100 * 2));
-        _logger.LogInformation("Cluster started");
+        Log.Information("Cluster started");
     }
 
     [TearDown]

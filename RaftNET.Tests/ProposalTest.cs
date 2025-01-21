@@ -20,7 +20,7 @@ public class ProposalTest : FSMTestBase {
         }
 
         var cfg = Messages.ConfigFromIds(ids.ToArray());
-        var log1 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log1 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm1 = new FSMDebug(Id1, 0, 0, log1, new TrivialFailureDetector(), FSMConfig);
 
         ElectionTimeout(fsm1);

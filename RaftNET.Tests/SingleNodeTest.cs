@@ -6,7 +6,7 @@ public class SingleNodeTest : FSMTestBase {
     [Test]
     public void TestSingleNodeCommit() {
         var cfg = Messages.ConfigFromIds(Id1);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), FSMConfig);
 
         Assert.That(fsm.IsLeader, Is.True);
@@ -35,7 +35,7 @@ public class SingleNodeTest : FSMTestBase {
     [Test]
     public void TestSingleNodePreCandidate() {
         var cfg = Messages.ConfigFromIds(Id1);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm1 = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), FSMPreVoteConfig);
         Assert.That(fsm1.IsLeader, Is.True);
     }

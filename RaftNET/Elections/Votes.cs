@@ -1,16 +1,13 @@
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+using Serilog;
 
 namespace RaftNET.Elections;
 
 public class Votes {
     private readonly ElectionTracker _current;
-    private readonly ILogger<Votes> _logger;
     private readonly ElectionTracker? _previous;
     private readonly IDictionary<ulong, ServerAddress> _voters = new Dictionary<ulong, ServerAddress>();
 
-    public Votes(Configuration configuration, ILogger<Votes>? logger = null) {
-        _logger = logger ?? new NullLogger<Votes>();
+    public Votes(Configuration configuration) {
         _current = new ElectionTracker(configuration.Current);
 
         foreach (var member in configuration.Previous) {
@@ -47,7 +44,7 @@ public class Votes {
         // We can get an outdated vote from a node that is now non-voting member.
         // Such vote should be ignored.
         if (!registered) {
-            _logger.LogInformation("Got a vote from unregistered server {} during election", from);
+            Log.Information("Got a vote from unregistered server {} during election", from);
         }
     }
 

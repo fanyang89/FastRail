@@ -5,7 +5,7 @@ public class LogTest {
     public void TestAppendRaftLogs() {
         var cfg = Messages.ConfigFromIds(1);
         var snp = new SnapshotDescriptor { Config = cfg };
-        var log = new Log(snp);
+        var log = new RaftLog(snp);
 
         Assert.Multiple(() => {
             Assert.That(log.LastIdx(), Is.EqualTo(0));

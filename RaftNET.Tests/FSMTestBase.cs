@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Records;
 
@@ -47,11 +46,11 @@ public class FSMTestBase : RaftTestBase {
         while (fsm.IsFollower) fsm.Tick();
     }
 
-    protected FSMDebug CreateFollower(ulong id, Log log, IFailureDetector fd) {
-        return new FSMDebug(id, 0, 0, log, fd, FSMConfig, LoggerFactory.CreateLogger<FSM>());
+    protected FSMDebug CreateFollower(ulong id, RaftLog log, IFailureDetector fd) {
+        return new FSMDebug(id, 0, 0, log, fd, FSMConfig);
     }
 
-    protected FSMDebug CreateFollower(ulong id, Log log) {
+    protected FSMDebug CreateFollower(ulong id, RaftLog log) {
         return CreateFollower(id, log, new TrivialFailureDetector());
     }
 
@@ -112,7 +111,7 @@ public class FSMTestBase : RaftTestBase {
         return Random.Shared.NextSingle() < probability;
     }
 
-    protected static bool CompareLogEntries(Log log1, Log log2, ulong from, ulong to) {
+    protected static bool CompareLogEntries(RaftLog log1, RaftLog log2, ulong from, ulong to) {
         Debug.Assert(to <= log1.LastIdx());
         Debug.Assert(to <= log2.LastIdx());
         for (var i = from; i < to; i++) {

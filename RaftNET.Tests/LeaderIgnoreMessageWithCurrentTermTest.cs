@@ -8,7 +8,7 @@ public class LeaderIgnoreMessageWithCurrentTermTest : FSMTestBase {
         // Check that the leader properly handles InstallSnapshot/AppendRequest/VoteRequest
         // messages carrying its own term.
         var fd = new DiscreteFailureDetector();
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
         var a = CreateFollower(A_ID, log.Clone(), fd);
         var b = CreateFollower(B_ID, log.Clone(), fd);
         ElectionTimeout(a);

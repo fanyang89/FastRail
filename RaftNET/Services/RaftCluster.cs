@@ -1,5 +1,4 @@
 ﻿using System.Net;
-using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Persistence;
 using RaftNET.StateMachines;
@@ -9,7 +8,7 @@ namespace RaftNET.Services;
 public class RaftCluster {
     private readonly Dictionary<ulong, RaftServer> _servers = new();
 
-    public RaftCluster(ILoggerFactory loggerFactory, ulong serverCount) {
+    public RaftCluster(ulong serverCount) {
         var addressBook = new AddressBook();
 
         for (ulong i = 1; i <= serverCount; i++) {
@@ -26,9 +25,8 @@ public class RaftCluster {
             var fd = new RpcFailureDetector(i, addressBook,
                 TimeSpan.FromMilliseconds(options.PingInterval),
                 TimeSpan.FromMilliseconds(options.PingTimeout),
-                clock,
-                loggerFactory.CreateLogger<RpcFailureDetector>());
-            var service = new RaftService(i, rpc, sm, persistence, fd, addressBook, loggerFactory, new RaftServiceOptions());
+                clock);
+            var service = new RaftService(i, rpc, sm, persistence, fd, addressBook, new RaftServiceOptions());
             var server = new RaftServer(service, IPAddress.Loopback, 15000 + (int)i);
             _servers.Add(i, server);
         }

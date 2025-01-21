@@ -7,11 +7,11 @@ public class OldMessageTest : FSMTestBase {
     public void TestOldMessages() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log1 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log1 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm1 = new FSMDebug(Id1, 0, 0, log1, fd, FSMConfig);
-        var log2 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log2 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm2 = new FSMDebug(Id2, 0, 0, log2, fd, FSMConfig);
-        var log3 = new Log(new SnapshotDescriptor { Config = cfg });
+        var log3 = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm3 = new FSMDebug(Id3, 0, 0, log3, fd, FSMConfig);
 
         MakeCandidate(fsm1);
@@ -37,7 +37,7 @@ public class OldMessageTest : FSMTestBase {
         fsm1.AddEntry("4");
         Communicate(fsm2, fsm1, fsm3);
 
-        var res1 = fsm1.Log;
+        var res1 = fsm1.RaftLog;
         for (ulong i = 1; i < 5; ++i) {
             Assert.That(res1[i].Idx, Is.EqualTo(i));
             if (i < 4) {
@@ -54,8 +54,8 @@ public class OldMessageTest : FSMTestBase {
         }
 
         Assert.Multiple(() => {
-            Assert.That(CompareLogEntries(res1, fsm2.Log, 1, 4));
-            Assert.That(CompareLogEntries(res1, fsm3.Log, 1, 4));
+            Assert.That(CompareLogEntries(res1, fsm2.RaftLog, 1, 4));
+            Assert.That(CompareLogEntries(res1, fsm3.RaftLog, 1, 4));
         });
     }
 }

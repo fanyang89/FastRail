@@ -1,11 +1,14 @@
 ﻿using System.CommandLine;
 using System.Net;
 using RaftNET.Services;
+using Serilog;
 
 namespace FastRail;
 
-internal class Program {
+static class Program {
     public static async Task Main(string[] args) {
+        Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
+
         var rootCommand = new RootCommand(
             "A distributed key-value store compatible with the ZooKeeper protocol");
 
@@ -47,5 +50,7 @@ internal class Program {
             myIdOption, dataDirOption, listenOption,
             raftDataDirOption, raftListenOption, initialMembersOption);
         await rootCommand.InvokeAsync(args);
+
+        await Log.CloseAndFlushAsync();
     }
 }

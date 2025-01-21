@@ -17,8 +17,8 @@ public partial class FSM {
             return CurrentTerm == other.CurrentTerm &&
                    VotedFor == other._votedFor &&
                    CommitIdx == other._commitIdx &&
-                   LastConfIdx == other.Log.LastConfIdx &&
-                   LastTerm == other.Log.LastTerm() &&
+                   LastConfIdx == other.RaftLog.LastConfIdx &&
+                   LastTerm == other.RaftLog.LastTerm() &&
                    AbortLeadershipTransfer == other._abortLeadershipTransfer;
         }
 
@@ -26,8 +26,8 @@ public partial class FSM {
             CurrentTerm = fsm.CurrentTerm;
             VotedFor = fsm._votedFor;
             CommitIdx = fsm._commitIdx;
-            LastConfIdx = fsm.Log.LastConfIdx;
-            LastTerm = fsm.Log.LastTerm();
+            LastConfIdx = fsm.RaftLog.LastConfIdx;
+            LastTerm = fsm.RaftLog.LastTerm();
             AbortLeadershipTransfer = fsm._abortLeadershipTransfer;
         }
     }

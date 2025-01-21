@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Serilog;
 
 namespace RaftNET.Tests;
 
@@ -7,8 +7,6 @@ public class RaftTestBase {
     [SetUp]
     public void Setup() {
         Console.SetOut(TestContext.Progress);
-        LoggerFactory = RaftNET.LoggerFactory.Instance;
+        Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
     }
-
-    protected ILoggerFactory LoggerFactory;
 }

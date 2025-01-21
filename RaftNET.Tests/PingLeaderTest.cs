@@ -13,7 +13,7 @@ public class PingLeaderTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = C_ID }, CanVote = false },
             }
         };
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
         var a = CreateFollower(A_ID, log.Clone(), fd);
         var b = CreateFollower(B_ID, log.Clone(), fd);
         var c = CreateFollower(C_ID, log.Clone(), fd);

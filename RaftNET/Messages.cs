@@ -128,7 +128,7 @@ public static class Messages {
         return cfg;
     }
 
-    public static SnapshotDescriptor LogSnapshot(Log log, ulong idx) {
+    public static SnapshotDescriptor LogSnapshot(RaftLog log, ulong idx) {
         return new SnapshotDescriptor {
             Idx = idx,
             Term = log.LastTerm(),

@@ -8,7 +8,7 @@ public class ProgressFlowControlTest : FSMTestBase {
     [Test]
     public void TestProgressFlowControl() {
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
 
         // Fit 2 x 1000 sized blobs
         var fsmCfg8 = FSMConfig.Clone();

@@ -7,7 +7,7 @@ public class QuiteTest : FSMTestBase {
     [Test]
     public void TestSingleNodeIsQuiet() {
         var cfg = Messages.ConfigFromIds(Id1);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = CreateFollower(Id1, log);
         ElectionTimeout(fsm);
         Assert.That(fsm.IsLeader, Is.True);
@@ -23,7 +23,7 @@ public class QuiteTest : FSMTestBase {
     [Test]
     public void TestSnapshotFollowerIsQuite() {
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor { Idx = 999, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 999, Config = cfg });
 
         log.Add(new LogEntry { Term = 10, Idx = 1000 });
         log.StableTo(log.LastIdx());

@@ -8,7 +8,7 @@ public class LogLastConfIdxTest : FSMTestBase {
         // last_conf_idx, prev_conf_idx are initialized correctly,
         // and maintained during truncate head/truncate tail
         var cfg = Messages.ConfigFromIds(ID1);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         Assert.That(log.LastConfIdx, Is.EqualTo(0));
         log.Add(new LogEntry { Configuration = cfg, Term = log.LastTerm(), Idx = log.LastIdx() });
         Assert.That(log.LastConfIdx, Is.EqualTo(1));

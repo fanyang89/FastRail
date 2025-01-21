@@ -1,7 +1,6 @@
 using FastRail.Protos;
 using FastRail.Server;
 using Google.Protobuf;
-using Microsoft.Extensions.Logging;
 
 namespace FastRail.Tests;
 
@@ -10,12 +9,12 @@ public class DataStoreTest : TestBase {
 
     [SetUp]
     public new void Setup() {
-        _ds = new DataStore(CreateTempDirectory(), LoggerFactory.CreateLogger<DataStore>());
+        _ds = new DataStore(CreateTempDirectory());
         _ds.Start();
     }
 
     [TearDown]
-    public new void TearDown() {
+    public void TearDown() {
         _ds.Stop();
         _ds.Dispose();
     }

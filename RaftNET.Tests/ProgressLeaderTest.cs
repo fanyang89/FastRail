@@ -8,7 +8,7 @@ public class ProgressLeaderTest : FSMTestBase {
     [Test]
     public void TestProgressLeader() {
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), FSMConfig);
 
         ElectionTimeout(fsm);

@@ -6,7 +6,7 @@ public class EmptyConfigurationTest : FSMTestBase {
     [Test]
     public void TestEmptyConfiguration() {
         var cfg = new Configuration();
-        var log = new Log(new SnapshotDescriptor { Config = cfg, Idx = 0 });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg, Idx = 0 });
 
         var follower = CreateFollower(Id1, log);
         Assert.That(follower.IsFollower);
@@ -20,7 +20,7 @@ public class EmptyConfigurationTest : FSMTestBase {
             Assert.That(follower.CurrentTerm, Is.EqualTo(0));
         });
 
-        var log2 = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(Id2) });
+        var log2 = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(Id2) });
         var leader = CreateFollower(Id2, log2);
         ElectionTimeout(leader);
         Assert.That(leader.IsLeader);

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Serilog;
 
 namespace FastRail.Tests;
 
@@ -7,13 +7,8 @@ public class TestBase {
     [SetUp]
     public void Setup() {
         Console.SetOut(TestContext.Progress);
-        LoggerFactory = FastRail.LoggerFactory.Instance;
+        Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
     }
-
-    [TearDown]
-    public void TearDown() {}
-
-    protected ILoggerFactory LoggerFactory;
 
     protected static string CreateTempDirectory() {
         return Directory.CreateTempSubdirectory().FullName;

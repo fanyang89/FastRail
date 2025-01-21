@@ -1,11 +1,11 @@
-﻿using Microsoft.Extensions.Logging;
-using org.apache.zookeeper;
+﻿using org.apache.zookeeper;
+using Serilog;
 
 namespace FastRail.Tests;
 
-public class LogWatcher(ILogger<LogWatcher> logger) : Watcher {
+public class LogWatcher() : Watcher {
     public override Task process(WatchedEvent @event) {
-        logger.LogInformation("Process event={}", @event);
+        Log.Information("Process event={}", @event);
         return Task.CompletedTask;
     }
 }

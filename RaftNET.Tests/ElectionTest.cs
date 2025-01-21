@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using RaftNET.FailureDetectors;
+﻿using RaftNET.FailureDetectors;
 
 namespace RaftNET.Tests;
 
@@ -13,8 +12,8 @@ public class ElectionTest : FSMTestBase {
             enablePreVote: enablePreVote
         );
         var cfg = Messages.ConfigFromIds(Id1);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
-        var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), fsmConfig, LoggerFactory.CreateLogger<FSM>());
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
+        var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), fsmConfig);
 
         ElectionTimeout(fsm);
         Assert.That(fsm.IsLeader, Is.True);
@@ -42,7 +41,7 @@ public class ElectionTest : FSMTestBase {
     public void TestTwoNodesElection() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = CreateFollower(Id1, log, fd);
         // Initial state is follower
         Assert.That(fsm.IsFollower);
@@ -93,9 +92,8 @@ public class ElectionTest : FSMTestBase {
     [Test]
     public void TestTwoNodesPreVote() {
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
-        var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), FSMPreVoteConfig,
-            LoggerFactory.CreateLogger<FSM>());
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
+        var fsm = new FSMDebug(Id1, 0, 0, log, new TrivialFailureDetector(), FSMPreVoteConfig);
         Assert.That(fsm.IsFollower, Is.True);
 
         ElectionTimeout(fsm);
@@ -172,7 +170,7 @@ public class ElectionTest : FSMTestBase {
     public void TestFourNodesElection() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = CreateFollower(Id1, log, fd);
         Assert.That(fsm.IsFollower);
 
@@ -203,7 +201,7 @@ public class ElectionTest : FSMTestBase {
     public void TestFourNodesPreVote() {
         var fd = new DiscreteFailureDetector();
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4);
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 0, 0, log, fd, FSMPreVoteConfig);
 
         Assert.That(fsm.IsFollower, Is.True);

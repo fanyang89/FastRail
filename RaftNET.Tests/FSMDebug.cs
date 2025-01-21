@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Replication;
 using RaftNET.Services;
@@ -10,12 +9,11 @@ public class FSMDebug(
     ulong id,
     ulong currentTerm,
     ulong votedFor,
-    Log log,
+    RaftLog log,
     IFailureDetector failureDetector,
-    FSM.Config config,
-    ILogger<FSM>? logger = null
+    FSM.Config config
 )
-    : FSM(id, currentTerm, votedFor, log, 0, failureDetector, config, Notifier, logger) {
+    : FSM(id, currentTerm, votedFor, log, 0, failureDetector, config, Notifier) {
     private static readonly Notifier Notifier = new();
 
     public FollowerProgress? GetProgress(ulong id) {

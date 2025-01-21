@@ -1,23 +1,22 @@
 ﻿using System.Net;
-using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Persistence;
 using RaftNET.Services;
 using RaftNET.StateMachines;
+using Serilog;
 
 namespace RaftNET.Tests;
 
 public class RaftServerTest : RaftTestBase, IStateMachine {
     private const int Port = 15000;
     private const ulong MyId = 1;
-    private ILogger<RaftServerTest> _logger;
     private RaftServer _server;
     private AddressBook _addressBook;
     private string _listenAddress;
 
     public void Apply(List<Command> commands) {
         foreach (var command in commands) {
-            _logger.LogInformation("Applying command: {command}", command);
+            Log.Information("Applying command: {command}", command);
         }
     }
 
@@ -35,7 +34,6 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
 
     [SetUp]
     public new void Setup() {
-        _logger = LoggerFactory.CreateLogger<RaftServerTest>();
         _listenAddress = $"http://127.0.0.1:{Port}";
         _addressBook = new AddressBook();
         _addressBook.Add(MyId, _listenAddress);
@@ -50,12 +48,11 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         var fd = new RpcFailureDetector(MyId, addressBook,
             TimeSpan.FromMilliseconds(options.PingInterval),
             TimeSpan.FromMilliseconds(options.PingTimeout),
-            clock,
-            LoggerFactory.CreateLogger<RpcFailureDetector>());
-        var service = new RaftService(MyId, rpc, sm, persistence, fd, addressBook, LoggerFactory, new RaftServiceOptions());
+            clock);
+        var service = new RaftService(MyId, rpc, sm, persistence, fd, addressBook, new RaftServiceOptions());
         _server = new RaftServer(service, IPAddress.Loopback, Port);
         _ = _server.Start();
-        _logger.LogInformation("Raft server started at {}", _listenAddress);
+        Log.Information("Raft server started at {}", _listenAddress);
     }
 
     [TearDown]
@@ -66,9 +63,9 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     [Test]
     public void TestSingleServerCanAppend() {
         Assert.That(_server.IsLeader, Is.True);
-        _logger.LogInformation("Adding entry");
+        Log.Information("Adding entry");
         _server.AddEntry("Hello World");
-        _logger.LogInformation("Entry added");
+        Log.Information("Entry added");
     }
 
     [Test]

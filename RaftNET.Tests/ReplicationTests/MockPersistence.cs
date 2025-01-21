@@ -1,6 +1,5 @@
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using RaftNET.Persistence;
+using Serilog;
 
 namespace RaftNET.Tests.ReplicationTests;
 
@@ -8,11 +7,9 @@ public class MockPersistence(
     ulong id,
     InitialState initialState,
     Snapshots snapshots,
-    PersistedSnapshots persistedSnapshots,
-    ILogger<MockPersistence>? logger = null
+    PersistedSnapshots persistedSnapshots
 )
     : IPersistence {
-    private readonly ILogger<MockPersistence> _logger = logger ?? new NullLogger<MockPersistence>();
     private readonly ulong _id = id;
 
     public void StoreTermVote(ulong term, ulong vote) {
@@ -32,7 +29,7 @@ public class MockPersistence(
     public void StoreSnapshotDescriptor(SnapshotDescriptor snapshot, ulong preserveLogEntries) {
         var snp = snapshots[_id][snapshot.Id];
         persistedSnapshots[_id] = (snapshot, snp);
-        _logger.LogInformation("[{}] StateMachine() persist snapshot, hash={}", id, snp.Hasher.FinalizeUInt64());
+        Log.Information("[{}] StateMachine() persist snapshot, hash={}", id, snp.Hasher.FinalizeUInt64());
     }
 
     public SnapshotDescriptor? LoadSnapshotDescriptor() {

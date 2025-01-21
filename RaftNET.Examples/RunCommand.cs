@@ -1,8 +1,8 @@
 ﻿using System.Net;
-using Microsoft.Extensions.Logging;
 using RaftNET.FailureDetectors;
 using RaftNET.Persistence;
 using RaftNET.Services;
+using Serilog;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -33,27 +33,24 @@ class RunCommand : Command<RunCommand.Settings> {
     }
 
     private async Task<int> ExecuteAsync(CommandContext context, Settings settings) {
-        var logger = LoggerFactory.Instance.CreateLogger<RunCommand>();
         if (string.IsNullOrEmpty(settings.DataDir)) {
             settings.DataDir = Directory.CreateTempSubdirectory("RaftNET.Examples").FullName;
         }
 
-        var sm = new InMemory(settings.MyId, LoggerFactory.Instance.CreateLogger<InMemory>());
+        var sm = new InMemory(settings.MyId);
         var addressBook = new AddressBook(settings.Members.ToList());
-        var loggerFactory = LoggerFactory.Instance;
-        var rpcClient = new ConnectionManager(settings.MyId, addressBook, loggerFactory.CreateLogger<ConnectionManager>());
+        var rpcClient = new ConnectionManager(settings.MyId, addressBook);
         var persistence = new RocksPersistence(settings.DataDir);
         var clock = new SystemClock();
         var fd = new RpcFailureDetector(settings.MyId, addressBook,
             settings.PingInterval, settings.PingTimeout,
-            clock, loggerFactory.CreateLogger<RpcFailureDetector>());
-        var service = new RaftService(settings.MyId, rpcClient, sm, persistence, fd, addressBook, loggerFactory,
-            new RaftServiceOptions());
+            clock);
+        var service = new RaftService(settings.MyId, rpcClient, sm, persistence, fd, addressBook, new RaftServiceOptions());
         var listen = IPEndPoint.Parse(settings.Listen);
         var server = new RaftServer(service, listen.Address, listen.Port);
         _ = server.Start();
         await Task.Delay(settings.Runtime);
-        logger.LogInformation("Runtime timeout, exiting...");
+        Log.Information("Runtime timeout, exiting...");
         server.Stop();
         return 0;
     }

@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using RaftNET.FailureDetectors;
+﻿using RaftNET.FailureDetectors;
 
 namespace RaftNET.Tests;
 
@@ -7,11 +6,11 @@ public class LogMatchingRuleTest : FSMTestBase {
     [Test]
     public void LogMatchingRule() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log = new Log(new SnapshotDescriptor { Idx = 999, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 999, Config = cfg });
         log.Add(new LogEntry { Term = 10, Idx = 1000 });
         log.StableTo(log.LastIdx());
 
-        var fsm = new FSMDebug(Id1, 10, 0, log, new TrivialFailureDetector(), FSMConfig, LoggerFactory.CreateLogger<FSM>());
+        var fsm = new FSMDebug(Id1, 10, 0, log, new TrivialFailureDetector(), FSMConfig);
 
         // Initial state is follower
         Assert.That(fsm.IsFollower, Is.True);

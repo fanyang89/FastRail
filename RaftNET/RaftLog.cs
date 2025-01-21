@@ -1,13 +1,11 @@
 ﻿using System.Diagnostics;
 using Google.Protobuf;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+using Serilog;
 
 namespace RaftNET;
 
-public class Log : IDeepCloneable<Log> {
+public class RaftLog : IDeepCloneable<RaftLog> {
     private readonly List<LogEntry> _log;
-    private readonly ILogger<Log> _logger;
     private ulong _firstIdx;
     private ulong _lastConfIdx;
     private ulong _prevConfIdx;
@@ -15,8 +13,7 @@ public class Log : IDeepCloneable<Log> {
     private ulong _stableIdx;
     private int _memoryUsage;
 
-    public Log(SnapshotDescriptor? snapshot, List<LogEntry>? logEntries = null, ILogger<Log>? logger = null) {
-        _logger = logger ?? new NullLogger<Log>();
+    public RaftLog(SnapshotDescriptor? snapshot, List<LogEntry>? logEntries = null) {
         _snapshot = snapshot ?? new SnapshotDescriptor();
         _log = logEntries ?? [];
 
@@ -32,9 +29,9 @@ public class Log : IDeepCloneable<Log> {
         InitLastConfigurationIdx();
     }
 
-    public Log Clone() {
+    public RaftLog Clone() {
         var logEntries = _log.Select(entry => entry.Clone()).ToList();
-        var log = new Log(_snapshot.Clone(), logEntries, _logger);
+        var log = new RaftLog(_snapshot.Clone(), logEntries);
         return log;
     }
 
@@ -105,19 +102,18 @@ public class Log : IDeepCloneable<Log> {
         foreach (var e in entries) {
             if (e.Idx <= LastIdx()) {
                 if (e.Idx < _firstIdx) {
-                    _logger.LogTrace(
+                    Log.Debug(
                         "append_entries: skipping entry with idx {idx} less than log start {firstIdx}", e.Idx,
                         _firstIdx);
                     continue;
                 }
 
                 if (e.Term == GetEntry(e.Idx).Term) {
-                    _logger.LogTrace("append_entries: entries with index {idx} has matching terms {term}", e.Idx,
-                        e.Term);
+                    Log.Debug("append_entries: entries with index {idx} has matching terms {term}", e.Idx, e.Term);
                     continue;
                 }
 
-                _logger.LogTrace(
+                Log.Debug(
                     "append_entries: entries with index {idx} has non matching terms e.term={term}, _log[i].term = {entryTerm}",
                     e.Idx, e.Term, GetEntry(e.Idx).Term);
                 Debug.Assert(e.Idx > _snapshot.Idx);

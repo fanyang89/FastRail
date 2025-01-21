@@ -7,7 +7,7 @@ public class ConfigurationChangeTest : FSMTestBase {
     [Test]
     public void AddNode() {
         var cfg = Messages.ConfigFromIds(Id1, Id2);
-        var log = new Log(new SnapshotDescriptor { Idx = 100, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 100, Config = cfg });
         var fsm = CreateFollower(Id1, log);
         Assert.That(fsm.IsFollower, Is.True);
 
@@ -73,7 +73,7 @@ public class ConfigurationChangeTest : FSMTestBase {
     [Test]
     public void RemoveNode() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log = new Log(new SnapshotDescriptor { Idx = 100, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 100, Config = cfg });
         var fsm = CreateFollower(Id1, log);
         Assert.That(fsm.IsFollower, Is.True);
         ElectionTimeout(fsm);
@@ -146,7 +146,7 @@ public class ConfigurationChangeTest : FSMTestBase {
     [Test]
     public void ReplaceNode() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
-        var log = new Log(new SnapshotDescriptor { Idx = 100, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 100, Config = cfg });
         var fsm = CreateFollower(Id1, log);
         Assert.That(fsm.IsFollower, Is.True);
         ElectionTimeout(fsm);
@@ -204,7 +204,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         // Configuration change {A, B} to {C, D}
         // Similar to A -> B change, but with many nodes,
         // so C_new has to campaign after configuration change.
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID)
         });
         var a = CreateFollower(A_ID, log.Clone());
@@ -242,7 +242,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         // Check configuration changes when C_old and C_new have no common quorum,
         // test leader change during configuration change
         var fd = new DiscreteFailureDetector();
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID)
         });
         var a = CreateFollower(A_ID, log.Clone());
@@ -282,7 +282,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         // Configuration change {A, B, C, D, E, F} to {A, B, C, G, H}
         // Test configuration changes in presence of down nodes in C_old
         var fd = new DiscreteFailureDetector();
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID, F_ID)
         });
         var a = CreateFollower(A_ID, log.Clone(), fd);
@@ -326,7 +326,7 @@ public class ConfigurationChangeTest : FSMTestBase {
         // Check configuration changes work fine with many nodes down
         var fd = new DiscreteFailureDetector();
 
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID)
         });
         var a = CreateFollower(A_ID, log.Clone(), fd);
@@ -376,7 +376,7 @@ public class ConfigurationChangeTest : FSMTestBase {
     [Test]
     public void ElectionDuringConfigurationChange() {
         // Joint config has reached old majority, the leader is from a new majority
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID) });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID) });
         var fd = new DiscreteFailureDetector();
         var a = CreateFollower(A_ID, log.Clone(), fd);
         var b = CreateFollower(B_ID, log.Clone(), fd);
@@ -416,7 +416,7 @@ public class ConfigurationChangeTest : FSMTestBase {
     public void TestReplyFromRemovedFollower() {
         // Messages from followers may be delayed.
         // Check they don't upset the leader when they are delivered past configuration change
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
         ElectionTimeout(a);
@@ -443,7 +443,7 @@ public class ConfigurationChangeTest : FSMTestBase {
     public void TestConfigurationChangeAToB() {
         // Test we can transition from a single-server configuration
         // {A} to a single server configuration {B}
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0,
             Config = Messages.ConfigFromIds(A_ID)
         });
@@ -467,7 +467,7 @@ public class ConfigurationChangeTest : FSMTestBase {
             Assert.That(b.GetConfiguration().Current.Any(x => x.ServerAddress.ServerId == B_ID), Is.True);
         });
 
-        log = new Log(new SnapshotDescriptor {
+        log = new RaftLog(new SnapshotDescriptor {
             Idx = b.LogLastIdx,
             Term = b.LogLastTerm,
             Config = b.GetConfiguration()

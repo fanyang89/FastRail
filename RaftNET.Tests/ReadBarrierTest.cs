@@ -5,7 +5,7 @@ namespace RaftNET.Tests;
 public class ReadBarrierTest : FSMTestBase {
     [Test]
     public void TestReadBarrier() {
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID)
         });
         var a = CreateFollower(A_ID, log.Clone());
@@ -125,7 +125,7 @@ public class ReadBarrierTest : FSMTestBase {
         Assert.That(a.IsLeader, Is.False);
 
         // create one node cluster
-        var log1 = new Log(new SnapshotDescriptor {
+        var log1 = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID)
         });
         var aa = CreateFollower(A_ID, log1.Clone());

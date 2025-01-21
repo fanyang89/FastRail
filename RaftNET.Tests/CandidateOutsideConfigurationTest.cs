@@ -6,7 +6,7 @@ public class CandidateOutsideConfigurationTest : FSMTestBase {
     [Test]
     public void TestCandidateOutsideConfiguration() {
         var cfg = Messages.ConfigFromIds(A_ID, B_ID);
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = cfg
         });
         var fd = new DiscreteFailureDetector();
@@ -17,10 +17,10 @@ public class CandidateOutsideConfigurationTest : FSMTestBase {
         Assert.That(a.IsLeader, Is.True);
         var newCfg = Messages.ConfigFromIds(B_ID);
         a.AddEntry(newCfg);
-        Assert.That(!b.Log.GetConfiguration().IsJoint(), Is.True);
+        Assert.That(!b.RaftLog.GetConfiguration().IsJoint(), Is.True);
         CommunicateUntil(() => !a.GetConfiguration().IsJoint() && b.GetConfiguration().IsJoint(), a, b);
         Assert.That(a.GetConfiguration().IsJoint, Is.False);
-        Assert.That(b.Log.GetConfiguration().IsJoint, Is.True);
+        Assert.That(b.RaftLog.GetConfiguration().IsJoint, Is.True);
         fd.MarkDead(B_ID);
         ElectionTimeout(a);
         Assert.That(a.IsLeader, Is.False);

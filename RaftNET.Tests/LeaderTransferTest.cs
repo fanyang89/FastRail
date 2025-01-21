@@ -13,7 +13,7 @@ public class LeaderTransferTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = Id3 }, CanVote = false },
             }
         };
-        var log = new Log(new SnapshotDescriptor { Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
         var fsm = new FSMDebug(Id1, 1, 0, log, new TrivialFailureDetector(), FSMConfig);
 
         fsm.Step(Id2, new TimeoutNowRequest { CurrentTerm = fsm.CurrentTerm });
@@ -148,7 +148,7 @@ public class LeaderTransferTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = Id3 }, CanVote = true },
             }
         };
-        var log2 = new Log(new SnapshotDescriptor { Config = cfg2 });
+        var log2 = new RaftLog(new SnapshotDescriptor { Config = cfg2 });
         var fsm2 = new FSMDebug(Id1, 1, 0, log2, new TrivialFailureDetector(), FSMConfig);
 
         ElectionTimeout(fsm2);
@@ -225,7 +225,7 @@ public class LeaderTransferTest : FSMTestBase {
     [Test]
     public void TestLeaderTransfereeDiesUponReceivingTimeoutNow() {
         var fd = new DiscreteFailureDetector();
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID)
         });
         var a = CreateFollower(A_ID, log.Clone(), fd);
@@ -290,7 +290,7 @@ public class LeaderTransferTest : FSMTestBase {
 
     [Test]
     public void TestLeaderTransferLostTimeoutNow() {
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID)
         });
         var a = CreateFollower(A_ID, log.Clone());
@@ -323,7 +323,7 @@ public class LeaderTransferTest : FSMTestBase {
 
     [Test]
     public void TestLeaderTransferLostForceVoteRequest() {
-        var log = new Log(new SnapshotDescriptor {
+        var log = new RaftLog(new SnapshotDescriptor {
             Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID)
         });
         var a = CreateFollower(A_ID, log.Clone());
@@ -378,7 +378,7 @@ public class LeaderTransferTest : FSMTestBase {
 
     [Test]
     public void TestLeaderTransferIgnoreProposal() {
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
         ElectionTimeout(a);
@@ -393,7 +393,7 @@ public class LeaderTransferTest : FSMTestBase {
 
     [Test]
     public void TestTransferNonMember() {
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(B_ID, C_ID, D_ID) });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(B_ID, C_ID, D_ID) });
         var a = CreateFollower(A_ID, log);
         a.Step(B_ID, new TimeoutNowRequest { CurrentTerm = a.CurrentTerm });
         Assert.That(a.IsCandidate, Is.False);
@@ -402,7 +402,7 @@ public class LeaderTransferTest : FSMTestBase {
     [Test]
     public void TestLeaderTransferTimeout() {
         var fd = new DiscreteFailureDetector();
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID) });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID) });
         var a = CreateFollower(A_ID, log.Clone(), fd);
         var b = CreateFollower(B_ID, log.Clone(), fd);
         var c = CreateFollower(C_ID, log.Clone(), fd);
@@ -439,7 +439,7 @@ public class LeaderTransferTest : FSMTestBase {
     [Test]
     public void TestLeaderTransferOneNodeCluster() {
         var fd = new DiscreteFailureDetector();
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID) });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID) });
         var a = CreateFollower(A_ID, log, fd);
         ElectionTimeout(a);
         Assert.That(a.IsLeader, Is.True);
@@ -456,7 +456,7 @@ public class LeaderTransferTest : FSMTestBase {
                 new ConfigMember { ServerAddress = new ServerAddress { ServerId = B_ID }, CanVote = false },
             }
         };
-        var log = new Log(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
         var a = CreateFollower(A_ID, log.Clone(), fd);
         ElectionTimeout(a);
         Assert.That(a.IsLeader, Is.True);
