@@ -10,15 +10,11 @@ public class Connected : IDeepCloneable<Connected> {
         N = n;
     }
 
-    #region IDeepCloneable<Connected> Members
-
     public Connected Clone() {
         return new Connected(N) {
             Disconnected = new HashSet<Connection>(Disconnected),
         };
     }
-
-    #endregion
 
     public void Connect(ulong id) {
         Disconnected = Disconnected.Where(x => x.to != id && x.from != id).ToHashSet();

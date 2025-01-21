@@ -55,8 +55,6 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         _server.AddEntry("Hello World");
     }
 
-    #region IStateMachine Members
-
     public void Apply(List<Command> commands) {
         foreach (var command in commands) {
             Log.Information("Applying command: {command}", command);
@@ -74,6 +72,4 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {}
 
     public void OnEvent(Event e) {}
-
-    #endregion
 }

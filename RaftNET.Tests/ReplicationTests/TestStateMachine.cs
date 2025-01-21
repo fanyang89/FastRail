@@ -22,8 +22,6 @@ public sealed class TestStateMachine(
         await _done.WaitAsync(1);
     }
 
-    #region IStateMachine Members
-
     public void Apply(List<Command> commands) {
         var n = apply(_id, commands, Hasher);
         _seen += (ulong)n;
@@ -66,6 +64,4 @@ public sealed class TestStateMachine(
             Log.Information("[{my_id}] Role changed, role={role}, id={id}", _id, ev.Role, ev.ServerId);
         });
     }
-
-    #endregion
 }
