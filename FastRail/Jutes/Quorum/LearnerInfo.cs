@@ -1,9 +1,9 @@
 ﻿namespace FastRail.Jutes.Quorum;
 
 internal class LearnerInfo : IJuteDeserializable, IJuteSerializable {
-    public long Serverid;
-    public int ProtocolVersion;
     public long ConfigVersion;
+    public int ProtocolVersion;
+    public long Serverid;
 
     public void DeserializeFrom(Stream s) {
         Serverid = JuteDeserializer.DeserializeLong(s);

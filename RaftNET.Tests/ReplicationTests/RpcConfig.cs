@@ -2,8 +2,8 @@
 
 public class RpcConfig {
     public bool Drops = false;
-    public TimeSpan NetworkDelay = TimeSpan.Zero;
+    public TimeSpan ExtraDelayMax = TimeSpan.FromMicroseconds(500);
     public TimeSpan LocalDelay = TimeSpan.Zero;
     public uint LocalNodes = 32;
-    public TimeSpan ExtraDelayMax = TimeSpan.FromMicroseconds(500);
+    public TimeSpan NetworkDelay = TimeSpan.Zero;
 }

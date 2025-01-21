@@ -3,9 +3,9 @@
 internal class TxnHeader : IJuteDeserializable, IJuteSerializable {
     public long ClientId;
     public int CXid;
-    public long ZXid;
     public long Time;
     public int Type;
+    public long ZXid;
 
     public void DeserializeFrom(Stream s) {
         ClientId = JuteDeserializer.DeserializeLong(s);

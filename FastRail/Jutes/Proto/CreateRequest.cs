@@ -3,10 +3,10 @@
 namespace FastRail.Jutes.Proto;
 
 public class CreateRequest : IJuteDeserializable, IJuteSerializable {
-    public string? Path;
-    public byte[]? Data;
     public IList<ACL>? ACL;
+    public byte[]? Data;
     public int Flags;
+    public string? Path;
 
     public void DeserializeFrom(Stream s) {
         Path = JuteDeserializer.DeserializeString(s);

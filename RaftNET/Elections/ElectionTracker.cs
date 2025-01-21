@@ -16,20 +16,6 @@ public class ElectionTracker {
         }
     }
 
-    public bool RegisterVote(ulong from, bool granted) {
-        if (!_votingMembers.Contains(from)) {
-            return false;
-        }
-
-        if (_responded.Add(from)) {
-            if (granted) {
-                _granted++;
-            }
-        }
-
-        return true;
-    }
-
     public VoteResult CountVotes() {
         var quorum = _votingMembers.Count / 2 + 1;
 
@@ -46,5 +32,19 @@ public class ElectionTracker {
         }
 
         return VoteResult.Lost;
+    }
+
+    public bool RegisterVote(ulong from, bool granted) {
+        if (!_votingMembers.Contains(from)) {
+            return false;
+        }
+
+        if (_responded.Add(from)) {
+            if (granted) {
+                _granted++;
+            }
+        }
+
+        return true;
     }
 }

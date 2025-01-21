@@ -3,8 +3,8 @@
 namespace FastRail.Jutes.Proto;
 
 public class SetACLRequest : IJuteDeserializable, IJuteSerializable {
-    public string? Path;
     public IList<ACL>? ACL;
+    public string? Path;
     public int Version;
 
     public void DeserializeFrom(Stream s) {

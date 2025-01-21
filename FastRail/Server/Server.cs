@@ -18,19 +18,19 @@ namespace FastRail.Server;
 
 public class Server : IDisposable, IStateMachine {
     public record Config {
-        public readonly TimeSpan ReceiveTimeout = TimeSpan.FromSeconds(6);
-        public readonly int MinSessionTimeout = 1000;
         public readonly int MaxSessionTimeout = 10 * 1000;
+        public readonly int MinSessionTimeout = 1000;
+        public readonly TimeSpan ReceiveTimeout = TimeSpan.FromSeconds(6);
         public readonly int Tick = 1000;
         public required string DataDir;
         public required IPEndPoint EndPoint;
     }
 
     private const long SuperSecret = 0XB3415C00L;
-    private readonly TcpListener _listener;
+    private readonly Config _config;
     private readonly CancellationTokenSource _cts = new();
     private readonly DataStore _ds;
-    private readonly Config _config;
+    private readonly TcpListener _listener;
     private readonly WatcherManager _watcherManager = new();
 
     public Server(Config config) {
@@ -39,8 +39,9 @@ public class Server : IDisposable, IStateMachine {
         _ds = new DataStore(config.DataDir);
     }
 
-    public RaftServer? Raft { get; set; }
     public int PingCount { get; private set; }
+
+    public RaftServer? Raft { get; set; }
 
     public void Dispose() {
         _cts.Dispose();
@@ -89,10 +90,6 @@ public class Server : IDisposable, IStateMachine {
         }
     }
 
-    public ulong TakeSnapshot() {
-        throw new NotImplementedException();
-    }
-
     public void DropSnapshot(ulong snapshot) {
         throw new NotImplementedException();
     }
@@ -101,12 +98,16 @@ public class Server : IDisposable, IStateMachine {
         throw new NotImplementedException();
     }
 
-    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {
+    public void OnEvent(Event ev) {
+        ev.Switch(e => { Log.Information("Role changed, id={id} role={role}", e.ServerId, e.Role); });
+    }
+
+    public ulong TakeSnapshot() {
         throw new NotImplementedException();
     }
 
-    public void OnEvent(Event ev) {
-        ev.Switch(e => { Log.Information("Role changed, id={id} role={role}", e.ServerId, e.Role); });
+    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {
+        throw new NotImplementedException();
     }
 
     public void Start() {

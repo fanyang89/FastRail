@@ -10,6 +10,66 @@ public class VotesTest {
     private const ulong Id5 = 5;
 
     [Test]
+    public void TestNonVotingVotesIgnored() {
+        // Joint configuration with non-voting members
+        var votes = new Votes(
+            new Configuration {
+                Current = { Messages.CreateConfigMember(Id1) },
+                Previous = {
+                    Messages.CreateConfigMember(Id2), Messages.CreateConfigMember(Id3), Messages.CreateConfigMember(Id4, false)
+                }
+            }
+        );
+
+        Assert.That(votes.Voters.Count, Is.EqualTo(3));
+        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
+        votes.RegisterVote(Id2, true);
+        votes.RegisterVote(Id3, true);
+        votes.RegisterVote(Id4, true);
+        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
+        votes.RegisterVote(Id1, true);
+        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Won));
+    }
+
+    [Test]
+    public void TestSameNodeVotingAndNonVoting() {
+        // The same node is voting in one config and non-voting in another
+        var votes = new Votes(
+            new Configuration {
+                Current = { Messages.CreateConfigMember(Id1), Messages.CreateConfigMember(Id4) },
+                Previous = {
+                    Messages.CreateConfigMember(Id2), Messages.CreateConfigMember(Id3), Messages.CreateConfigMember(Id4, false)
+                }
+            }
+        );
+
+        votes.RegisterVote(Id2, true);
+        votes.RegisterVote(Id1, true);
+        votes.RegisterVote(Id4, true);
+        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
+        votes.RegisterVote(Id3, true);
+        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Won));
+    }
+
+    [Test]
+    public void TestVoterWithNonVoter1() {
+        // Basic voting test with tree Voters and one no-voter
+        var votes = new Votes(
+            new Configuration {
+                Current = {
+                    Messages.CreateConfigMember(Id1),
+                    Messages.CreateConfigMember(Id2),
+                    Messages.CreateConfigMember(Id3),
+                    Messages.CreateConfigMember(Id4, false)
+                }
+            }
+        );
+        votes.RegisterVote(Id1, true);
+        votes.RegisterVote(Id2, true);
+        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Won));
+    }
+
+    [Test]
     public void TestVotesBasics() {
         var votes = new Votes(Messages.ConfigFromIds(Id1));
         Assert.Multiple(() => {
@@ -65,19 +125,6 @@ public class VotesTest {
     }
 
     [Test]
-    public void TestVotingFourNodes() {
-        // Basic voting test for 4 nodes
-        var votes = new Votes(Messages.ConfigFromIds(Id1, Id2, Id3, Id4));
-        votes.RegisterVote(Id1, true);
-        votes.RegisterVote(Id2, true);
-        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
-        votes.RegisterVote(Id3, false);
-        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
-        votes.RegisterVote(Id4, false);
-        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Lost));
-    }
-
-    [Test]
     public void TestVotingFiveNodes() {
         // Basic voting test for 5 nodes
         var votes = new Votes(Messages.ConfigFromIds([Id1, Id2, Id3, Id4, Id5], [Id1, Id2, Id3]));
@@ -91,62 +138,15 @@ public class VotesTest {
     }
 
     [Test]
-    public void TestVoterWithNonVoter1() {
-        // Basic voting test with tree Voters and one no-voter
-        var votes = new Votes(
-            new Configuration {
-                Current = {
-                    Messages.CreateConfigMember(Id1),
-                    Messages.CreateConfigMember(Id2),
-                    Messages.CreateConfigMember(Id3),
-                    Messages.CreateConfigMember(Id4, false)
-                }
-            }
-        );
+    public void TestVotingFourNodes() {
+        // Basic voting test for 4 nodes
+        var votes = new Votes(Messages.ConfigFromIds(Id1, Id2, Id3, Id4));
         votes.RegisterVote(Id1, true);
         votes.RegisterVote(Id2, true);
-        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Won));
-    }
-
-    [Test]
-    public void TestNonVotingVotesIgnored() {
-        // Joint configuration with non-voting members
-        var votes = new Votes(
-            new Configuration {
-                Current = { Messages.CreateConfigMember(Id1) },
-                Previous = {
-                    Messages.CreateConfigMember(Id2), Messages.CreateConfigMember(Id3), Messages.CreateConfigMember(Id4, false)
-                }
-            }
-        );
-
-        Assert.That(votes.Voters.Count, Is.EqualTo(3));
         Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
-        votes.RegisterVote(Id2, true);
-        votes.RegisterVote(Id3, true);
-        votes.RegisterVote(Id4, true);
+        votes.RegisterVote(Id3, false);
         Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
-        votes.RegisterVote(Id1, true);
-        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Won));
-    }
-
-    [Test]
-    public void TestSameNodeVotingAndNonVoting() {
-        // The same node is voting in one config and non-voting in another
-        var votes = new Votes(
-            new Configuration {
-                Current = { Messages.CreateConfigMember(Id1), Messages.CreateConfigMember(Id4) },
-                Previous = {
-                    Messages.CreateConfigMember(Id2), Messages.CreateConfigMember(Id3), Messages.CreateConfigMember(Id4, false)
-                }
-            }
-        );
-
-        votes.RegisterVote(Id2, true);
-        votes.RegisterVote(Id1, true);
-        votes.RegisterVote(Id4, true);
-        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Unknown));
-        votes.RegisterVote(Id3, true);
-        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Won));
+        votes.RegisterVote(Id4, false);
+        Assert.That(votes.CountVotes(), Is.EqualTo(VoteResult.Lost));
     }
 }

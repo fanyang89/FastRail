@@ -20,12 +20,6 @@ public class DataStoreTest : TestBase {
     }
 
     [Test]
-    public void TestRootNodeExists() {
-        var root = _ds.GetNodeStat("/");
-        Assert.That(root, Is.Not.Null);
-    }
-
-    [Test]
     public void TestCreateNode() {
         var root = _ds.GetNodeStat("/");
         Assert.That(root, Is.Not.Null);
@@ -72,6 +66,12 @@ public class DataStoreTest : TestBase {
         root = _ds.GetNodeStat("/");
         Assert.That(root, Is.Not.Null);
         Assert.That(root.NumChildren, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void TestRootNodeExists() {
+        var root = _ds.GetNodeStat("/");
+        Assert.That(root, Is.Not.Null);
     }
 
     [Test]

@@ -8,29 +8,11 @@ using Serilog;
 namespace RaftNET.Tests;
 
 public class RaftServerTest : RaftTestBase, IStateMachine {
-    private const int Port = 15000;
     private const ulong MyId = 1;
-    private RaftServer _server;
+    private const int Port = 15000;
     private AddressBook _addressBook;
     private string _listenAddress;
-
-    public void Apply(List<Command> commands) {
-        foreach (var command in commands) {
-            Log.Information("Applying command: {command}", command);
-        }
-    }
-
-    public ulong TakeSnapshot() {
-        return 0;
-    }
-
-    public void DropSnapshot(ulong snapshot) {}
-
-    public void LoadSnapshot(ulong snapshot) {}
-
-    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {}
-
-    public void OnEvent(Event e) {}
+    private RaftServer _server;
 
     [SetUp]
     public new void Setup() {
@@ -60,16 +42,38 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     }
 
     [Test]
-    public void TestSingleServerCanAppend() {
-        Assert.That(_server.IsLeader, Is.True);
-        _server.AddEntry("Hello World");
-    }
-
-    [Test]
     public async Task TestRpcServerBasicAsync() {
         const ulong myId = 2;
         var client = new RaftGrpcClient(myId, _listenAddress);
         var cts = new CancellationTokenSource();
         await client.PingAsync(DateTime.UtcNow + TimeSpan.FromSeconds(1), cts.Token);
     }
+
+    [Test]
+    public void TestSingleServerCanAppend() {
+        Assert.That(_server.IsLeader, Is.True);
+        _server.AddEntry("Hello World");
+    }
+
+    #region IStateMachine Members
+
+    public void Apply(List<Command> commands) {
+        foreach (var command in commands) {
+            Log.Information("Applying command: {command}", command);
+        }
+    }
+
+    public ulong TakeSnapshot() {
+        return 0;
+    }
+
+    public void DropSnapshot(ulong snapshot) {}
+
+    public void LoadSnapshot(ulong snapshot) {}
+
+    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {}
+
+    public void OnEvent(Event e) {}
+
+    #endregion
 }

@@ -3,11 +3,11 @@
 namespace FastRail.Jutes.Txn;
 
 internal class CreateTxn : IJuteDeserializable, IJuteSerializable {
-    public string? Path;
-    public byte[]? Data;
     public IList<ACL>? ACL;
+    public byte[]? Data;
     public bool Ephemeral;
     public int ParentCVersion;
+    public string? Path;
 
     public void DeserializeFrom(Stream s) {
         Path = JuteDeserializer.DeserializeString(s);

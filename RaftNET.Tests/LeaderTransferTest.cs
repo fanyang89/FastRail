@@ -289,36 +289,18 @@ public class LeaderTransferTest : FSMTestBase {
     }
 
     [Test]
-    public void TestLeaderTransferLostTimeoutNow() {
-        var log = new RaftLog(new SnapshotDescriptor {
-            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID)
-        });
+    public void TestLeaderTransferIgnoreProposal() {
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
-        var c = CreateFollower(C_ID, log.Clone());
-
         ElectionTimeout(a);
-        Communicate(a, b, c);
+        Communicate(a, b);
         Assert.That(a.IsLeader, Is.True);
 
-        var newCfg = Messages.ConfigFromIds(B_ID, C_ID);
-        a.AddEntry(newCfg);
+        a.TransferLeadership();
 
-        CommunicateUntil(() => !a.IsLeader, a, b, c);
-
-        var output = a.GetOutput();
-        Assert.Multiple(() => {
-            Assert.That(output.Messages, Has.Count.EqualTo(1));
-            Assert.That(output.Messages.Last().Message.IsTimeoutNowRequest, Is.True);
-            // ... and lose it.
-            Assert.That(b.IsFollower, Is.True);
-            Assert.That(c.IsFollower, Is.True);
-        });
-
-        ElectionTimeout(b);
-        ElectionThreshold(c);
-        Communicate(b, c);
-        Assert.That(b.IsLeader, Is.True);
+        Assert.Throws<NotLeaderException>(() => a.AddEntry(new Void()));
+        Assert.That(a.IsLeader, Is.True);
     }
 
     [Test]
@@ -377,26 +359,64 @@ public class LeaderTransferTest : FSMTestBase {
     }
 
     [Test]
-    public void TestLeaderTransferIgnoreProposal() {
-        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
+    public void TestLeaderTransferLostTimeoutNow() {
+        var log = new RaftLog(new SnapshotDescriptor {
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID)
+        });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
+        var c = CreateFollower(C_ID, log.Clone());
+
         ElectionTimeout(a);
-        Communicate(a, b);
+        Communicate(a, b, c);
         Assert.That(a.IsLeader, Is.True);
 
-        a.TransferLeadership();
+        var newCfg = Messages.ConfigFromIds(B_ID, C_ID);
+        a.AddEntry(newCfg);
 
-        Assert.Throws<NotLeaderException>(() => a.AddEntry(new Void()));
-        Assert.That(a.IsLeader, Is.True);
+        CommunicateUntil(() => !a.IsLeader, a, b, c);
+
+        var output = a.GetOutput();
+        Assert.Multiple(() => {
+            Assert.That(output.Messages, Has.Count.EqualTo(1));
+            Assert.That(output.Messages.Last().Message.IsTimeoutNowRequest, Is.True);
+            // ... and lose it.
+            Assert.That(b.IsFollower, Is.True);
+            Assert.That(c.IsFollower, Is.True);
+        });
+
+        ElectionTimeout(b);
+        ElectionThreshold(c);
+        Communicate(b, c);
+        Assert.That(b.IsLeader, Is.True);
     }
 
     [Test]
-    public void TestTransferNonMember() {
-        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(B_ID, C_ID, D_ID) });
-        var a = CreateFollower(A_ID, log);
-        a.Step(B_ID, new TimeoutNowRequest { CurrentTerm = a.CurrentTerm });
-        Assert.That(a.IsCandidate, Is.False);
+    public void TestLeaderTransferOneNodeCluster() {
+        var fd = new DiscreteFailureDetector();
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID) });
+        var a = CreateFollower(A_ID, log, fd);
+        ElectionTimeout(a);
+        Assert.That(a.IsLeader, Is.True);
+        Assert.Throws<NoOtherVotingMemberException>(() => a.TransferLeadership(5));
+        Assert.That(a.IsLeadershipTransferActive, Is.False);
+    }
+
+    [Test]
+    public void TestLeaderTransferOneVoter() {
+        var fd = new DiscreteFailureDetector();
+        var cfg = new Configuration {
+            Current = {
+                new ConfigMember { ServerAddress = new ServerAddress { ServerId = A_ID }, CanVote = true },
+                new ConfigMember { ServerAddress = new ServerAddress { ServerId = B_ID }, CanVote = false },
+            }
+        };
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        ElectionTimeout(a);
+        Assert.That(a.IsLeader, Is.True);
+        Assert.Throws<NoOtherVotingMemberException>(() => a.TransferLeadership(5));
+        Assert.That(a.IsLeadershipTransferActive, Is.False);
     }
 
     [Test]
@@ -437,30 +457,10 @@ public class LeaderTransferTest : FSMTestBase {
     }
 
     [Test]
-    public void TestLeaderTransferOneNodeCluster() {
-        var fd = new DiscreteFailureDetector();
-        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID) });
-        var a = CreateFollower(A_ID, log, fd);
-        ElectionTimeout(a);
-        Assert.That(a.IsLeader, Is.True);
-        Assert.Throws<NoOtherVotingMemberException>(() => a.TransferLeadership(5));
-        Assert.That(a.IsLeadershipTransferActive, Is.False);
-    }
-
-    [Test]
-    public void TestLeaderTransferOneVoter() {
-        var fd = new DiscreteFailureDetector();
-        var cfg = new Configuration {
-            Current = {
-                new ConfigMember { ServerAddress = new ServerAddress { ServerId = A_ID }, CanVote = true },
-                new ConfigMember { ServerAddress = new ServerAddress { ServerId = B_ID }, CanVote = false },
-            }
-        };
-        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = cfg });
-        var a = CreateFollower(A_ID, log.Clone(), fd);
-        ElectionTimeout(a);
-        Assert.That(a.IsLeader, Is.True);
-        Assert.Throws<NoOtherVotingMemberException>(() => a.TransferLeadership(5));
-        Assert.That(a.IsLeadershipTransferActive, Is.False);
+    public void TestTransferNonMember() {
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(B_ID, C_ID, D_ID) });
+        var a = CreateFollower(A_ID, log);
+        a.Step(B_ID, new TimeoutNowRequest { CurrentTerm = a.CurrentTerm });
+        Assert.That(a.IsCandidate, Is.False);
     }
 }

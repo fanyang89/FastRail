@@ -35,14 +35,6 @@ public class RaftServer {
 
     public Role Role => _raftService.AcquireFSMLock(fsm => fsm.Role);
 
-    public Task Start() {
-        return Task.Run(() => _app.RunAsync());
-    }
-
-    public void Stop() {
-        _app.Lifetime.StopApplication();
-    }
-
     public void AddEntry(byte[] buffer) {
         _raftService.AddEntry(buffer);
     }
@@ -57,5 +49,13 @@ public class RaftServer {
 
     public void AddEntryApplied(byte[] buffer) {
         _raftService.AddEntryApplied(buffer);
+    }
+
+    public Task Start() {
+        return Task.Run(() => _app.RunAsync());
+    }
+
+    public void Stop() {
+        _app.Lifetime.StopApplication();
     }
 }

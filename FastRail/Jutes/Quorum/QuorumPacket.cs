@@ -3,10 +3,10 @@
 namespace FastRail.Jutes.Quorum;
 
 internal class QuorumPacket : IJuteDeserializable, IJuteSerializable {
+    public IList<ID>? Authinfo;
+    public byte[]? Data; // Only significant when type is request
     public int Type; // Request, Ack, Commit, Ping
     public long Zxid;
-    public byte[]? Data; // Only significant when type is request
-    public IList<ID>? Authinfo;
 
     public void DeserializeFrom(Stream s) {
         Type = JuteDeserializer.DeserializeInt(s);

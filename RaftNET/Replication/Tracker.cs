@@ -3,61 +3,9 @@ namespace RaftNET.Replication;
 public class Tracker {
     public SortedSet<ulong> CurrentVoters { get; } = new();
 
-    public SortedSet<ulong> PreviousVoters { get; } = new();
-
     public Dictionary<ulong, FollowerProgress> FollowerProgresses { get; private set; } = new();
 
-    public FollowerProgress? Find(ulong id) {
-        return FollowerProgresses.GetValueOrDefault(id);
-    }
-
-    public void SetConfiguration(Configuration configuration, ulong nextIdx) {
-        CurrentVoters.Clear();
-        PreviousVoters.Clear();
-
-        var oldProgress = FollowerProgresses;
-        FollowerProgresses = new Dictionary<ulong, FollowerProgress>();
-
-        foreach (var member in configuration.Current) {
-            var id = member.ServerAddress.ServerId;
-
-            if (member.CanVote) {
-                CurrentVoters.Add(id);
-            }
-
-            if (FollowerProgresses.ContainsKey(id)) {
-                continue;
-            }
-
-            if (oldProgress.TryGetValue(id, out var value)) {
-                FollowerProgresses[id] = value;
-                FollowerProgresses[id].CanVote = member.CanVote;
-            } else {
-                FollowerProgresses.Add(id, new FollowerProgress { Id = id, NextIdx = nextIdx, CanVote = member.CanVote });
-            }
-        }
-
-        if (configuration.Previous.Count > 0) {
-            foreach (var member in configuration.Previous) {
-                var id = member.ServerAddress.ServerId;
-
-                if (member.CanVote) {
-                    PreviousVoters.Add(id);
-                }
-
-                if (FollowerProgresses.ContainsKey(id)) {
-                    continue;
-                }
-
-                if (oldProgress.TryGetValue(id, out var value)) {
-                    FollowerProgresses[id] = value;
-                    FollowerProgresses[id].CanVote = member.CanVote;
-                } else {
-                    FollowerProgresses.Add(id, new FollowerProgress { Id = id, NextIdx = nextIdx, CanVote = member.CanVote });
-                }
-            }
-        }
-    }
+    public SortedSet<ulong> PreviousVoters { get; } = new();
 
     // Calculate the current commit index based on the current simple or joint quorum
     public ulong Committed(ulong prevCommitIdx) {
@@ -114,8 +62,60 @@ public class Tracker {
         return current.Committed() ? current.CommitIdx() : prevCommitIdx;
     }
 
+    public FollowerProgress? Find(ulong id) {
+        return FollowerProgresses.GetValueOrDefault(id);
+    }
+
     public ActivityTracker GetActivityTracker() {
         return new ActivityTracker(this);
+    }
+
+    public void SetConfiguration(Configuration configuration, ulong nextIdx) {
+        CurrentVoters.Clear();
+        PreviousVoters.Clear();
+
+        var oldProgress = FollowerProgresses;
+        FollowerProgresses = new Dictionary<ulong, FollowerProgress>();
+
+        foreach (var member in configuration.Current) {
+            var id = member.ServerAddress.ServerId;
+
+            if (member.CanVote) {
+                CurrentVoters.Add(id);
+            }
+
+            if (FollowerProgresses.ContainsKey(id)) {
+                continue;
+            }
+
+            if (oldProgress.TryGetValue(id, out var value)) {
+                FollowerProgresses[id] = value;
+                FollowerProgresses[id].CanVote = member.CanVote;
+            } else {
+                FollowerProgresses.Add(id, new FollowerProgress { Id = id, NextIdx = nextIdx, CanVote = member.CanVote });
+            }
+        }
+
+        if (configuration.Previous.Count > 0) {
+            foreach (var member in configuration.Previous) {
+                var id = member.ServerAddress.ServerId;
+
+                if (member.CanVote) {
+                    PreviousVoters.Add(id);
+                }
+
+                if (FollowerProgresses.ContainsKey(id)) {
+                    continue;
+                }
+
+                if (oldProgress.TryGetValue(id, out var value)) {
+                    FollowerProgresses[id] = value;
+                    FollowerProgresses[id].CanVote = member.CanVote;
+                } else {
+                    FollowerProgresses.Add(id, new FollowerProgress { Id = id, NextIdx = nextIdx, CanVote = member.CanVote });
+                }
+            }
+        }
     }
 
     private ISet<ulong> GetAllMembers(Configuration configuration) {

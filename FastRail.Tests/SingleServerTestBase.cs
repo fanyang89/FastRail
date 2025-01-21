@@ -9,10 +9,10 @@ public class SingleServerTestBase : TestBase {
     protected const int Port = 15000;
     protected const int RaftPort = 15001;
     protected const int SessionTimeout = 6000;
-    protected Launcher Launcher;
-    protected Server.Server Server;
-    protected RaftServer Raft;
     protected ZooKeeper Client;
+    protected Launcher Launcher;
+    protected RaftServer Raft;
+    protected Server.Server Server;
 
     [SetUp]
     public new void Setup() {

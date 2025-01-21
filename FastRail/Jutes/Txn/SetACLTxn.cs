@@ -3,8 +3,8 @@
 namespace FastRail.Jutes.Txn;
 
 internal class SetACLTxn : IJuteDeserializable, IJuteSerializable {
-    public string? Path;
     public IList<ACL>? ACL;
+    public string? Path;
     public int Version;
 
     public void DeserializeFrom(Stream s) {

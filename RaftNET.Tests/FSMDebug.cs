@@ -16,6 +16,10 @@ public class FSMDebug(
     : FSM(id, currentTerm, votedFor, log, 0, failureDetector, config, Notifier) {
     private static readonly Notifier Notifier = new();
 
+    public new void BecomeFollower(ulong leader) {
+        base.BecomeFollower(leader);
+    }
+
     public FollowerProgress? GetProgress(ulong id) {
         return LeaderState.Tracker.Find(id);
     }
@@ -23,9 +27,5 @@ public class FSMDebug(
     public bool IsLeadershipTransferActive() {
         Debug.Assert(IsLeader);
         return LeaderState.StepDown != null;
-    }
-
-    public new void BecomeFollower(ulong leader) {
-        base.BecomeFollower(leader);
     }
 }

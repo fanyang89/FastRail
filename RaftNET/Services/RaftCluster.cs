@@ -32,18 +32,6 @@ public class RaftCluster {
         }
     }
 
-    public void Start() {
-        foreach (var server in _servers.Values) {
-            server.Start();
-        }
-    }
-
-    public void Stop() {
-        foreach (var server in _servers.Values) {
-            server.Stop();
-        }
-    }
-
     public ulong? FindLeader() {
         foreach (var (id, server) in _servers) {
             if (server.IsLeader) {
@@ -62,5 +50,17 @@ public class RaftCluster {
         }
 
         return roles.ToArray();
+    }
+
+    public void Start() {
+        foreach (var server in _servers.Values) {
+            server.Start();
+        }
+    }
+
+    public void Stop() {
+        foreach (var server in _servers.Values) {
+            server.Stop();
+        }
     }
 }

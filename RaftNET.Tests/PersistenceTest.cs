@@ -3,8 +3,8 @@
 namespace RaftNET.Tests;
 
 public class PersistenceTest {
-    private const ulong StartIdx = 1;
     private const ulong Count = 10;
+    private const ulong StartIdx = 1;
     private const ulong TermOffset = 100;
     private RocksPersistence _persistence;
 
@@ -22,79 +22,6 @@ public class PersistenceTest {
     [TearDown]
     public void TearDown() {
         _persistence.Dispose();
-    }
-
-    [Test]
-    public void TestRaftLoadLogs() {
-        var logs = _persistence.LoadLog();
-
-        for (ulong i = 0; i < (ulong)logs.Count; ++i) {
-            var log = logs[(int)i];
-            Assert.Multiple(() => {
-                Assert.That(log.Idx, Is.EqualTo(i + StartIdx));
-                Assert.That(log.Term, Is.EqualTo(i + StartIdx + TermOffset));
-            });
-        }
-    }
-
-    [Test]
-    public void TestRaftTruncateLogs1() {
-        _persistence.TruncateLog(20);
-        var logs = _persistence.LoadLog();
-        Assert.That(logs, Has.Count.EqualTo(Count));
-    }
-
-    [Test]
-    public void TestRaftTruncateLogs2() {
-        _persistence.TruncateLog(5);
-        var logs = _persistence.LoadLog();
-        Assert.That(logs, Has.Count.EqualTo(4));
-
-        for (ulong i = 0; i < (ulong)logs.Count; i++) {
-            var log = logs[(int)i];
-            Assert.Multiple(() => {
-                Assert.That(log.Idx, Is.EqualTo(i + StartIdx));
-                Assert.That(log.Term, Is.EqualTo(i + StartIdx + TermOffset));
-            });
-        }
-    }
-
-    [Test]
-    public void TestRaftTruncateLogs3() {
-        _persistence.TruncateLog(0);
-        var logs = _persistence.LoadLog();
-        Assert.That(logs, Is.Empty);
-    }
-
-    [Test]
-    public void TestSnapshotStoreLoad() {
-        _persistence.StoreSnapshotDescriptor(new SnapshotDescriptor { Idx = 5 }, Count);
-        var snapshot = _persistence.LoadSnapshotDescriptor();
-        Assert.That(snapshot, Is.Not.Null);
-        Assert.That(snapshot.Idx, Is.EqualTo(5));
-    }
-
-    [Test]
-    public void TestSnapshotPreserve1() {
-        _persistence.StoreSnapshotDescriptor(new SnapshotDescriptor { Idx = 5 }, 10);
-        var logs = _persistence.LoadLog();
-        Assert.That(logs, Has.Count.EqualTo(Count));
-    }
-
-    [Test]
-    public void TestSnapshotPreserve2() {
-        var snapshot = new SnapshotDescriptor { Idx = 5 };
-        _persistence.StoreSnapshotDescriptor(snapshot, 5);
-        var logs = _persistence.LoadLog();
-        Assert.That(logs, Has.Count.EqualTo(5));
-    }
-
-    [Test]
-    public void TestSnapshotPreserve3() {
-        var snapshot = new SnapshotDescriptor { Idx = 5 };
-        _persistence.StoreSnapshotDescriptor(snapshot, 0);
-        var logs = _persistence.LoadLog();
-        Assert.That(logs, Has.Count.EqualTo(5));
     }
 
     [Test]
@@ -141,5 +68,78 @@ public class PersistenceTest {
                 Assert.That(log, Is.EqualTo(expected));
             }
         }
+    }
+
+    [Test]
+    public void TestRaftLoadLogs() {
+        var logs = _persistence.LoadLog();
+
+        for (ulong i = 0; i < (ulong)logs.Count; ++i) {
+            var log = logs[(int)i];
+            Assert.Multiple(() => {
+                Assert.That(log.Idx, Is.EqualTo(i + StartIdx));
+                Assert.That(log.Term, Is.EqualTo(i + StartIdx + TermOffset));
+            });
+        }
+    }
+
+    [Test]
+    public void TestRaftTruncateLogs1() {
+        _persistence.TruncateLog(20);
+        var logs = _persistence.LoadLog();
+        Assert.That(logs, Has.Count.EqualTo(Count));
+    }
+
+    [Test]
+    public void TestRaftTruncateLogs2() {
+        _persistence.TruncateLog(5);
+        var logs = _persistence.LoadLog();
+        Assert.That(logs, Has.Count.EqualTo(4));
+
+        for (ulong i = 0; i < (ulong)logs.Count; i++) {
+            var log = logs[(int)i];
+            Assert.Multiple(() => {
+                Assert.That(log.Idx, Is.EqualTo(i + StartIdx));
+                Assert.That(log.Term, Is.EqualTo(i + StartIdx + TermOffset));
+            });
+        }
+    }
+
+    [Test]
+    public void TestRaftTruncateLogs3() {
+        _persistence.TruncateLog(0);
+        var logs = _persistence.LoadLog();
+        Assert.That(logs, Is.Empty);
+    }
+
+    [Test]
+    public void TestSnapshotPreserve1() {
+        _persistence.StoreSnapshotDescriptor(new SnapshotDescriptor { Idx = 5 }, 10);
+        var logs = _persistence.LoadLog();
+        Assert.That(logs, Has.Count.EqualTo(Count));
+    }
+
+    [Test]
+    public void TestSnapshotPreserve2() {
+        var snapshot = new SnapshotDescriptor { Idx = 5 };
+        _persistence.StoreSnapshotDescriptor(snapshot, 5);
+        var logs = _persistence.LoadLog();
+        Assert.That(logs, Has.Count.EqualTo(5));
+    }
+
+    [Test]
+    public void TestSnapshotPreserve3() {
+        var snapshot = new SnapshotDescriptor { Idx = 5 };
+        _persistence.StoreSnapshotDescriptor(snapshot, 0);
+        var logs = _persistence.LoadLog();
+        Assert.That(logs, Has.Count.EqualTo(5));
+    }
+
+    [Test]
+    public void TestSnapshotStoreLoad() {
+        _persistence.StoreSnapshotDescriptor(new SnapshotDescriptor { Idx = 5 }, Count);
+        var snapshot = _persistence.LoadSnapshotDescriptor();
+        Assert.That(snapshot, Is.Not.Null);
+        Assert.That(snapshot.Idx, Is.EqualTo(5));
     }
 }

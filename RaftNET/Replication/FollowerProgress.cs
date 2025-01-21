@@ -30,9 +30,49 @@ public class FollowerProgress {
     // Number of in-flight still unACKed append entries requests.
     public ulong InFlight { get; set; }
 
+    public bool ProbeSent { get; set; }
+
     public FollowerProgressState State { get; private set; } = FollowerProgressState.Probe;
 
-    public bool ProbeSent { get; set; }
+    public void Accepted(ulong idx) {
+        // AppendEntries replies can arrive out of order.
+        MatchIdx = ulong.Max(idx, MatchIdx);
+        // idx may be smaller if we increased next_idx optimistically in pipeline mode.
+        NextIdx = ulong.Max(idx + 1, NextIdx);
+    }
+
+    public void BecomePipeline() {
+        if (State != FollowerProgressState.Pipeline) {
+            State = FollowerProgressState.Pipeline;
+            InFlight = 0;
+        }
+    }
+
+    public void BecomeProbe() {
+        State = FollowerProgressState.Probe;
+        ProbeSent = false;
+    }
+
+    public void BecomeSnapshot(ulong snp_idx) {
+        State = FollowerProgressState.Snapshot;
+        NextIdx = snp_idx + 1;
+    }
+
+    public bool CanSendTo() {
+        return State switch {
+            FollowerProgressState.Probe => !ProbeSent,
+            FollowerProgressState.Pipeline =>
+                // allow `max_in_flight` outstanding indexes
+                // FIXME: make it smarter
+                InFlight < MaxInFlight,
+            FollowerProgressState.Snapshot =>
+                // In this state we are waiting
+                // for a snapshot to be transferred
+                // before starting to sync the log.
+                false,
+            _ => false
+        };
+    }
 
     public bool IsStrayReject(AppendRejected rejected) {
         if (rejected.NonMatchingIdx <= MatchIdx) {
@@ -59,45 +99,5 @@ public class FollowerProgress {
         }
 
         return false;
-    }
-
-    public void BecomeProbe() {
-        State = FollowerProgressState.Probe;
-        ProbeSent = false;
-    }
-
-    public void BecomePipeline() {
-        if (State != FollowerProgressState.Pipeline) {
-            State = FollowerProgressState.Pipeline;
-            InFlight = 0;
-        }
-    }
-
-    public void BecomeSnapshot(ulong snp_idx) {
-        State = FollowerProgressState.Snapshot;
-        NextIdx = snp_idx + 1;
-    }
-
-    public bool CanSendTo() {
-        return State switch {
-            FollowerProgressState.Probe => !ProbeSent,
-            FollowerProgressState.Pipeline =>
-                // allow `max_in_flight` outstanding indexes
-                // FIXME: make it smarter
-                InFlight < MaxInFlight,
-            FollowerProgressState.Snapshot =>
-                // In this state we are waiting
-                // for a snapshot to be transferred
-                // before starting to sync the log.
-                false,
-            _ => false
-        };
-    }
-
-    public void Accepted(ulong idx) {
-        // AppendEntries replies can arrive out of order.
-        MatchIdx = ulong.Max(idx, MatchIdx);
-        // idx may be smaller if we increased next_idx optimistically in pipeline mode.
-        NextIdx = ulong.Max(idx + 1, NextIdx);
     }
 }

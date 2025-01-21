@@ -2,12 +2,12 @@
 
 public partial class FSM {
     public sealed record LastObservedState : IEquatable<FSM> {
-        public ulong CurrentTerm;
-        public ulong VotedFor;
+        public bool AbortLeadershipTransfer;
         public ulong CommitIdx;
+        public ulong CurrentTerm;
         public ulong LastConfIdx;
         public ulong LastTerm;
-        public bool AbortLeadershipTransfer;
+        public ulong VotedFor;
 
         public bool Equals(FSM? other) {
             if (other is null) {

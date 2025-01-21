@@ -1,8 +1,8 @@
 ﻿namespace FastRail.Jutes.Data;
 
 public record ID : IJuteDeserializable, IJuteSerializable {
-    public string? Scheme;
     public string? Id;
+    public string? Scheme;
 
     public void DeserializeFrom(Stream s) {
         Scheme = JuteDeserializer.DeserializeString(s);

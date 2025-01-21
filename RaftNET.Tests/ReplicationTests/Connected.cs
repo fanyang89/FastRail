@@ -10,6 +10,24 @@ public class Connected : IDeepCloneable<Connected> {
         N = n;
     }
 
+    #region IDeepCloneable<Connected> Members
+
+    public Connected Clone() {
+        return new Connected(N) {
+            Disconnected = new HashSet<Connection>(Disconnected),
+        };
+    }
+
+    #endregion
+
+    public void Connect(ulong id) {
+        Disconnected = Disconnected.Where(x => x.to != id && x.from != id).ToHashSet();
+    }
+
+    public void ConnectAll() {
+        Disconnected.Clear();
+    }
+
     public void Cut(ulong id1, ulong id2) {
         Disconnected.Add(new Connection(id1, id2));
         Disconnected.Add(new Connection(id2, id1));
@@ -23,22 +41,8 @@ public class Connected : IDeepCloneable<Connected> {
         }
     }
 
-    public void Connect(ulong id) {
-        Disconnected = Disconnected.Where(x => x.to != id && x.from != id).ToHashSet();
-    }
-
-    public void ConnectAll() {
-        Disconnected.Clear();
-    }
-
     public bool IsConnected(ulong id1, ulong id2) {
         return !Disconnected.Contains(new Connection(id1, id2)) &&
                !Disconnected.Contains(new Connection(id2, id1));
-    }
-
-    public Connected Clone() {
-        return new Connected(N) {
-            Disconnected = new HashSet<Connection>(Disconnected),
-        };
     }
 }

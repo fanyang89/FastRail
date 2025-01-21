@@ -1,8 +1,8 @@
 ﻿namespace FastRail.Jutes.Txn;
 
 internal class SetDataTxn : IJuteDeserializable, IJuteSerializable {
-    public string? Path;
     public byte[]? Data;
+    public string? Path;
     public int Version;
 
     public void DeserializeFrom(Stream s) {

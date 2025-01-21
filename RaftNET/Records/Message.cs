@@ -23,6 +23,20 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
     public Message(ReadQuorumRequest request) : base(request) {}
     public Message(ReadQuorumResponse request) : base(request) {}
 
+    public AppendRequest AppendRequest {
+        get {
+            Debug.Assert(IsAppendRequest);
+            return AsT2;
+        }
+    }
+
+    public AppendResponse AppendResponse {
+        get {
+            Debug.Assert(IsAppendResponse);
+            return AsT3;
+        }
+    }
+
     public ulong CurrentTerm {
         get {
             return Match(
@@ -39,34 +53,6 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
         }
     }
 
-    public VoteRequest VoteRequest {
-        get {
-            Debug.Assert(IsVoteRequest);
-            return AsT0;
-        }
-    }
-
-    public VoteResponse VoteResponse {
-        get {
-            Debug.Assert(IsVoteResponse);
-            return AsT1;
-        }
-    }
-
-    public AppendRequest AppendRequest {
-        get {
-            Debug.Assert(IsAppendRequest);
-            return AsT2;
-        }
-    }
-
-    public AppendResponse AppendResponse {
-        get {
-            Debug.Assert(IsAppendResponse);
-            return AsT3;
-        }
-    }
-
     public InstallSnapshotRequest InstallSnapshotRequest {
         get {
             Debug.Assert(IsInstallSnapshotRequest);
@@ -74,43 +60,16 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
         }
     }
 
-    public SnapshotResponse SnapshotResponse {
-        get {
-            Debug.Assert(IsSnapshotResponse);
-            return AsT5;
-        }
-    }
-
-    public TimeoutNowRequest TimeoutNowRequest {
-        get {
-            Debug.Assert(IsTimeoutNowRequest);
-            return AsT6;
-        }
-    }
-
-    public ReadQuorumRequest ReadQuorumRequest {
-        get {
-            Debug.Assert(IsReadQuorumRequest);
-            return AsT7;
-        }
-    }
-
-    public ReadQuorumResponse ReadQuorumResponse {
-        get {
-            Debug.Assert(IsReadQuorumResponse);
-            return AsT8;
-        }
-    }
-
-    public bool IsVoteRequest => IsT0;
-    public bool IsVoteResponse => IsT1;
     public bool IsAppendRequest => IsT2;
     public bool IsAppendResponse => IsT3;
     public bool IsInstallSnapshotRequest => IsT4;
-    public bool IsSnapshotResponse => IsT5;
-    public bool IsTimeoutNowRequest => IsT6;
     public bool IsReadQuorumRequest => IsT7;
     public bool IsReadQuorumResponse => IsT8;
+    public bool IsSnapshotResponse => IsT5;
+    public bool IsTimeoutNowRequest => IsT6;
+
+    public bool IsVoteRequest => IsT0;
+    public bool IsVoteResponse => IsT1;
 
     public string Name {
         get {
@@ -142,6 +101,48 @@ public class Message : OneOfBase<VoteRequest, VoteResponse, AppendRequest, Appen
                 return "ReadQuorumResponse";
             }
             return "UnknownMessage";
+        }
+    }
+
+    public ReadQuorumRequest ReadQuorumRequest {
+        get {
+            Debug.Assert(IsReadQuorumRequest);
+            return AsT7;
+        }
+    }
+
+    public ReadQuorumResponse ReadQuorumResponse {
+        get {
+            Debug.Assert(IsReadQuorumResponse);
+            return AsT8;
+        }
+    }
+
+    public SnapshotResponse SnapshotResponse {
+        get {
+            Debug.Assert(IsSnapshotResponse);
+            return AsT5;
+        }
+    }
+
+    public TimeoutNowRequest TimeoutNowRequest {
+        get {
+            Debug.Assert(IsTimeoutNowRequest);
+            return AsT6;
+        }
+    }
+
+    public VoteRequest VoteRequest {
+        get {
+            Debug.Assert(IsVoteRequest);
+            return AsT0;
+        }
+    }
+
+    public VoteResponse VoteResponse {
+        get {
+            Debug.Assert(IsVoteResponse);
+            return AsT1;
         }
     }
 }

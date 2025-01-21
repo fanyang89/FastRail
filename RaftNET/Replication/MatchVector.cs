@@ -15,10 +15,6 @@ internal class MatchVector<T>(T prevCommitIdx, int reserveSize)
         _match.Add(matchIdx);
     }
 
-    public bool Committed() {
-        return _count >= _match.Count / 2 + 1;
-    }
-
     public T CommitIdx() {
         // The index of the pivot node is selected so that all nodes
         // with a larger match index plus the pivot form a majority,
@@ -32,5 +28,9 @@ internal class MatchVector<T>(T prevCommitIdx, int reserveSize)
         var pivot = (_match.Count - 1) / 2;
         _match.Sort();
         return _match[pivot];
+    }
+
+    public bool Committed() {
+        return _count >= _match.Count / 2 + 1;
     }
 }

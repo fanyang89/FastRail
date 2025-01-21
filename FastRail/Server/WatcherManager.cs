@@ -5,8 +5,8 @@ namespace FastRail.Server;
 using WatcherHandler = Action<string, WatcherEventType>;
 
 public class WatcherManager {
-    private readonly Dictionary<string, List<Watcher>> _watchers = new();
     private readonly Dictionary<string, List<Watcher>> _recursiveWatchers = new();
+    private readonly Dictionary<string, List<Watcher>> _watchers = new();
 
     public void Register(string watchPath, WatcherHandler handler, bool isPersistent = false, bool isRecursive = false) {
         if (isRecursive) {

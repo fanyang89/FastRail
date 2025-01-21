@@ -1,32 +1,32 @@
 ﻿namespace FastRail.Jutes.Data;
 
 public record StatPersisted : IJuteDeserializable, IJuteSerializable {
-    // created zxid
-    public long CZxid;
-
-    // last modified zxid
-    public long MZxid;
+    // acl version
+    public int AVersion;
 
     // created
     public long CTime;
 
-    // last modified
-    public long MTime;
-
-    // version
-    public int Version;
-
     // child version
     public int CVersion;
 
-    // acl version
-    public int AVersion;
+    // created zxid
+    public long CZxid;
 
     // owner id if ephemeral, 0 otw
     public long EphemeralOwner;
 
+    // last modified
+    public long MTime;
+
+    // last modified zxid
+    public long MZxid;
+
     // last modified children
     public long PZxid;
+
+    // version
+    public int Version;
 
     public void DeserializeFrom(Stream s) {
         CZxid = JuteDeserializer.DeserializeLong(s);

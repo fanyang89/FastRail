@@ -1,9 +1,9 @@
 ﻿namespace FastRail.Jutes.Persistence;
 
 internal class FileHeader : IJuteDeserializable, IJuteSerializable {
+    public long Dbid;
     public int Magic;
     public int Version;
-    public long Dbid;
 
     public void DeserializeFrom(Stream s) {
         Magic = JuteDeserializer.DeserializeInt(s);

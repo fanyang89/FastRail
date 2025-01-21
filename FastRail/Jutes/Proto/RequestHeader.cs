@@ -1,8 +1,8 @@
 ﻿namespace FastRail.Jutes.Proto;
 
 public class RequestHeader : IJuteDeserializable, IJuteSerializable {
-    public int Xid;
     public int Type;
+    public int Xid;
 
     public static int SizeOf => sizeof(int) + sizeof(int);
 

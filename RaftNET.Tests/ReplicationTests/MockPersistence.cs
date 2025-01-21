@@ -12,6 +12,8 @@ public class MockPersistence(
     : IPersistence {
     private readonly ulong _id = id;
 
+    #region IPersistence Members
+
     public void StoreTermVote(ulong term, ulong vote) {
         Thread.Sleep(TimeSpan.FromMicroseconds(1));
     }
@@ -45,4 +47,6 @@ public class MockPersistence(
     }
 
     public void TruncateLog(ulong idx) {}
+
+    #endregion
 }

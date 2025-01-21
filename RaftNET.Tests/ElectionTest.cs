@@ -3,6 +3,128 @@
 namespace RaftNET.Tests;
 
 public class ElectionTest : FSMTestBase {
+    [Test]
+    public void TestFourNodesElection() {
+        var fd = new DiscreteFailureDetector();
+        var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4);
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
+        var fsm = CreateFollower(Id1, log, fd);
+        Assert.That(fsm.IsFollower);
+
+        fsm.Step(Id4, new AppendRequest { CurrentTerm = 1, PrevLogIdx = 1, PrevLogTerm = 1 });
+
+        fsm.GetOutput();
+
+        fsm.Step(Id3, new VoteRequest { CurrentTerm = 1, LastLogIdx = 1, LastLogTerm = 1 });
+
+        var output = fsm.GetOutput();
+        var reply = output.Messages.Last().Message.VoteResponse;
+        Assert.That(!reply.VoteGranted);
+
+        fd.MarkAllDead();
+        ElectionTimeout(fsm);
+        Assert.That(fsm.IsCandidate);
+
+        output = fsm.GetOutput();
+        Assert.That(output.TermAndVote, Is.Not.Null);
+        var currentTerm = output.TermAndVote.Term;
+        fsm.Step(Id2, new VoteResponse { CurrentTerm = currentTerm, VoteGranted = true });
+        Assert.That(fsm.IsCandidate);
+        fsm.Step(Id3, new VoteResponse { CurrentTerm = currentTerm, VoteGranted = true });
+        Assert.That(fsm.IsLeader);
+    }
+
+    [Test]
+    public void TestFourNodesPreVote() {
+        var fd = new DiscreteFailureDetector();
+        var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4);
+        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
+        var fsm = new FSMDebug(Id1, 0, 0, log, fd, FSMPreVoteConfig);
+
+        Assert.That(fsm.IsFollower, Is.True);
+
+        fsm.Step(Id4, new AppendRequest {
+            CurrentTerm = 1, PrevLogIdx = 1, PrevLogTerm = 1
+        });
+
+        fsm.GetOutput();
+
+        fsm.Step(Id3, new VoteRequest {
+            CurrentTerm = 1,
+            LastLogIdx = 1,
+            LastLogTerm = 1,
+            IsPreVote = true,
+            Force = false
+        });
+
+        var output = fsm.GetOutput();
+        Assert.That(output.Messages.Last().Message.IsVoteResponse, Is.True);
+        var reply = output.Messages.Last().Message.VoteResponse;
+        Assert.Multiple(() => {
+            Assert.That(reply.VoteGranted, Is.False);
+            Assert.That(reply.IsPreVote, Is.True);
+        });
+
+        fd.MarkAllDead();
+        ElectionTimeout(fsm);
+        Assert.Multiple(() => {
+            Assert.That(fsm.IsCandidate, Is.True);
+            Assert.That(fsm.IsPreVoteCandidate, Is.True);
+        });
+
+        output = fsm.GetOutput();
+        Assert.That(output.TermAndVote, Is.Null);
+        fsm.Step(Id2, new VoteResponse {
+            CurrentTerm = fsm.CurrentTerm + 1,
+            VoteGranted = true,
+            IsPreVote = true
+        });
+        Assert.Multiple(() => {
+            Assert.That(fsm.IsCandidate, Is.True);
+            Assert.That(fsm.IsPreVoteCandidate, Is.True);
+        });
+
+        fsm.Step(Id3, new VoteResponse {
+            CurrentTerm = fsm.CurrentTerm + 1,
+            VoteGranted = true,
+            IsPreVote = true
+        });
+        Assert.Multiple(() => {
+            Assert.That(fsm.IsCandidate, Is.True);
+            Assert.That(fsm.IsPreVoteCandidate, Is.False);
+        });
+
+        fsm.Step(Id2, new VoteRequest {
+            CurrentTerm = fsm.CurrentTerm + 1,
+            LastLogIdx = 1,
+            LastLogTerm = 1,
+            IsPreVote = false,
+            Force = false
+        });
+
+        fsm.GetOutput();
+
+        fsm.Step(Id3, new VoteRequest {
+            CurrentTerm = fsm.CurrentTerm + 1,
+            LastLogIdx = 1,
+            LastLogTerm = 1,
+            IsPreVote = true,
+            Force = false
+        });
+
+        output = fsm.GetOutput();
+
+        Assert.Multiple(() => {
+            Assert.That(output.Messages, Has.Count.EqualTo(1));
+            Assert.That(output.Messages.Last().Message.IsVoteResponse, Is.True);
+        });
+        reply = output.Messages.Last().Message.VoteResponse;
+        Assert.Multiple(() => {
+            Assert.That(reply.VoteGranted, Is.True);
+            Assert.That(reply.IsPreVote, Is.True);
+        });
+    }
+
     [TestCase(true)]
     [TestCase(false)]
     public void TestSingleNodeElection(bool enablePreVote) {
@@ -163,128 +285,6 @@ public class ElectionTest : FSMTestBase {
             Assert.That(msg.CurrentTerm, Is.EqualTo(4));
             Assert.That(msg.VoteGranted, Is.True);
             Assert.That(fsm.CurrentTerm, Is.EqualTo(3));
-        });
-    }
-
-    [Test]
-    public void TestFourNodesElection() {
-        var fd = new DiscreteFailureDetector();
-        var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4);
-        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
-        var fsm = CreateFollower(Id1, log, fd);
-        Assert.That(fsm.IsFollower);
-
-        fsm.Step(Id4, new AppendRequest { CurrentTerm = 1, PrevLogIdx = 1, PrevLogTerm = 1 });
-
-        fsm.GetOutput();
-
-        fsm.Step(Id3, new VoteRequest { CurrentTerm = 1, LastLogIdx = 1, LastLogTerm = 1 });
-
-        var output = fsm.GetOutput();
-        var reply = output.Messages.Last().Message.VoteResponse;
-        Assert.That(!reply.VoteGranted);
-
-        fd.MarkAllDead();
-        ElectionTimeout(fsm);
-        Assert.That(fsm.IsCandidate);
-
-        output = fsm.GetOutput();
-        Assert.That(output.TermAndVote, Is.Not.Null);
-        var currentTerm = output.TermAndVote.Term;
-        fsm.Step(Id2, new VoteResponse { CurrentTerm = currentTerm, VoteGranted = true });
-        Assert.That(fsm.IsCandidate);
-        fsm.Step(Id3, new VoteResponse { CurrentTerm = currentTerm, VoteGranted = true });
-        Assert.That(fsm.IsLeader);
-    }
-
-    [Test]
-    public void TestFourNodesPreVote() {
-        var fd = new DiscreteFailureDetector();
-        var cfg = Messages.ConfigFromIds(Id1, Id2, Id3, Id4);
-        var log = new RaftLog(new SnapshotDescriptor { Config = cfg });
-        var fsm = new FSMDebug(Id1, 0, 0, log, fd, FSMPreVoteConfig);
-
-        Assert.That(fsm.IsFollower, Is.True);
-
-        fsm.Step(Id4, new AppendRequest {
-            CurrentTerm = 1, PrevLogIdx = 1, PrevLogTerm = 1
-        });
-
-        fsm.GetOutput();
-
-        fsm.Step(Id3, new VoteRequest {
-            CurrentTerm = 1,
-            LastLogIdx = 1,
-            LastLogTerm = 1,
-            IsPreVote = true,
-            Force = false
-        });
-
-        var output = fsm.GetOutput();
-        Assert.That(output.Messages.Last().Message.IsVoteResponse, Is.True);
-        var reply = output.Messages.Last().Message.VoteResponse;
-        Assert.Multiple(() => {
-            Assert.That(reply.VoteGranted, Is.False);
-            Assert.That(reply.IsPreVote, Is.True);
-        });
-
-        fd.MarkAllDead();
-        ElectionTimeout(fsm);
-        Assert.Multiple(() => {
-            Assert.That(fsm.IsCandidate, Is.True);
-            Assert.That(fsm.IsPreVoteCandidate, Is.True);
-        });
-
-        output = fsm.GetOutput();
-        Assert.That(output.TermAndVote, Is.Null);
-        fsm.Step(Id2, new VoteResponse {
-            CurrentTerm = fsm.CurrentTerm + 1,
-            VoteGranted = true,
-            IsPreVote = true
-        });
-        Assert.Multiple(() => {
-            Assert.That(fsm.IsCandidate, Is.True);
-            Assert.That(fsm.IsPreVoteCandidate, Is.True);
-        });
-
-        fsm.Step(Id3, new VoteResponse {
-            CurrentTerm = fsm.CurrentTerm + 1,
-            VoteGranted = true,
-            IsPreVote = true
-        });
-        Assert.Multiple(() => {
-            Assert.That(fsm.IsCandidate, Is.True);
-            Assert.That(fsm.IsPreVoteCandidate, Is.False);
-        });
-
-        fsm.Step(Id2, new VoteRequest {
-            CurrentTerm = fsm.CurrentTerm + 1,
-            LastLogIdx = 1,
-            LastLogTerm = 1,
-            IsPreVote = false,
-            Force = false
-        });
-
-        fsm.GetOutput();
-
-        fsm.Step(Id3, new VoteRequest {
-            CurrentTerm = fsm.CurrentTerm + 1,
-            LastLogIdx = 1,
-            LastLogTerm = 1,
-            IsPreVote = true,
-            Force = false
-        });
-
-        output = fsm.GetOutput();
-
-        Assert.Multiple(() => {
-            Assert.That(output.Messages, Has.Count.EqualTo(1));
-            Assert.That(output.Messages.Last().Message.IsVoteResponse, Is.True);
-        });
-        reply = output.Messages.Last().Message.VoteResponse;
-        Assert.Multiple(() => {
-            Assert.That(reply.VoteGranted, Is.True);
-            Assert.That(reply.IsPreVote, Is.True);
         });
     }
 }

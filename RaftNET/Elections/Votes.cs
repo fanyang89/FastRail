@@ -33,6 +33,18 @@ public class Votes {
 
     public ISet<ServerAddress> Voters => new HashSet<ServerAddress>(_voters.Values);
 
+    public VoteResult CountVotes() {
+        if (_previous != null) {
+            var result = _previous.CountVotes();
+
+            if (result != VoteResult.Won) {
+                return result;
+            }
+        }
+
+        return _current.CountVotes();
+    }
+
     public void RegisterVote(ulong from, bool granted) {
         var registered = _current.RegisterVote(from, granted);
 
@@ -46,17 +58,5 @@ public class Votes {
         if (!registered) {
             Log.Information("Got a vote from unregistered server {from} during election", from);
         }
-    }
-
-    public VoteResult CountVotes() {
-        if (_previous != null) {
-            var result = _previous.CountVotes();
-
-            if (result != VoteResult.Won) {
-                return result;
-            }
-        }
-
-        return _current.CountVotes();
     }
 }

@@ -40,12 +40,6 @@ public class AddressBook : IAddressBook {
         }
     }
 
-    public Dictionary<ulong, bool> GetMembers() {
-        lock (_addresses) {
-            return _addresses.Select(x => (x.Key, true)).ToDictionary();
-        }
-    }
-
     public void Add(ulong id, string address, int port) {
         Add(id, $"http://{address}:{port}");
     }
@@ -56,5 +50,11 @@ public class AddressBook : IAddressBook {
 
     public void Add(ulong id, int port) {
         Add(id, $"http://127.0.0.1:{port}");
+    }
+
+    public Dictionary<ulong, bool> GetMembers() {
+        lock (_addresses) {
+            return _addresses.Select(x => (x.Key, true)).ToDictionary();
+        }
     }
 }

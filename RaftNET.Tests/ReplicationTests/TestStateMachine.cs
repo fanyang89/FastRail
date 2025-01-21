@@ -10,13 +10,19 @@ public sealed class TestStateMachine(
     ulong applyEntries,
     Snapshots snapshots
 ) : IStateMachine {
-    private Dictionary<ulong, Dictionary<ulong, SnapshotValue>> _snapshots = snapshots;
-    private ulong _applyEntries = applyEntries;
-    private ulong _seen;
-    private ulong _id = id;
     private readonly SemaphoreSlim _done = new(1, 1);
+    private ulong _applyEntries = applyEntries;
+    private ulong _id = id;
+    private ulong _seen;
+    private Dictionary<ulong, Dictionary<ulong, SnapshotValue>> _snapshots = snapshots;
 
-    public HasherInt Hasher { get; set; }
+    public HasherInt Hasher { get; set; } = new();
+
+    public async Task DoneAsync() {
+        await _done.WaitAsync(1);
+    }
+
+    #region IStateMachine Members
 
     public void Apply(List<Command> commands) {
         var n = apply(_id, commands, Hasher);
@@ -61,7 +67,5 @@ public sealed class TestStateMachine(
         });
     }
 
-    public async Task DoneAsync() {
-        await _done.WaitAsync(1);
-    }
+    #endregion
 }

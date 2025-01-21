@@ -49,7 +49,7 @@ public class ReplicationTestBase : RaftTestBase {
             await raftCluster.WaitAllAsync();
         }
 
-        await raftCluster.StopAllAsync();
+        await raftCluster.StopAllAsync("Test run is done");
 
         if (test.TotalValues > 0) {
             raftCluster.Verify();

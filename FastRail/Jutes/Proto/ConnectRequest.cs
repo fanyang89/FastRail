@@ -1,12 +1,12 @@
 ﻿namespace FastRail.Jutes.Proto;
 
 public class ConnectRequest : IJuteDeserializable, IJuteSerializable {
-    public int ProtocolVersion;
     public long LastZxidSeen;
-    public int Timeout;
-    public long SessionId;
     public byte[]? Passwd;
+    public int ProtocolVersion;
     public bool ReadOnly;
+    public long SessionId;
+    public int Timeout;
 
     public void DeserializeFrom(Stream s) {
         ProtocolVersion = JuteDeserializer.DeserializeInt(s);

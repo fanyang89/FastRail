@@ -1,8 +1,8 @@
 ﻿namespace FastRail.Jutes.Txn;
 
 internal class Txn : IJuteDeserializable, IJuteSerializable {
-    public int Type;
     public byte[]? Data;
+    public int Type;
 
     public void DeserializeFrom(Stream s) {
         Type = JuteDeserializer.DeserializeInt(s);

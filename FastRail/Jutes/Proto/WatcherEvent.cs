@@ -1,9 +1,9 @@
 ﻿namespace FastRail.Jutes.Proto;
 
 internal class WatcherEvent : IJuteDeserializable, IJuteSerializable {
-    public int Type; // event type
-    public int State; // state of the Keeper client runtime
     public string? Path;
+    public int State; // state of the Keeper client runtime
+    public int Type; // event type
 
     public void DeserializeFrom(Stream s) {
         Type = JuteDeserializer.DeserializeInt(s);

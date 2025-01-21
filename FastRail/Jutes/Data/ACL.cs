@@ -1,8 +1,8 @@
 ﻿namespace FastRail.Jutes.Data;
 
 public record ACL : IJuteDeserializable, IJuteSerializable {
-    public int Perms;
     public ID? Id;
+    public int Perms;
 
     public void DeserializeFrom(Stream s) {
         Perms = JuteDeserializer.DeserializeInt(s);

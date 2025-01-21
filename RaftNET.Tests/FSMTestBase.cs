@@ -5,12 +5,6 @@ using RaftNET.Records;
 namespace RaftNET.Tests;
 
 public class FSMTestBase : RaftTestBase {
-    protected const ulong Id1 = 1;
-    protected const ulong Id2 = 2;
-    protected const ulong Id3 = 3;
-    protected const ulong Id4 = 4;
-    protected const ulong Id5 = 5;
-
     protected const ulong A_ID = 1;
     protected const ulong B_ID = 2;
     protected const ulong C_ID = 3;
@@ -19,6 +13,11 @@ public class FSMTestBase : RaftTestBase {
     protected const ulong F_ID = 6;
     protected const ulong G_ID = 7;
     protected const ulong H_ID = 8;
+    protected const ulong Id1 = 1;
+    protected const ulong Id2 = 2;
+    protected const ulong Id3 = 3;
+    protected const ulong Id4 = 4;
+    protected const ulong Id5 = 5;
 
     protected readonly FSM.Config FSMConfig = new(
         maxLogSize: 4 * 1024 * 1024,

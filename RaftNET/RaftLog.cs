@@ -8,10 +8,10 @@ public class RaftLog : IDeepCloneable<RaftLog> {
     private readonly List<LogEntry> _log;
     private ulong _firstIdx;
     private ulong _lastConfIdx;
+    private int _memoryUsage;
     private ulong _prevConfIdx;
     private SnapshotDescriptor _snapshot;
     private ulong _stableIdx;
-    private int _memoryUsage;
 
     public RaftLog(SnapshotDescriptor? snapshot, List<LogEntry>? logEntries = null) {
         _snapshot = snapshot ?? new SnapshotDescriptor();
@@ -29,12 +29,6 @@ public class RaftLog : IDeepCloneable<RaftLog> {
         InitLastConfigurationIdx();
     }
 
-    public RaftLog Clone() {
-        var logEntries = _log.Select(entry => entry.Clone()).ToList();
-        var log = new RaftLog(_snapshot.Clone(), logEntries);
-        return log;
-    }
-
     public LogEntry this[ulong index] {
         get {
             Debug.Assert(_log.Count > 0 && index >= _firstIdx);
@@ -42,12 +36,22 @@ public class RaftLog : IDeepCloneable<RaftLog> {
         }
     }
 
-    public bool Empty() {
-        return _log.Count == 0;
+    public ulong LastConfIdx => _lastConfIdx > 0 ? _lastConfIdx : _snapshot.Idx;
+
+    public RaftLog Clone() {
+        var logEntries = _log.Select(entry => entry.Clone()).ToList();
+        var log = new RaftLog(_snapshot.Clone(), logEntries);
+        return log;
     }
 
-    public SnapshotDescriptor GetSnapshot() {
-        return _snapshot;
+    public void Add(LogEntry entry) {
+        _log.Add(entry);
+        _memoryUsage += MemoryUsageOf(entry);
+
+        if (_log.Last().Configuration != null) {
+            _prevConfIdx = _lastConfIdx;
+            _lastConfIdx = LastIdx();
+        }
     }
 
     public (int, ulong) ApplySnapshot(SnapshotDescriptor snp, int maxTrailingEntries, int maxTrailingBytes) {
@@ -94,6 +98,86 @@ public class RaftLog : IDeepCloneable<RaftLog> {
         return (releasedMemory, _firstIdx);
     }
 
+    public bool Empty() {
+        return _log.Count == 0;
+    }
+
+    public Configuration GetConfiguration() {
+        if (_lastConfIdx > 0) {
+            var cfg = _log[(int)(_lastConfIdx - _firstIdx)].Configuration;
+            return new Configuration(cfg);
+        }
+
+        if (_snapshot.Config == null) {
+            return new Configuration();
+        }
+
+        return new Configuration(_snapshot.Config);
+    }
+
+    public Configuration? GetPreviousConfiguration() {
+        var cfg = DoGetPreviousConfiguration();
+
+        if (cfg == null) {
+            return cfg;
+        }
+
+        return new Configuration(cfg);
+    }
+
+    public SnapshotDescriptor GetSnapshot() {
+        return _snapshot;
+    }
+
+    public int InMemorySize() {
+        return _log.Count;
+    }
+
+    public bool IsUpToUpdate(ulong idx, ulong term) {
+        return term > LastTerm() || term == LastTerm() && idx >= LastIdx();
+    }
+
+    public Configuration LastConfFor(ulong idx) {
+        return new Configuration(DoLastConfFor(idx));
+    }
+
+    public ulong LastIdx() {
+        return (ulong)_log.Count + _firstIdx - 1;
+    }
+
+    public ulong LastTerm() {
+        if (_log.Count == 0) {
+            return _snapshot.Term;
+        }
+        return _log.Last().Term;
+    }
+
+    public Tuple<bool, ulong> MatchTerm(ulong idx, ulong term) {
+        if (idx == 0) {
+            return new Tuple<bool, ulong>(true, 0);
+        }
+
+        if (idx < _snapshot.Idx) {
+            return new Tuple<bool, ulong>(true, LastTerm());
+        }
+
+        ulong myTerm;
+
+        if (idx == _snapshot.Idx) {
+            myTerm = _snapshot.Term;
+        } else {
+            var i = idx - _firstIdx;
+
+            if (i >= (ulong)_log.Count) {
+                return new Tuple<bool, ulong>(false, 0);
+            }
+
+            myTerm = _log[(int)i].Term;
+        }
+
+        return myTerm == term ? new Tuple<bool, ulong>(true, 0) : new Tuple<bool, ulong>(false, myTerm);
+    }
+
     public ulong MaybeAppend(IList<LogEntry> entries) {
         Debug.Assert(entries.Count > 0);
 
@@ -127,44 +211,8 @@ public class RaftLog : IDeepCloneable<RaftLog> {
         return lastNewIdx;
     }
 
-    public Tuple<bool, ulong> MatchTerm(ulong idx, ulong term) {
-        if (idx == 0) {
-            return new Tuple<bool, ulong>(true, 0);
-        }
-
-        if (idx < _snapshot.Idx) {
-            return new Tuple<bool, ulong>(true, LastTerm());
-        }
-
-        ulong myTerm;
-
-        if (idx == _snapshot.Idx) {
-            myTerm = _snapshot.Term;
-        } else {
-            var i = idx - _firstIdx;
-
-            if (i >= (ulong)_log.Count) {
-                return new Tuple<bool, ulong>(false, 0);
-            }
-
-            myTerm = _log[(int)i].Term;
-        }
-
-        return myTerm == term ? new Tuple<bool, ulong>(true, 0) : new Tuple<bool, ulong>(false, myTerm);
-    }
-
-    public void Add(LogEntry entry) {
-        _log.Add(entry);
-        _memoryUsage += MemoryUsageOf(entry);
-
-        if (_log.Last().Configuration != null) {
-            _prevConfIdx = _lastConfIdx;
-            _lastConfIdx = LastIdx();
-        }
-    }
-
-    public ulong LastIdx() {
-        return (ulong)_log.Count + _firstIdx - 1;
+    public int MemoryUsage() {
+        return _memoryUsage;
     }
 
     public ulong NextIdx() {
@@ -180,17 +228,6 @@ public class RaftLog : IDeepCloneable<RaftLog> {
         _stableIdx = idx;
     }
 
-    public bool IsUpToUpdate(ulong idx, ulong term) {
-        return term > LastTerm() || term == LastTerm() && idx >= LastIdx();
-    }
-
-    public ulong LastTerm() {
-        if (_log.Count == 0) {
-            return _snapshot.Term;
-        }
-        return _log.Last().Term;
-    }
-
     public ulong? TermFor(ulong idx) {
         if (_log.Count > 0 && idx >= _firstIdx) {
             return _log[(int)(idx - _firstIdx)].Term;
@@ -201,39 +238,6 @@ public class RaftLog : IDeepCloneable<RaftLog> {
         }
 
         return null;
-    }
-
-    public ulong LastConfIdx => _lastConfIdx > 0 ? _lastConfIdx : _snapshot.Idx;
-
-    public Configuration GetConfiguration() {
-        if (_lastConfIdx > 0) {
-            var cfg = _log[(int)(_lastConfIdx - _firstIdx)].Configuration;
-            return new Configuration(cfg);
-        }
-
-        if (_snapshot.Config == null) {
-            return new Configuration();
-        }
-
-        return new Configuration(_snapshot.Config);
-    }
-
-    public Configuration LastConfFor(ulong idx) {
-        return new Configuration(DoLastConfFor(idx));
-    }
-
-    public Configuration? GetPreviousConfiguration() {
-        var cfg = DoGetPreviousConfiguration();
-
-        if (cfg == null) {
-            return cfg;
-        }
-
-        return new Configuration(cfg);
-    }
-
-    public int MemoryUsage() {
-        return _memoryUsage;
     }
 
     private LogEntry GetEntry(ulong idx) {
@@ -327,9 +331,5 @@ public class RaftLog : IDeepCloneable<RaftLog> {
                 break;
             }
         }
-    }
-
-    public int InMemorySize() {
-        return _log.Count;
     }
 }

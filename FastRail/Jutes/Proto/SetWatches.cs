@@ -1,10 +1,10 @@
 ﻿namespace FastRail.Jutes.Proto;
 
 internal class SetWatches : IJuteDeserializable, IJuteSerializable {
-    public long RelativeZxid;
+    public IList<string>? ChildWatches;
     public IList<string>? DataWatches;
     public IList<string>? ExistWatches;
-    public IList<string>? ChildWatches;
+    public long RelativeZxid;
 
     public void DeserializeFrom(Stream s) {
         RelativeZxid = JuteDeserializer.DeserializeInt(s);

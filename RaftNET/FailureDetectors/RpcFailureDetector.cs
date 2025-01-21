@@ -11,10 +11,10 @@ public class RpcFailureDetector(
     TimeSpan timeout,
     IClock clock
 ) : IFailureDetector {
-    private readonly Dictionary<ulong, CancellationTokenSource> _cancellationTokenSources = new();
-    private readonly Dictionary<ulong, Task> _workers = new();
     private readonly Dictionary<ulong, bool> _alive = new();
+    private readonly Dictionary<ulong, CancellationTokenSource> _cancellationTokenSources = new();
     private readonly ConnectionManager _connectionManager = new(myId, addressBook);
+    private readonly Dictionary<ulong, Task> _workers = new();
 
     public bool IsAlive(ulong server) {
         lock (_alive) {

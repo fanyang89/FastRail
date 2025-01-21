@@ -1,17 +1,17 @@
 ﻿namespace FastRail.Jutes.Data;
 
 public record Stat : IJuteDeserializable, IJuteSerializable {
-    public long Czxid; // created zxid
-    public long Mzxid; // last modified zxid
-    public long Ctime; // created
-    public long Mtime; // last modified
-    public int Version; // version
-    public int Cversion; // child version
     public int Aversion; // acl version
-    public long EphemeralOwner; // owner id if ephemeral, 0 otw
+    public long Ctime; // created
+    public int Cversion; // child version
+    public long Czxid; // created zxid
     public int DataLength; //length of the data in the node
+    public long EphemeralOwner; // owner id if ephemeral, 0 otw
+    public long Mtime; // last modified
+    public long Mzxid; // last modified zxid
     public int NumChildren; //number of children of this node
     public long Pzxid; // last modified children
+    public int Version; // version
 
     public void DeserializeFrom(Stream s) {
         Czxid = JuteDeserializer.DeserializeLong(s);

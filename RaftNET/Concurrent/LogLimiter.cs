@@ -2,8 +2,15 @@
 
 public class LogLimiter(int initialCount, int maxCount) {
     private readonly object _lock = new();
-    private Exception? _lastException;
     private int _count = initialCount;
+    private Exception? _lastException;
+
+    public void Broken(Exception ex) {
+        lock (_lock) {
+            _lastException = ex;
+            Monitor.PulseAll(_lock);
+        }
+    }
 
     public void Consume(int n) {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(n, maxCount);
@@ -22,13 +29,6 @@ public class LogLimiter(int initialCount, int maxCount) {
         lock (_lock) {
             _count += Math.Min(maxCount, _count + n);
             Monitor.Pulse(_lock);
-        }
-    }
-
-    public void Broken(Exception ex) {
-        lock (_lock) {
-            _lastException = ex;
-            Monitor.PulseAll(_lock);
         }
     }
 }

@@ -1,8 +1,8 @@
 ﻿namespace RaftNET.Concurrent;
 
 internal class SemaphoreGuard : IDisposable {
-    private readonly SemaphoreSlim _semaphore;
     private readonly int _n;
+    private readonly SemaphoreSlim _semaphore;
 
     public SemaphoreGuard(SemaphoreSlim semaphore, int n = 1) {
         _semaphore = semaphore;

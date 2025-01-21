@@ -71,6 +71,141 @@ public class ConfigurationChangeTest : FSMTestBase {
     }
 
     [Test]
+    public void ElectionDuringConfigurationChange() {
+        // Joint config has reached old majority, the leader is from a new majority
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID) });
+        var fd = new DiscreteFailureDetector();
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        var b = CreateFollower(B_ID, log.Clone(), fd);
+        var c = CreateFollower(C_ID, log.Clone(), fd);
+        ElectionTimeout(a);
+        Communicate(a, b, c);
+        a.AddEntry(Messages.ConfigFromIds(C_ID, D_ID, E_ID));
+        Communicate(a, b, c);
+        fd.MarkDead(A_ID);
+        var d = CreateFollower(D_ID, log.Clone(), fd);
+        var e = CreateFollower(E_ID, log.Clone(), fd);
+        ElectionTimeout(c);
+        ElectionThreshold(b);
+        CommunicateUntil(() => c.IsLeader, b, c, d, e);
+        Assert.That(c.GetConfiguration().IsJoint, Is.True);
+        fd.MarkAlive(A_ID);
+        Communicate(d, a, b, e);
+        fd.MarkAlive(C_ID);
+        CommunicateUntil(() => !c.GetConfiguration().IsJoint(), b, c, d, e);
+        Communicate(c, d);
+        fd.MarkDead(C_ID);
+        ElectionTimeout(d);
+        // E may still be in joint. It must vote for D anyway. D is in C_new
+        // and will replicate C_new to E after becoming a leader
+        ElectionThreshold(e);
+        a.Tick();
+        Communicate(a, d, e);
+        Assert.Multiple(() => {
+            Assert.That(d.IsLeader, Is.True);
+            Assert.That(a.IsFollower, Is.True);
+            Assert.That(d.GetConfiguration().IsJoint(), Is.False);
+            Assert.That(d.GetConfiguration().Current, Has.Count.EqualTo(3));
+        });
+    }
+
+    [Test]
+    public void LargeClusterAddTwoNodes() {
+        // Check configuration changes work fine with many nodes down
+        var fd = new DiscreteFailureDetector();
+
+        var log = new RaftLog(new SnapshotDescriptor {
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID)
+        });
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        var b = CreateFollower(B_ID, log.Clone(), fd);
+        var c = CreateFollower(C_ID, log.Clone(), fd);
+        var d = CreateFollower(D_ID, log.Clone(), fd);
+        var e = CreateFollower(E_ID, log.Clone(), fd);
+        ElectionTimeout(a);
+        Communicate(a, d, e);
+        Assert.That(a.IsLeader, Is.True);
+
+        var f = CreateFollower(F_ID, log.Clone());
+        var g = CreateFollower(G_ID, log.Clone());
+
+        // Wrap configuration entry into some traffic
+        a.AddEntry(new Void());
+        a.AddEntry(Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID, F_ID, G_ID));
+        a.AddEntry(new Void());
+        // Without tick() A won't re-try communication with nodes it
+        // believes are down (B, C).
+        a.Tick();
+        // 4 is enough to transition to the new configuration
+        Communicate(a, b, c, g);
+
+        Assert.Multiple(() => {
+            Assert.That(a.IsLeader, Is.True);
+            Assert.That(a.GetConfiguration().IsJoint, Is.False);
+            Assert.That(a.GetConfiguration().Current, Has.Count.EqualTo(7));
+        });
+
+        a.Tick();
+        Communicate(a, b, c, d, e, f, g);
+
+        Assert.Multiple(() => {
+            Assert.That(a.LogLastIdx, Is.EqualTo(b.LogLastIdx));
+            Assert.That(a.LogLastIdx, Is.EqualTo(c.LogLastIdx));
+            Assert.That(a.LogLastIdx, Is.EqualTo(d.LogLastIdx));
+            Assert.That(a.LogLastIdx, Is.EqualTo(e.LogLastIdx));
+            Assert.That(a.LogLastIdx, Is.EqualTo(f.LogLastIdx));
+            Assert.That(a.LogLastIdx, Is.EqualTo(g.LogLastIdx));
+            Assert.That(a.IsLeader, Is.True);
+            Assert.That(a.GetConfiguration().IsJoint, Is.False);
+            Assert.That(a.GetConfiguration().Current, Has.Count.EqualTo(7));
+        });
+    }
+
+    [Test]
+    public void RemoveAndAddNodes() {
+        // Configuration change {A, B, C, D, E, F} to {A, B, C, G, H}
+        // Test configuration changes in presence of down nodes in C_old
+        var fd = new DiscreteFailureDetector();
+        var log = new RaftLog(new SnapshotDescriptor {
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID, F_ID)
+        });
+        var a = CreateFollower(A_ID, log.Clone(), fd);
+        var b = CreateFollower(B_ID, log.Clone(), fd);
+        var c = CreateFollower(C_ID, log.Clone(), fd);
+        var d = CreateFollower(D_ID, log.Clone(), fd);
+        var e = CreateFollower(E_ID, log.Clone(), fd);
+        var f = CreateFollower(F_ID, log.Clone(), fd);
+        ElectionTimeout(d);
+        Communicate(a, d, e, f);
+        Assert.That(d.IsLeader, Is.True);
+
+        var g = CreateFollower(G_ID, log.Clone());
+        var h = CreateFollower(H_ID, log.Clone());
+
+        d.AddEntry(Messages.ConfigFromIds(A_ID, B_ID, C_ID, G_ID, H_ID));
+        Communicate(b, c, d, g, h);
+        Assert.Multiple(() => {
+            Assert.That(d.IsLeader, Is.True);
+            Assert.That(d.GetConfiguration().IsJoint(), Is.True);
+        });
+        d.Tick();
+        Communicate(b, c, e, d, g, h);
+        Assert.That(d.IsFollower, Is.True);
+
+        var leader = SelectLeader(a, b, c, g, h);
+        Assert.Multiple(() => {
+            Assert.That(leader.GetConfiguration().IsJoint(), Is.False);
+            Assert.That(leader.GetConfiguration().Current, Has.Count.EqualTo(5));
+        });
+
+        fd.MarkAllDead();
+        ElectionTimeout(d);
+        ElectionTimeout(a);
+        Communicate(a, b, c, d, e, f, g, h);
+        Assert.That(leader.IsLeader, Is.True);
+    }
+
+    [Test]
     public void RemoveNode() {
         var cfg = Messages.ConfigFromIds(Id1, Id2, Id3);
         var log = new RaftLog(new SnapshotDescriptor { Idx = 100, Config = cfg });
@@ -200,43 +335,6 @@ public class ConfigurationChangeTest : FSMTestBase {
     }
 
     [Test]
-    public void ReplaceTwoNodesSimple() {
-        // Configuration change {A, B} to {C, D}
-        // Similar to A -> B change, but with many nodes,
-        // so C_new has to campaign after configuration change.
-        var log = new RaftLog(new SnapshotDescriptor {
-            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID)
-        });
-        var a = CreateFollower(A_ID, log.Clone());
-        var b = CreateFollower(B_ID, log.Clone());
-        ElectionTimeout(a);
-        Communicate(a, b);
-        Assert.That(a.IsLeader, Is.True);
-
-        var c = CreateFollower(C_ID, log.Clone());
-        var d = CreateFollower(D_ID, log.Clone());
-
-        a.AddEntry(Messages.ConfigFromIds(C_ID, D_ID));
-        Communicate(a, b, c, d);
-
-        Assert.Multiple(() => {
-            Assert.That(a.CurrentTerm, Is.EqualTo(1));
-            Assert.That(a.IsFollower, Is.True);
-            Assert.That(b.IsFollower, Is.True);
-        });
-
-        ElectionTimeout(c);
-        ElectionThreshold(d);
-        Communicate(a, b, c, d);
-        Assert.Multiple(() => {
-            Assert.That(c.CurrentTerm, Is.EqualTo(2));
-            Assert.That(c.IsLeader, Is.True);
-            Assert.That(c.GetConfiguration().IsJoint, Is.False);
-            Assert.That(c.GetConfiguration().Current, Has.Count.EqualTo(2));
-        });
-    }
-
-    [Test]
     public void ReplaceTwoNodes() {
         // Configuration change {A, B, C} to {C, D, E}
         // Check configuration changes when C_old and C_new have no common quorum,
@@ -278,165 +376,40 @@ public class ConfigurationChangeTest : FSMTestBase {
     }
 
     [Test]
-    public void RemoveAndAddNodes() {
-        // Configuration change {A, B, C, D, E, F} to {A, B, C, G, H}
-        // Test configuration changes in presence of down nodes in C_old
-        var fd = new DiscreteFailureDetector();
+    public void ReplaceTwoNodesSimple() {
+        // Configuration change {A, B} to {C, D}
+        // Similar to A -> B change, but with many nodes,
+        // so C_new has to campaign after configuration change.
         var log = new RaftLog(new SnapshotDescriptor {
-            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID, F_ID)
+            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID)
         });
-        var a = CreateFollower(A_ID, log.Clone(), fd);
-        var b = CreateFollower(B_ID, log.Clone(), fd);
-        var c = CreateFollower(C_ID, log.Clone(), fd);
-        var d = CreateFollower(D_ID, log.Clone(), fd);
-        var e = CreateFollower(E_ID, log.Clone(), fd);
-        var f = CreateFollower(F_ID, log.Clone(), fd);
-        ElectionTimeout(d);
-        Communicate(a, d, e, f);
-        Assert.That(d.IsLeader, Is.True);
-
-        var g = CreateFollower(G_ID, log.Clone());
-        var h = CreateFollower(H_ID, log.Clone());
-
-        d.AddEntry(Messages.ConfigFromIds(A_ID, B_ID, C_ID, G_ID, H_ID));
-        Communicate(b, c, d, g, h);
-        Assert.Multiple(() => {
-            Assert.That(d.IsLeader, Is.True);
-            Assert.That(d.GetConfiguration().IsJoint(), Is.True);
-        });
-        d.Tick();
-        Communicate(b, c, e, d, g, h);
-        Assert.That(d.IsFollower, Is.True);
-
-        var leader = SelectLeader(a, b, c, g, h);
-        Assert.Multiple(() => {
-            Assert.That(leader.GetConfiguration().IsJoint(), Is.False);
-            Assert.That(leader.GetConfiguration().Current, Has.Count.EqualTo(5));
-        });
-
-        fd.MarkAllDead();
-        ElectionTimeout(d);
-        ElectionTimeout(a);
-        Communicate(a, b, c, d, e, f, g, h);
-        Assert.That(leader.IsLeader, Is.True);
-    }
-
-    [Test]
-    public void LargeClusterAddTwoNodes() {
-        // Check configuration changes work fine with many nodes down
-        var fd = new DiscreteFailureDetector();
-
-        var log = new RaftLog(new SnapshotDescriptor {
-            Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID)
-        });
-        var a = CreateFollower(A_ID, log.Clone(), fd);
-        var b = CreateFollower(B_ID, log.Clone(), fd);
-        var c = CreateFollower(C_ID, log.Clone(), fd);
-        var d = CreateFollower(D_ID, log.Clone(), fd);
-        var e = CreateFollower(E_ID, log.Clone(), fd);
-        ElectionTimeout(a);
-        Communicate(a, d, e);
-        Assert.That(a.IsLeader, Is.True);
-
-        var f = CreateFollower(F_ID, log.Clone());
-        var g = CreateFollower(G_ID, log.Clone());
-
-        // Wrap configuration entry into some traffic
-        a.AddEntry(new Void());
-        a.AddEntry(Messages.ConfigFromIds(A_ID, B_ID, C_ID, D_ID, E_ID, F_ID, G_ID));
-        a.AddEntry(new Void());
-        // Without tick() A won't re-try communication with nodes it
-        // believes are down (B, C).
-        a.Tick();
-        // 4 is enough to transition to the new configuration
-        Communicate(a, b, c, g);
-
-        Assert.Multiple(() => {
-            Assert.That(a.IsLeader, Is.True);
-            Assert.That(a.GetConfiguration().IsJoint, Is.False);
-            Assert.That(a.GetConfiguration().Current, Has.Count.EqualTo(7));
-        });
-
-        a.Tick();
-        Communicate(a, b, c, d, e, f, g);
-
-        Assert.Multiple(() => {
-            Assert.That(a.LogLastIdx, Is.EqualTo(b.LogLastIdx));
-            Assert.That(a.LogLastIdx, Is.EqualTo(c.LogLastIdx));
-            Assert.That(a.LogLastIdx, Is.EqualTo(d.LogLastIdx));
-            Assert.That(a.LogLastIdx, Is.EqualTo(e.LogLastIdx));
-            Assert.That(a.LogLastIdx, Is.EqualTo(f.LogLastIdx));
-            Assert.That(a.LogLastIdx, Is.EqualTo(g.LogLastIdx));
-            Assert.That(a.IsLeader, Is.True);
-            Assert.That(a.GetConfiguration().IsJoint, Is.False);
-            Assert.That(a.GetConfiguration().Current, Has.Count.EqualTo(7));
-        });
-    }
-
-    [Test]
-    public void ElectionDuringConfigurationChange() {
-        // Joint config has reached old majority, the leader is from a new majority
-        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID, C_ID) });
-        var fd = new DiscreteFailureDetector();
-        var a = CreateFollower(A_ID, log.Clone(), fd);
-        var b = CreateFollower(B_ID, log.Clone(), fd);
-        var c = CreateFollower(C_ID, log.Clone(), fd);
-        ElectionTimeout(a);
-        Communicate(a, b, c);
-        a.AddEntry(Messages.ConfigFromIds(C_ID, D_ID, E_ID));
-        Communicate(a, b, c);
-        fd.MarkDead(A_ID);
-        var d = CreateFollower(D_ID, log.Clone(), fd);
-        var e = CreateFollower(E_ID, log.Clone(), fd);
-        ElectionTimeout(c);
-        ElectionThreshold(b);
-        CommunicateUntil(() => c.IsLeader, b, c, d, e);
-        Assert.That(c.GetConfiguration().IsJoint, Is.True);
-        fd.MarkAlive(A_ID);
-        Communicate(d, a, b, e);
-        fd.MarkAlive(C_ID);
-        CommunicateUntil(() => !c.GetConfiguration().IsJoint(), b, c, d, e);
-        Communicate(c, d);
-        fd.MarkDead(C_ID);
-        ElectionTimeout(d);
-        // E may still be in joint. It must vote for D anyway. D is in C_new
-        // and will replicate C_new to E after becoming a leader
-        ElectionThreshold(e);
-        a.Tick();
-        Communicate(a, d, e);
-        Assert.Multiple(() => {
-            Assert.That(d.IsLeader, Is.True);
-            Assert.That(a.IsFollower, Is.True);
-            Assert.That(d.GetConfiguration().IsJoint(), Is.False);
-            Assert.That(d.GetConfiguration().Current, Has.Count.EqualTo(3));
-        });
-    }
-
-    [Test]
-    public void TestReplyFromRemovedFollower() {
-        // Messages from followers may be delayed.
-        // Check they don't upset the leader when they are delivered past configuration change
-        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
         var a = CreateFollower(A_ID, log.Clone());
         var b = CreateFollower(B_ID, log.Clone());
         ElectionTimeout(a);
         Communicate(a, b);
-        a.AddEntry(Messages.ConfigFromIds(A_ID));
-        Communicate(a, b);
-        Assert.Multiple(() => {
-            Assert.That(a.IsLeader, Is.True);
-            Assert.That(a.GetConfiguration().IsJoint(), Is.False);
-            Assert.That(a.GetConfiguration().Current, Has.Count.EqualTo(1));
-        });
-        var idx = a.LogLastIdx;
-        a.Step(B_ID, new AppendResponse {
-            CurrentTerm = a.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
-        });
-        a.Step(B_ID, new AppendResponse {
-            CurrentTerm = a.CurrentTerm, CommitIdx = idx, Rejected = new AppendRejected { NonMatchingIdx = idx }
-        });
-        a.Step(B_ID, new SnapshotResponse { CurrentTerm = a.CurrentTerm, Success = true });
         Assert.That(a.IsLeader, Is.True);
+
+        var c = CreateFollower(C_ID, log.Clone());
+        var d = CreateFollower(D_ID, log.Clone());
+
+        a.AddEntry(Messages.ConfigFromIds(C_ID, D_ID));
+        Communicate(a, b, c, d);
+
+        Assert.Multiple(() => {
+            Assert.That(a.CurrentTerm, Is.EqualTo(1));
+            Assert.That(a.IsFollower, Is.True);
+            Assert.That(b.IsFollower, Is.True);
+        });
+
+        ElectionTimeout(c);
+        ElectionThreshold(d);
+        Communicate(a, b, c, d);
+        Assert.Multiple(() => {
+            Assert.That(c.CurrentTerm, Is.EqualTo(2));
+            Assert.That(c.IsLeader, Is.True);
+            Assert.That(c.GetConfiguration().IsJoint, Is.False);
+            Assert.That(c.GetConfiguration().Current, Has.Count.EqualTo(2));
+        });
     }
 
     [Test]
@@ -485,5 +458,32 @@ public class ConfigurationChangeTest : FSMTestBase {
             Assert.That(b1.IsFollower, Is.True);
             Assert.That(b1.GetOutput().Messages, Is.Empty);
         });
+    }
+
+    [Test]
+    public void TestReplyFromRemovedFollower() {
+        // Messages from followers may be delayed.
+        // Check they don't upset the leader when they are delivered past configuration change
+        var log = new RaftLog(new SnapshotDescriptor { Idx = 0, Config = Messages.ConfigFromIds(A_ID, B_ID) });
+        var a = CreateFollower(A_ID, log.Clone());
+        var b = CreateFollower(B_ID, log.Clone());
+        ElectionTimeout(a);
+        Communicate(a, b);
+        a.AddEntry(Messages.ConfigFromIds(A_ID));
+        Communicate(a, b);
+        Assert.Multiple(() => {
+            Assert.That(a.IsLeader, Is.True);
+            Assert.That(a.GetConfiguration().IsJoint(), Is.False);
+            Assert.That(a.GetConfiguration().Current, Has.Count.EqualTo(1));
+        });
+        var idx = a.LogLastIdx;
+        a.Step(B_ID, new AppendResponse {
+            CurrentTerm = a.CurrentTerm, CommitIdx = idx, Accepted = new AppendAccepted { LastNewIdx = idx }
+        });
+        a.Step(B_ID, new AppendResponse {
+            CurrentTerm = a.CurrentTerm, CommitIdx = idx, Rejected = new AppendRejected { NonMatchingIdx = idx }
+        });
+        a.Step(B_ID, new SnapshotResponse { CurrentTerm = a.CurrentTerm, Success = true });
+        Assert.That(a.IsLeader, Is.True);
     }
 }

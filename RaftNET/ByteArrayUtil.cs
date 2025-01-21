@@ -27,6 +27,16 @@ public static class ByteArrayUtil {
         return Concat(a, buf);
     }
 
+    public static ulong GetIdx(byte[] b, byte[] prefix, bool bigEndian = true) {
+        var s = new Memory<byte>(b, prefix.Length, sizeof(ulong)).Span;
+
+        if (bigEndian) {
+            return BinaryPrimitives.ReadUInt64BigEndian(s);
+        }
+
+        return BinaryPrimitives.ReadUInt64LittleEndian(s);
+    }
+
     public static bool StartsWith(this byte[] b, byte[] prefix) {
         if (prefix.Length > b.Length) {
             return false;
@@ -38,15 +48,5 @@ public static class ByteArrayUtil {
             }
 
         return true;
-    }
-
-    public static ulong GetIdx(byte[] b, byte[] prefix, bool bigEndian = true) {
-        var s = new Memory<byte>(b, prefix.Length, sizeof(ulong)).Span;
-
-        if (bigEndian) {
-            return BinaryPrimitives.ReadUInt64BigEndian(s);
-        }
-
-        return BinaryPrimitives.ReadUInt64LittleEndian(s);
     }
 }

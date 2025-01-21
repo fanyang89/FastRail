@@ -15,13 +15,6 @@ public class HasherInt {
         }
     }
 
-    public void Update(ulong val) {
-        if (_hasherInt != null) {
-            _hasherInt += val;
-        }
-        _hasher?.Append(BitConverter.GetBytes(val));
-    }
-
     public ulong FinalizeUInt64() {
         if (_hasherInt != null) {
             return _hasherInt.Value;
@@ -39,5 +32,12 @@ public class HasherInt {
             h.Update(i);
         }
         return h;
+    }
+
+    public void Update(ulong val) {
+        if (_hasherInt != null) {
+            _hasherInt += val;
+        }
+        _hasher?.Append(BitConverter.GetBytes(val));
     }
 }

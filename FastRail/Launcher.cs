@@ -25,8 +25,9 @@ public class Launcher : IDisposable {
         Server.Raft = Raft;
     }
 
-    public Server.Server Server { get; }
     public RaftServer Raft { get; }
+
+    public Server.Server Server { get; }
 
     public void Dispose() {
         Server.Dispose();

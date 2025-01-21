@@ -10,13 +10,17 @@ namespace RaftNET.Examples;
 
 class RunCommand : Command<RunCommand.Settings> {
     public class Settings : CommandSettings {
-        [CommandArgument(0, "<ID>")] public required ulong MyId { get; init; }
+        [CommandOption("-d|--data-dir")] public string? DataDir { get; set; }
         [CommandArgument(1, "<LISTEN>")] public required string Listen { get; init; }
         [CommandArgument(2, "<MEMBERS>")] public required string[] Members { get; init; }
-        [CommandOption("-d|--data-dir")] public string? DataDir { get; set; }
-        [CommandOption("-t|--runtime")] public TimeSpan Runtime { get; init; } = TimeSpan.FromSeconds(10);
+        [CommandArgument(0, "<ID>")] public required ulong MyId { get; init; }
         [CommandOption("--ping-interval")] public TimeSpan PingInterval { get; init; } = TimeSpan.FromMilliseconds(500);
         [CommandOption("--ping-timeout")] public TimeSpan PingTimeout { get; init; } = TimeSpan.FromMilliseconds(1000);
+        [CommandOption("-t|--runtime")] public TimeSpan Runtime { get; init; } = TimeSpan.FromSeconds(10);
+    }
+
+    public override int Execute(CommandContext context, Settings settings) {
+        return ExecuteAsync(context, settings).Result;
     }
 
     public override ValidationResult Validate(CommandContext context, Settings settings) {
@@ -53,9 +57,5 @@ class RunCommand : Command<RunCommand.Settings> {
         Log.Information("Runtime timeout, exiting...");
         server.Stop();
         return 0;
-    }
-
-    public override int Execute(CommandContext context, Settings settings) {
-        return ExecuteAsync(context, settings).Result;
     }
 }

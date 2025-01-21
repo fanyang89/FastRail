@@ -5,23 +5,6 @@ namespace RaftNET.Services;
 public class ConnectionManager(ulong myId, AddressBook addressBook) : IRaftRpcClient {
     private readonly Dictionary<ulong, RaftGrpcClient> _channels = new();
 
-    public async Task PingAsync(ulong to, DateTime deadline, CancellationToken cancellationToken) {
-        var conn = EnsureConnection(to);
-        await conn.PingAsync(deadline, cancellationToken);
-    }
-
-    public async Task VoteRequestAsync(ulong to, VoteRequest request) {
-        var conn = EnsureConnection(to);
-        Log.Debug("Send({from}->{to}) VoteRequest={request}", myId, to, request);
-        await conn.VoteAsync(request);
-    }
-
-    public async Task VoteResponseAsync(ulong to, VoteResponse response) {
-        var conn = EnsureConnection(to);
-        Log.Debug("Send({from}->{to}) VoteResponse={response}", myId, to, response);
-        await conn.RespondVoteAsync(response);
-    }
-
     public async Task AppendRequestAsync(ulong to, AppendRequest request) {
         var conn = EnsureConnection(to);
         Log.Debug("Send({from}->{to}) AppendRequest={request}", myId, to, request);
@@ -32,6 +15,23 @@ public class ConnectionManager(ulong myId, AddressBook addressBook) : IRaftRpcCl
         var conn = EnsureConnection(to);
         Log.Debug("Send({from}->{to}) AppendResponse={response}", myId, to, response);
         await conn.RespondAppendAsync(response);
+    }
+
+    public async Task PingAsync(ulong to, DateTime deadline, CancellationToken cancellationToken) {
+        var conn = EnsureConnection(to);
+        await conn.PingAsync(deadline, cancellationToken);
+    }
+
+    public async Task ReadQuorumRequestAsync(ulong to, ReadQuorumRequest request) {
+        var conn = EnsureConnection(to);
+        Log.Debug("Send({from}->{to}) ReadQuorumRequest={request}", myId, to, request);
+        await conn.ReadQuorumAsync(request);
+    }
+
+    public async Task ReadQuorumResponseAsync(ulong to, ReadQuorumResponse response) {
+        var conn = EnsureConnection(to);
+        Log.Debug("Send({from}->{to}) ReadQuorumResponse={response}", myId, to, response);
+        await conn.RespondReadQuorumAsync(response);
     }
 
     public async Task<SnapshotResponse> SendSnapshotAsync(ulong to, InstallSnapshotRequest request) {
@@ -48,16 +48,16 @@ public class ConnectionManager(ulong myId, AddressBook addressBook) : IRaftRpcCl
         await conn.TimeoutNowAsync(request);
     }
 
-    public async Task ReadQuorumRequestAsync(ulong to, ReadQuorumRequest request) {
+    public async Task VoteRequestAsync(ulong to, VoteRequest request) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({from}->{to}) ReadQuorumRequest={request}", myId, to, request);
-        await conn.ReadQuorumAsync(request);
+        Log.Debug("Send({from}->{to}) VoteRequest={request}", myId, to, request);
+        await conn.VoteAsync(request);
     }
 
-    public async Task ReadQuorumResponseAsync(ulong to, ReadQuorumResponse response) {
+    public async Task VoteResponseAsync(ulong to, VoteResponse response) {
         var conn = EnsureConnection(to);
-        Log.Debug("Send({from}->{to}) ReadQuorumResponse={response}", myId, to, response);
-        await conn.RespondReadQuorumAsync(response);
+        Log.Debug("Send({from}->{to}) VoteResponse={response}", myId, to, response);
+        await conn.RespondVoteAsync(response);
     }
 
     private RaftGrpcClient EnsureConnection(ulong id) {

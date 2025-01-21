@@ -6,9 +6,9 @@ namespace RaftNET.Persistence;
 public class RocksPersistence : IPersistence, IDisposable {
     private readonly RocksDb _db;
     private readonly byte[] _keyCommitIdx = "/a/commit-idx"u8.ToArray();
+    private readonly byte[] _keyLogEntryPrefix = "/logs/"u8.ToArray();
     private readonly byte[] _keySnapshot = "/a/snapshot"u8.ToArray();
     private readonly byte[] _keyTermVote = "/a/term-vote"u8.ToArray();
-    private readonly byte[] _keyLogEntryPrefix = "/logs/"u8.ToArray();
     private readonly WriteOptions _syncWriteOption = new WriteOptions().SetSync(true);
 
     public RocksPersistence(string path) {
@@ -25,13 +25,43 @@ public class RocksPersistence : IPersistence, IDisposable {
         }
     }
 
-    public void StoreTermVote(ulong term, ulong vote) {
-        lock (_keyTermVote) {
-            var tv = new TermVote { Term = term, VotedFor = vote };
-            var buf = tv.ToByteArray();
-            var options = new WriteOptions();
-            options.SetSync(true);
-            _db.Put(_keyTermVote, buf, writeOptions: _syncWriteOption);
+    public ulong LoadCommitIdx() {
+        lock (_keyCommitIdx) {
+            var buf = _db.Get(_keyCommitIdx);
+
+            if (buf == null) {
+                return 0;
+            }
+
+            return BitConverter.ToUInt64(buf);
+        }
+    }
+
+    public List<LogEntry> LoadLog() {
+        var entries = new List<LogEntry>();
+
+        lock (_keyLogEntryPrefix) {
+            using var iter = _db.NewIterator();
+
+            for (iter.Seek(_keyLogEntryPrefix); iter.Valid(); iter.Next()) {
+                var entry = LogEntry.Parser.ParseFrom(iter.Value());
+                entries.Add(entry);
+            }
+        }
+
+        return entries;
+    }
+
+    public SnapshotDescriptor? LoadSnapshotDescriptor() {
+        lock (_keySnapshot) {
+            var buf = _db.Get(_keySnapshot);
+
+            if (buf == null) {
+                return null;
+            }
+
+            var snapshot = SnapshotDescriptor.Parser.ParseFrom(buf);
+            return snapshot;
         }
     }
 
@@ -54,15 +84,16 @@ public class RocksPersistence : IPersistence, IDisposable {
         }
     }
 
-    public ulong LoadCommitIdx() {
-        lock (_keyCommitIdx) {
-            var buf = _db.Get(_keyCommitIdx);
+    public void StoreLogEntries(IEnumerable<LogEntry> entries) {
+        lock (_keyLogEntryPrefix) {
+            var batch = new WriteBatch();
 
-            if (buf == null) {
-                return 0;
+            foreach (var entry in entries) {
+                var key = ByteArrayUtil.Concat(_keyLogEntryPrefix, entry.Idx);
+                batch.Put(key, entry.ToByteArray());
             }
 
-            return BitConverter.ToUInt64(buf);
+            _db.Write(batch, _syncWriteOption);
         }
     }
 
@@ -103,45 +134,14 @@ public class RocksPersistence : IPersistence, IDisposable {
         }
     }
 
-    public SnapshotDescriptor? LoadSnapshotDescriptor() {
-        lock (_keySnapshot) {
-            var buf = _db.Get(_keySnapshot);
-
-            if (buf == null) {
-                return null;
-            }
-
-            var snapshot = SnapshotDescriptor.Parser.ParseFrom(buf);
-            return snapshot;
+    public void StoreTermVote(ulong term, ulong vote) {
+        lock (_keyTermVote) {
+            var tv = new TermVote { Term = term, VotedFor = vote };
+            var buf = tv.ToByteArray();
+            var options = new WriteOptions();
+            options.SetSync(true);
+            _db.Put(_keyTermVote, buf, writeOptions: _syncWriteOption);
         }
-    }
-
-    public void StoreLogEntries(IEnumerable<LogEntry> entries) {
-        lock (_keyLogEntryPrefix) {
-            var batch = new WriteBatch();
-
-            foreach (var entry in entries) {
-                var key = ByteArrayUtil.Concat(_keyLogEntryPrefix, entry.Idx);
-                batch.Put(key, entry.ToByteArray());
-            }
-
-            _db.Write(batch, _syncWriteOption);
-        }
-    }
-
-    public List<LogEntry> LoadLog() {
-        var entries = new List<LogEntry>();
-
-        lock (_keyLogEntryPrefix) {
-            using var iter = _db.NewIterator();
-
-            for (iter.Seek(_keyLogEntryPrefix); iter.Valid(); iter.Next()) {
-                var entry = LogEntry.Parser.ParseFrom(iter.Value());
-                entries.Add(entry);
-            }
-        }
-
-        return entries;
     }
 
     public void TruncateLog(ulong idx) {

@@ -1,8 +1,8 @@
 ﻿namespace FastRail.Jutes.Proto;
 
 internal class AddWatchRequest : IJuteDeserializable, IJuteSerializable {
-    public string? Path;
     public int Mode;
+    public string? Path;
 
     public void DeserializeFrom(Stream s) {
         Path = JuteDeserializer.DeserializeString(s);

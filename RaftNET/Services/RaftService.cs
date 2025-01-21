@@ -12,22 +12,22 @@ using Serilog;
 namespace RaftNET.Services;
 
 public class RaftService : IRaftRpcHandler {
-    private readonly FSM _fsm;
-    private readonly Notifier _fsmEventNotify;
-    private readonly IStateMachine _stateMachine;
-    private readonly IPersistence _persistence;
     private readonly BlockingCollection<ApplyMessage> _applyMessages = new();
-    private readonly IRaftRpcClient _connectionManager;
-    private readonly ulong _myId;
-    private readonly RaftServiceOptions _options;
     private readonly OrderedDictionary<TermIdx, Notifier> _applyNotifiers = new();
     private readonly OrderedDictionary<TermIdx, Notifier> _commitNotifiers = new();
-    private ulong _appliedIdx;
-    private ulong _snapshotDescIdx;
+    private readonly IRaftRpcClient _connectionManager;
+    private readonly FSM _fsm;
+    private readonly Notifier _fsmEventNotify;
+    private readonly ulong _myId;
+    private readonly RaftServiceOptions _options;
+    private readonly IPersistence _persistence;
     private readonly Dictionary<ulong, TaskCompletionSource<SnapshotResponse>> _snapshotResponsePromises = new();
-    private Timer? _ticker;
+    private readonly IStateMachine _stateMachine;
+    private ulong _appliedIdx;
     private Task? _applyTask;
     private Task? _ioTask;
+    private ulong _snapshotDescIdx;
+    private Timer? _ticker;
 
     public RaftService(ulong myId, IRaftRpcClient rpc, IStateMachine sm, IPersistence persistence,
         IFailureDetector fd, AddressBook addressBook, RaftServiceOptions options) {
@@ -74,6 +74,134 @@ public class RaftService : IRaftRpcHandler {
         }
     }
 
+    public Task HandleAppendRequestAsync(ulong from, AppendRequest message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAppendResponseAsync(ulong from, AppendResponse message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public async Task<SnapshotResponse> HandleInstallSnapshotRequestAsync(ulong from, InstallSnapshotRequest message) {
+        // tell the state machine to transfer snapshot
+        _stateMachine.TransferSnapshot(from, message.Snp);
+
+        var response = new SnapshotResponse { Success = false };
+
+        // step the fsm
+        TaskCompletionSource<SnapshotResponse>? promise = null;
+        lock (_fsm)
+        lock (_snapshotResponsePromises) {
+            if (!_snapshotResponsePromises.ContainsKey(from)) {
+                _fsm.Step(from, message);
+                promise = new TaskCompletionSource<SnapshotResponse>();
+                _snapshotResponsePromises.Add(from, promise);
+            } else {
+                response.CurrentTerm = _fsm.CurrentTerm;
+            }
+        }
+
+        // return the response
+        if (promise == null) {
+            return response;
+        }
+
+        // retrieve the response
+        return await promise.Task;
+    }
+
+    public Task<PingResponse> HandlePingRequestAsync(ulong from, PingRequest message) {
+        return Task.FromResult(new PingResponse());
+    }
+
+    public Task HandleReadQuorumRequestAsync(ulong from, ReadQuorumRequest message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleReadQuorumResponseAsync(ulong from, ReadQuorumResponse message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleTimeoutNowAsync(ulong from, TimeoutNowRequest message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleVoteRequestAsync(ulong from, VoteRequest message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task HandleVoteResponseAsync(ulong from, VoteResponse message) {
+        lock (_fsm) {
+            _fsm.Step(from, message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public T AcquireFSMLock<T>(Func<FSM, T> fn) {
+        lock (_fsm) {
+            return fn(_fsm);
+        }
+    }
+
+    public void AddEntry(ulong command, WaitType waitType) {
+        var buffer = BitConverter.GetBytes(command);
+        AddEntry(buffer, waitType);
+    }
+
+    public void AddEntry(byte[] buffer) {
+        AddEntry(buffer, WaitType.Committed);
+    }
+
+    public void AddEntry(Configuration configuration) {
+        AddEntry(configuration, WaitType.Committed);
+    }
+
+    public void AddEntryApplied(byte[] buffer) {
+        AddEntry(buffer, WaitType.Applied);
+    }
+
+    public void ElapseElection() {
+        lock (_fsm) {
+            while (_fsm.ElectionElapsed < FSM.ElectionTimeout) {
+                _fsm.Tick();
+            }
+        }
+    }
+
+    public bool IsLeader() {
+        lock (_fsm) {
+            return _fsm.IsLeader;
+        }
+    }
+
+    public (ulong, ulong) LogLastIdxTerm() {
+        lock (_fsm) {
+            return (_fsm.LogLastIdx, _fsm.LogLastTerm);
+        }
+    }
+
+    public async Task ReadBarrier(object o) {
+        throw new NotImplementedException();
+    }
+
     public Task StartAsync(CancellationToken token) {
         _ticker = new Timer(Tick, null, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100));
         _applyTask = Task.Run(DoApply(token), token);
@@ -100,15 +228,30 @@ public class RaftService : IRaftRpcHandler {
         Log.Information("[{my_id}] RaftService stopped", _myId);
     }
 
-    public T AcquireFSMLock<T>(Func<FSM, T> fn) {
+    public void Tick(object? state = null) {
         lock (_fsm) {
-            return fn(_fsm);
+            _fsm.Tick();
         }
     }
 
-    public void AddEntry(ulong command, WaitType waitType) {
-        var buffer = BitConverter.GetBytes(command);
-        AddEntry(buffer, waitType);
+    public async Task WaitElectionDone() {
+        lock (_fsm) {
+            while (_fsm.IsCandidate) {
+                throw new NotImplementedException();
+            }
+        }
+    }
+
+    public async Task WaitLogIdxTerm((ulong, ulong) leaderLogIdxTerm) {
+        throw new NotImplementedException();
+    }
+
+    public void WaitUntilCandidate() {
+        lock (_fsm) {
+            while (_fsm.IsFollower) {
+                _fsm.Tick();
+            }
+        }
     }
 
     private void AddEntry(OneOf<byte[], Configuration> command, WaitType waitType) {
@@ -130,18 +273,6 @@ public class RaftService : IRaftRpcHandler {
         }
 
         WaitForEntry(entry, waitType);
-    }
-
-    public void AddEntry(byte[] buffer) {
-        AddEntry(buffer, WaitType.Committed);
-    }
-
-    public void AddEntryApplied(byte[] buffer) {
-        AddEntry(buffer, WaitType.Applied);
-    }
-
-    public void AddEntry(Configuration configuration) {
-        AddEntry(configuration, WaitType.Committed);
     }
 
     private Action DoApply(CancellationToken cancellationToken) {
@@ -343,12 +474,6 @@ public class RaftService : IRaftRpcHandler {
         }
     }
 
-    public void Tick(object? state = null) {
-        lock (_fsm) {
-            _fsm.Tick();
-        }
-    }
-
     private void WaitForEntry(LogEntry entry, WaitType waitType) {
         var termIndex = new TermIdx(entry.Idx, entry.Term);
         var ok = false;
@@ -371,130 +496,5 @@ public class RaftService : IRaftRpcHandler {
 
         Debug.Assert(ok);
         notifier.Wait();
-    }
-
-    public void WaitUntilCandidate() {
-        lock (_fsm) {
-            while (_fsm.IsFollower) {
-                _fsm.Tick();
-            }
-        }
-    }
-
-    public async Task WaitElectionDone() {
-        lock (_fsm) {
-            while (_fsm.IsCandidate) {
-                throw new NotImplementedException();
-            }
-        }
-    }
-
-    public (ulong, ulong) LogLastIdxTerm() {
-        lock (_fsm) {
-            return (_fsm.LogLastIdx, _fsm.LogLastTerm);
-        }
-    }
-
-    public async Task WaitLogIdxTerm((ulong, ulong) leaderLogIdxTerm) {
-        throw new NotImplementedException();
-    }
-
-    public bool IsLeader() {
-        lock (_fsm) {
-            return _fsm.IsLeader;
-        }
-    }
-
-    public void ElapseElection() {
-        lock (_fsm) {
-            while (_fsm.ElectionElapsed < FSM.ElectionTimeout) {
-                _fsm.Tick();
-            }
-        }
-    }
-
-    public Task HandleVoteRequestAsync(ulong from, VoteRequest message) {
-        lock (_fsm) {
-            _fsm.Step(from, message);
-        }
-        return Task.CompletedTask;
-    }
-
-    public Task HandleVoteResponseAsync(ulong from, VoteResponse message) {
-        lock (_fsm) {
-            _fsm.Step(from, message);
-        }
-        return Task.CompletedTask;
-    }
-
-    public Task HandleAppendRequestAsync(ulong from, AppendRequest message) {
-        lock (_fsm) {
-            _fsm.Step(from, message);
-        }
-        return Task.CompletedTask;
-    }
-
-    public Task HandleAppendResponseAsync(ulong from, AppendResponse message) {
-        lock (_fsm) {
-            _fsm.Step(from, message);
-        }
-        return Task.CompletedTask;
-    }
-
-    public Task HandleReadQuorumRequestAsync(ulong from, ReadQuorumRequest message) {
-        lock (_fsm) {
-            _fsm.Step(from, message);
-        }
-        return Task.CompletedTask;
-    }
-
-    public Task HandleReadQuorumResponseAsync(ulong from, ReadQuorumResponse message) {
-        lock (_fsm) {
-            _fsm.Step(from, message);
-        }
-        return Task.CompletedTask;
-    }
-
-    public Task HandleTimeoutNowAsync(ulong from, TimeoutNowRequest message) {
-        lock (_fsm) {
-            _fsm.Step(from, message);
-        }
-        return Task.CompletedTask;
-    }
-
-    public Task<PingResponse> HandlePingRequestAsync(ulong from, PingRequest message) {
-        return Task.FromResult(new PingResponse());
-    }
-
-    public async Task<SnapshotResponse> HandleInstallSnapshotRequestAsync(ulong from, InstallSnapshotRequest message) {
-        // tell the state machine to transfer snapshot
-        _stateMachine.TransferSnapshot(from, message.Snp);
-
-        var response = new SnapshotResponse { Success = false };
-
-        // step the fsm
-        TaskCompletionSource<SnapshotResponse>? promise = null;
-        lock (_fsm)
-        lock (_snapshotResponsePromises) {
-            if (!_snapshotResponsePromises.ContainsKey(from)) {
-                _fsm.Step(from, message);
-                promise = new TaskCompletionSource<SnapshotResponse>();
-                _snapshotResponsePromises.Add(from, promise);
-            } else {
-                response.CurrentTerm = _fsm.CurrentTerm;
-            }
-        }
-
-        // return the response
-        if (promise == null) {
-            return response;
-        }
-
-        // retrieve the response
-        return await promise.Task;
-    }
-
-    public async Task ReadBarrier(object o) {
-        throw new NotImplementedException();
     }
 }

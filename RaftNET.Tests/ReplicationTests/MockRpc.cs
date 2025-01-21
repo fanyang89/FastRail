@@ -4,19 +4,18 @@ using RaftNET.Tests.Exceptions;
 namespace RaftNET.Tests.ReplicationTests;
 
 public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
-    private readonly ulong _id;
-    private readonly Connected _connected;
-    private readonly Snapshots _snapshots;
-    private readonly RpcNet _net;
-    private readonly RpcConfig _rpcConfig;
-    public ServerAddressSet KnownPeers { get; } = new();
+    public bool Delays;
     public uint ServersAdded = 0;
     public uint ServersRemoved = 0;
-    private ulong _sameNodePrefix;
-    public bool Delays;
-    private ulong? _delaySnapshotId;
-    private readonly SemaphoreSlim _delaySnapshot = new(1, 1);
+    private readonly Connected _connected;
     private readonly bool _delays;
+    private readonly SemaphoreSlim _delaySnapshot = new(1, 1);
+    private readonly ulong _id;
+    private readonly RpcNet _net;
+    private readonly RpcConfig _rpcConfig;
+    private readonly Snapshots _snapshots;
+    private ulong? _delaySnapshotId;
+    private ulong _sameNodePrefix;
 
     public MockRpc(ulong id, Connected connected, Snapshots snapshots, RpcNet net, RpcConfig rpcConfig) {
         _id = id;
@@ -29,30 +28,34 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         _sameNodePrefix = (1 << sizeof(uint)) - 1;
     }
 
-    public bool DropPackets() {
-        return _rpcConfig.Drops && Random.Shared.Next() % 5 == 0;
+    public ServerAddressSet KnownPeers { get; } = new();
+
+    public void DelaySendSnapshot(ulong snapshotId) {
+        _delaySnapshotId = snapshotId;
     }
 
-    public bool IsLocalNode(ulong id) {
-        return (id & _sameNodePrefix) == (_id & _sameNodePrefix);
+    public bool DropPackets() {
+        return _rpcConfig.Drops && Random.Shared.Next() % 5 == 0;
     }
 
     public TimeSpan GetDelay(ulong id) {
         return IsLocalNode(id) ? _rpcConfig.LocalDelay : _rpcConfig.NetworkDelay;
     }
 
-    public TimeSpan RandExtraDelay() {
-        return TimeSpan.FromMilliseconds(Random.Shared.NextInt64(0, _rpcConfig.ExtraDelayMax.Milliseconds));
+    public bool IsLocalNode(ulong id) {
+        return (id & _sameNodePrefix) == (_id & _sameNodePrefix);
     }
 
-    public void DelaySendSnapshot(ulong snapshotId) {
-        _delaySnapshotId = snapshotId;
+    public TimeSpan RandExtraDelay() {
+        return TimeSpan.FromMilliseconds(Random.Shared.NextInt64(0, _rpcConfig.ExtraDelayMax.Milliseconds));
     }
 
     public void ResumeSendSnapshot() {
         _delaySnapshotId = null;
         _delaySnapshot.Release();
     }
+
+    #region IRaftRpcClient Members
 
     public Task PingAsync(ulong to, DateTime deadline, CancellationToken cancellationToken) {
         throw new NotImplementedException();
@@ -203,6 +206,10 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
         await toRpc.HandleReadQuorumResponseAsync(_id, response);
     }
 
+    #endregion
+
+    #region IRaftRpcHandler Members
+
     public Task HandleVoteRequestAsync(ulong from, VoteRequest message) {
         throw new NotImplementedException();
     }
@@ -238,4 +245,6 @@ public sealed class MockRpc : IRaftRpcHandler, IRaftRpcClient {
     public Task<PingResponse> HandlePingRequestAsync(ulong from, PingRequest message) {
         throw new NotImplementedException();
     }
+
+    #endregion
 }

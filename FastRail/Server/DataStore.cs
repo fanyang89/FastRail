@@ -11,9 +11,9 @@ using SystemException = FastRail.Exceptions.SystemException;
 namespace FastRail.Server;
 
 public class DataStore : IDisposable {
-    private static readonly byte[] KeyStatPrefix = "/stat"u8.ToArray();
     private static readonly byte[] KeyDataPrefix = "/data"u8.ToArray();
     private static readonly byte[] KeySessionPrefix = "/sess/"u8.ToArray();
+    private static readonly byte[] KeyStatPrefix = "/stat"u8.ToArray();
     private static readonly byte[] KeyZxid = "/zxid"u8.ToArray();
     private readonly RocksDb _db;
     private readonly Lock _sessionLock = new();
@@ -24,16 +24,6 @@ public class DataStore : IDisposable {
     public DataStore(string dataDir) {
         var options = new DbOptions().SetCreateIfMissing();
         _db = RocksDb.Open(options, dataDir);
-    }
-
-    public long NextZxid {
-        get {
-            lock (KeyZxid) {
-                var zxid = LastZxid + 1;
-                LastZxid = zxid;
-                return zxid;
-            }
-        }
     }
 
     public long LastZxid {
@@ -54,27 +44,49 @@ public class DataStore : IDisposable {
         }
     }
 
+    public long NextZxid {
+        get {
+            lock (KeyZxid) {
+                var zxid = LastZxid + 1;
+                LastZxid = zxid;
+                return zxid;
+            }
+        }
+    }
+
     public void Dispose() {
         _db.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    public void Start() {
-        CreateRootNode();
-
-        // loading sessions
+    public int CountAllChildren() {
+        var acc = 0;
         using var it = _db.NewIterator();
-        for (it.SeekToFirst(); it.Valid(); it.Next()) {
-            if (it.Key().StartsWith(KeySessionPrefix)) {
-                var session = SessionEntry.Parser.ParseFrom(it.Value());
-                lock (_sessions) {
-                    _sessions[session.Id] = new InMemorySession(session, []);
-                }
+        for (it.Seek(KeyDataPrefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(KeyDataPrefix)) {
+                break;
             }
+            acc++;
         }
+        return acc;
     }
 
-    public void Stop() {}
+    public int CountAllChildren(string requestPath) {
+        var acc = 0;
+        var prefix = ByteArrayUtil.Concat(KeyDataPrefix, requestPath);
+        using var it = _db.NewIterator();
+        for (it.Seek(prefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(prefix)) {
+                break;
+            }
+            var path = new ArraySegment<byte>(it.Key(), KeyDataPrefix.Length,
+                it.Key().Length - KeyDataPrefix.Length);
+            if (requestPath != null && path.StartsWith(requestPath) && path.Count > requestPath.Length) {
+                acc++;
+            }
+        }
+        return acc;
+    }
 
     public void CreateNode(long zxid, CreateNodeTransaction txn) {
         var statBuffer = _db.Get(MakeStatKey(txn.Path));
@@ -128,12 +140,102 @@ public class DataStore : IDisposable {
         _watcherManager.Trigger(txn.Path, WatcherEventType.EventNodeCreated);
     }
 
+    public void CreateSession(long zxid, CreateSessionTransaction txn) {
+        var sessionId = txn.Session.Id;
+        lock (_sessions) {
+            _sessions.Add(sessionId, new InMemorySession(txn.Session, []));
+            _db.Put(MakeSessionKey(sessionId), txn.Session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
+        }
+    }
+
+    public long CreateSession(TimeSpan sessionTimeout) {
+        var sessionId = _nextSessionId++;
+        var key = MakeSessionKey(sessionId);
+        var session = new SessionEntry {
+            Id = sessionId, Timeout = sessionTimeout.Milliseconds, LastLive = Time.CurrentTimeMillis()
+        };
+        lock (_sessions) {
+            _sessions.Add(sessionId, new InMemorySession(session, []));
+            _db.Put(key, session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
+        }
+        return sessionId;
+    }
+
+    public List<string> GetChildren(string path, out StatEntry stat) {
+        var prefix = MakeStatKey(path);
+        var buffer = _db.Get(prefix);
+        if (buffer == null) {
+            throw new RailException(ErrorCodes.NoNode);
+        }
+        stat = StatEntry.Parser.ParseFrom(buffer);
+
+        var depth = PathDepth(path);
+        var children = new List<string>();
+        using var it = _db.NewIterator();
+        for (it.Seek(prefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(prefix)) {
+                break;
+            }
+            var nodeDepth = PathDepth(it.Key());
+            if (nodeDepth == depth + 1) {
+                children.Add(Encoding.UTF8.GetString(it.Value()));
+            } else if (nodeDepth > depth + 1) {
+                break;
+            }
+        }
+        return children;
+    }
+
+    public byte[]? GetNodeData(string path) {
+        var key = MakeDataKey(path);
+        return _db.Get(key);
+    }
+
+    public StatEntry? GetNodeStat(string path) {
+        var key = MakeStatKey(path);
+        var value = _db.Get(key);
+        return value == null ? null : StatEntry.Parser.ParseFrom(value);
+    }
+
     public static string GetParentPath(string childPath) {
         var p = childPath.LastIndexOf('/');
         if (p < 0 || childPath == "/") {
             throw new ArgumentException("invalid child path", nameof(childPath));
         }
         return p == 0 ? "/" : childPath[..p];
+    }
+
+    public string LastPathByPrefix(string requestPathPrefix) {
+        var prefix = ByteArrayUtil.Concat(KeyDataPrefix, requestPathPrefix);
+        using var it = _db.NewIterator();
+        byte[]? lastKey = null;
+        for (it.Seek(prefix); it.Valid(); it.Next()) {
+            if (!prefix.StartsWith(prefix)) {
+                break;
+            }
+            lastKey = it.Key();
+        }
+        return lastKey == null ? "" : Encoding.UTF8.GetString(lastKey);
+    }
+
+    public List<string> ListEphemeral(string? pathPrefix) {
+        var results = new List<string>();
+        using var it = _db.NewIterator();
+        for (it.Seek(KeyStatPrefix); it.Valid(); it.Next()) {
+            if (!it.Key().StartsWith(KeyStatPrefix)) {
+                break;
+            }
+            var path = new ArraySegment<byte>(it.Key(), KeyStatPrefix.Length,
+                it.Key().Length - KeyStatPrefix.Length);
+            if (pathPrefix != null && !path.StartsWith(pathPrefix)) {
+                continue;
+            }
+            var node = StatEntry.Parser.ParseFrom(it.Value());
+            if (node.EphemeralOwner != 0) {
+                results.Add(Encoding.UTF8.GetString(it.Key()));
+            }
+        }
+        return results;
     }
 
     public void RemoveNode(long zxid, DeleteNodeTransaction txn) {
@@ -169,38 +271,6 @@ public class DataStore : IDisposable {
         _watcherManager.Trigger(txn.Path, WatcherEventType.EventNodeDeleted);
     }
 
-    public byte[]? GetNodeData(string path) {
-        var key = MakeDataKey(path);
-        return _db.Get(key);
-    }
-
-    public StatEntry? GetNodeStat(string path) {
-        var key = MakeStatKey(path);
-        var value = _db.Get(key);
-        return value == null ? null : StatEntry.Parser.ParseFrom(value);
-    }
-
-    public void CreateSession(long zxid, CreateSessionTransaction txn) {
-        var sessionId = txn.Session.Id;
-        lock (_sessions) {
-            _sessions.Add(sessionId, new InMemorySession(txn.Session, []));
-            _db.Put(MakeSessionKey(sessionId), txn.Session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
-        }
-    }
-
-    public long CreateSession(TimeSpan sessionTimeout) {
-        var sessionId = _nextSessionId++;
-        var key = MakeSessionKey(sessionId);
-        var session = new SessionEntry {
-            Id = sessionId, Timeout = sessionTimeout.Milliseconds, LastLive = Time.CurrentTimeMillis()
-        };
-        lock (_sessions) {
-            _sessions.Add(sessionId, new InMemorySession(session, []));
-            _db.Put(key, session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
-        }
-        return sessionId;
-    }
-
     public void RemoveSession(long sessionId) {
         var sessionKey = MakeSessionKey(sessionId);
         lock (_sessions) {
@@ -217,6 +287,23 @@ public class DataStore : IDisposable {
         }
     }
 
+    public void Start() {
+        CreateRootNode();
+
+        // loading sessions
+        using var it = _db.NewIterator();
+        for (it.SeekToFirst(); it.Valid(); it.Next()) {
+            if (it.Key().StartsWith(KeySessionPrefix)) {
+                var session = SessionEntry.Parser.ParseFrom(it.Value());
+                lock (_sessions) {
+                    _sessions[session.Id] = new InMemorySession(session, []);
+                }
+            }
+        }
+    }
+
+    public void Stop() {}
+
     public void TouchSession(long sessionId) {
         var key = MakeSessionKey(sessionId);
         lock (_sessions) {
@@ -224,93 +311,6 @@ public class DataStore : IDisposable {
             session.Session.LastLive = Time.CurrentTimeMillis();
             _db.Put(key, session.Session.ToByteArray(), writeOptions: new WriteOptions().SetSync(true));
         }
-    }
-
-    public List<string> GetChildren(string path, out StatEntry stat) {
-        var prefix = MakeStatKey(path);
-        var buffer = _db.Get(prefix);
-        if (buffer == null) {
-            throw new RailException(ErrorCodes.NoNode);
-        }
-        stat = StatEntry.Parser.ParseFrom(buffer);
-
-        var depth = PathDepth(path);
-        var children = new List<string>();
-        using var it = _db.NewIterator();
-        for (it.Seek(prefix); it.Valid(); it.Next()) {
-            if (!it.Key().StartsWith(prefix)) {
-                break;
-            }
-            var nodeDepth = PathDepth(it.Key());
-            if (nodeDepth == depth + 1) {
-                children.Add(Encoding.UTF8.GetString(it.Value()));
-            } else if (nodeDepth > depth + 1) {
-                break;
-            }
-        }
-        return children;
-    }
-
-    public List<string> ListEphemeral(string? pathPrefix) {
-        var results = new List<string>();
-        using var it = _db.NewIterator();
-        for (it.Seek(KeyStatPrefix); it.Valid(); it.Next()) {
-            if (!it.Key().StartsWith(KeyStatPrefix)) {
-                break;
-            }
-            var path = new ArraySegment<byte>(it.Key(), KeyStatPrefix.Length,
-                it.Key().Length - KeyStatPrefix.Length);
-            if (pathPrefix != null && !path.StartsWith(pathPrefix)) {
-                continue;
-            }
-            var node = StatEntry.Parser.ParseFrom(it.Value());
-            if (node.EphemeralOwner != 0) {
-                results.Add(Encoding.UTF8.GetString(it.Key()));
-            }
-        }
-        return results;
-    }
-
-    public int CountAllChildren() {
-        var acc = 0;
-        using var it = _db.NewIterator();
-        for (it.Seek(KeyDataPrefix); it.Valid(); it.Next()) {
-            if (!it.Key().StartsWith(KeyDataPrefix)) {
-                break;
-            }
-            acc++;
-        }
-        return acc;
-    }
-
-    public int CountAllChildren(string requestPath) {
-        var acc = 0;
-        var prefix = ByteArrayUtil.Concat(KeyDataPrefix, requestPath);
-        using var it = _db.NewIterator();
-        for (it.Seek(prefix); it.Valid(); it.Next()) {
-            if (!it.Key().StartsWith(prefix)) {
-                break;
-            }
-            var path = new ArraySegment<byte>(it.Key(), KeyDataPrefix.Length,
-                it.Key().Length - KeyDataPrefix.Length);
-            if (requestPath != null && path.StartsWith(requestPath) && path.Count > requestPath.Length) {
-                acc++;
-            }
-        }
-        return acc;
-    }
-
-    public string LastPathByPrefix(string requestPathPrefix) {
-        var prefix = ByteArrayUtil.Concat(KeyDataPrefix, requestPathPrefix);
-        using var it = _db.NewIterator();
-        byte[]? lastKey = null;
-        for (it.Seek(prefix); it.Valid(); it.Next()) {
-            if (!prefix.StartsWith(prefix)) {
-                break;
-            }
-            lastKey = it.Key();
-        }
-        return lastKey == null ? "" : Encoding.UTF8.GetString(lastKey);
     }
 
     public void UpdateNode(long zxid, UpdateNodeTransaction txn) {

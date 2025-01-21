@@ -3,10 +3,10 @@
 namespace FastRail.Jutes.Proto;
 
 internal class CreateTtlRequest : IJuteDeserializable, IJuteSerializable {
-    public string? Path;
-    public byte[]? Data;
     public IList<ACL>? ACL;
+    public byte[]? Data;
     public int Flags;
+    public string? Path;
     public long Ttl;
 
     public void DeserializeFrom(Stream s) {

@@ -1,10 +1,10 @@
 ﻿namespace FastRail.Jutes.Proto;
 
 internal class ReconfigRequest : IJuteDeserializable, IJuteSerializable {
+    public long CurConfigId;
     public string? JoiningServers;
     public string? LeavingServers;
     public string? NewMembers;
-    public long CurConfigId;
 
     public void DeserializeFrom(Stream s) {
         JoiningServers = JuteDeserializer.DeserializeString(s);

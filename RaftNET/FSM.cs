@@ -14,22 +14,22 @@ namespace RaftNET;
 
 public partial class FSM {
     public const long ElectionTimeout = 10;
-    private readonly ulong _myID;
-    private readonly Config _config;
     private readonly LogicalClock _clock = new();
+    private readonly Config _config;
     private readonly IFailureDetector _failureDetector;
-    private readonly ThreadLocal<Random> _random = new(() => new Random());
+    private readonly ulong _myID;
     private readonly LastObservedState _observed = new();
+    private readonly ThreadLocal<Random> _random = new(() => new Random());
     private readonly Notifier _smEvents;
+    private bool _abortLeadershipTransfer;
+    private ulong _commitIdx;
+    private long _lastElectionTime;
+    private List<ToMessage> _messages = new();
+    private Output _output = new();
+    private bool _pingLeader;
+    private long _randomizedElectionTimeout = ElectionTimeout + 1;
     private State _state = new(new Follower(0));
     private ulong _votedFor;
-    private ulong _commitIdx;
-    private bool _abortLeadershipTransfer;
-    private bool _pingLeader;
-    private Output _output = new();
-    private long _lastElectionTime;
-    private long _randomizedElectionTimeout = ElectionTimeout + 1;
-    private List<ToMessage> _messages = new();
 
     public FSM(
         ulong id,
@@ -66,35 +66,124 @@ public partial class FSM {
         }
     }
 
-    public bool IsFollower => _state.IsT0;
-    public bool IsCandidate => _state.IsT1;
-    public bool IsLeader => _state.IsT2;
-    public string CurrentState => IsLeader ? "Leader" : IsFollower ? "Follower" : "Candidate";
-    public bool IsPreVoteCandidate => IsCandidate && _state.AsT1.IsPreVote;
+    private Candidate CandidateState => _state.AsT1;
     public ulong CurrentLeader => IsLeader ? _myID : IsFollower ? _state.AsT0.CurrentLeader : 0;
+    public string CurrentState => IsLeader ? "Leader" : IsFollower ? "Follower" : "Candidate";
     public ulong CurrentTerm { get; private set; }
 
     public long ElectionElapsed => _clock.Now() - _lastElectionTime;
 
     private Follower FollowerState => _state.AsT0;
-    private Candidate CandidateState => _state.AsT1;
+
+    public ulong Id => _myID;
+    public int InMemoryLogSize => RaftLog.InMemorySize();
+    public bool IsCandidate => _state.IsT1;
+
+    public bool IsFollower => _state.IsT0;
+    public bool IsLeader => _state.IsT2;
+    public bool IsPreVoteCandidate => IsCandidate && _state.AsT1.IsPreVote;
     protected Leader LeaderState => _state.AsT2;
-    public Role Role => IsFollower ? Role.Follower : IsLeader ? Role.Leader : Role.Candidate;
+    public ulong LogLastIdx => RaftLog.LastIdx();
+    public ulong LogLastTerm => RaftLog.LastTerm();
+    public int LogMemoryUsage => RaftLog.MemoryUsage();
 
     public RaftLog RaftLog { get; }
+    public Role Role => IsFollower ? Role.Follower : IsLeader ? Role.Leader : Role.Candidate;
 
-    public bool HasOutput() {
-        Log.Debug("[{my_id}] FSM.HasOutput() stable_idx={stable_idx} last_idx={last_idx}", _myID, RaftLog.StableIdx(),
-            RaftLog.LastIdx());
-        var diff = RaftLog.LastIdx() - RaftLog.StableIdx();
-        return diff > 0 ||
-               _messages.Count != 0 ||
-               !_observed.Equals(this) ||
-               _output.MaxReadIdWithQuorum.HasValue ||
-               IsLeader && LeaderState.LastReadIdChanged ||
-               _output.Snapshot != null ||
-               _output.SnapshotsToDrop.Any() ||
-               _output.StateChanged;
+    public LogEntry AddEntry(string command) {
+        return AddEntry(Encoding.UTF8.GetBytes(command));
+    }
+
+    public LogEntry AddEntry(OneOf<Void, byte[], Configuration> command) {
+        // It's only possible to add entries on a leader.
+        CheckIsLeader();
+        if (LeaderState.StepDown != null) {
+            // A leader stepping down should not add new entries
+            // to its log (see 3.10), but it still does not know who the new
+            // leader will be.
+            throw new NotLeaderException();
+        }
+
+        var isConfig = command.IsT2;
+        if (isConfig) {
+            // Do not permit changes which would render the cluster
+            // unusable, such as transitioning to an empty configuration or
+            // one with no voters.
+            Messages.CheckConfiguration(command.AsT2.Current);
+            if (RaftLog.LastConfIdx > _commitIdx || RaftLog.GetConfiguration().IsJoint()) {
+                Log.Debug(
+                    "[{my_id}] A{joint}configuration change at index {last_conf_idx} is not yet committed (config {config}) (commit_idx: {commit_idx})",
+                    _myID, RaftLog.GetConfiguration().IsJoint() ? " joint " : " ",
+                    RaftLog.LastConfIdx, RaftLog.GetConfiguration(), _commitIdx);
+                throw new ConfigurationChangeInProgressException();
+            }
+            // 4.3. Arbitrary configuration changes using joint consensus
+            //
+            // When the leader receives a request to change the
+            // configuration from C_old to C_new, it stores the
+            // configuration for joint consensus (C_old, new) as a log
+            // entry and replicates that entry using the normal Raft
+            // mechanism.
+            var tmp = RaftLog.GetConfiguration().Clone();
+            tmp.EnterJoint(command.AsT2.Current);
+            command = tmp;
+
+            Log.Debug("[{my_id}] appending joint config entry at {next_idx}: {command}", _myID, RaftLog.NextIdx(), command);
+        }
+
+        var logEntry = new LogEntry { Term = CurrentTerm, Idx = RaftLog.NextIdx() };
+        command.Switch(
+            _ => { logEntry.Fake = new Void(); },
+            buffer => { logEntry.Command = new Command { Buffer = ByteString.CopyFrom(buffer) }; },
+            config => { logEntry.Configuration = config; }
+        );
+        Log.Information("[{my_id}] AddEntry() idx={idx} term={term}", _myID, logEntry.Idx, logEntry.Term);
+        RaftLog.Add(logEntry);
+        _smEvents.Signal();
+
+        if (isConfig) {
+            LeaderState.Tracker.SetConfiguration(RaftLog.GetConfiguration(), RaftLog.LastIdx());
+        }
+
+        return RaftLog[RaftLog.LastIdx()];
+    }
+
+    public bool ApplySnapshot(
+        SnapshotDescriptor snapshot, int maxTrailingEntries, int maxTrailingBytes, bool local
+    ) {
+        Log.Debug("[{my_id}] ApplySnapshot() current_term={current_term} term={term} idx={idx} id={id} local={local}",
+            _myID, CurrentTerm, snapshot.Term, snapshot.Idx, snapshot.Id, local);
+        Debug.Assert(local && snapshot.Idx <= _observed.CommitIdx || !local && IsFollower);
+
+        var currentSnapshot = RaftLog.GetSnapshot();
+        if (snapshot.Idx <= currentSnapshot.Idx || !local && snapshot.Idx <= _commitIdx) {
+            Log.Error(
+                "[{my_id}] ApplySnapshot() ignore outdated snapshot {snapshot_id}/{snapshot_idx} current one is {current_snapshot_id}/{current_snapshot_idx}, commit_idx={commit_idx}",
+                _myID, snapshot.Id, snapshot.Idx, currentSnapshot.Id, currentSnapshot.Idx, _commitIdx);
+            _output.SnapshotsToDrop.Add(snapshot.Id);
+            return false;
+        }
+
+        _output.SnapshotsToDrop.Add(currentSnapshot.Id);
+
+        _commitIdx = ulong.Max(_commitIdx, snapshot.Idx);
+        var (units, newFirstIndex) = RaftLog.ApplySnapshot(snapshot, maxTrailingEntries, maxTrailingBytes);
+        currentSnapshot = RaftLog.GetSnapshot();
+        _output.Snapshot = new AppliedSnapshot(
+            currentSnapshot,
+            local,
+            currentSnapshot.Idx + 1 - newFirstIndex
+        );
+        if (IsLeader) {
+            Log.Debug("[{my_id}] ApplySnapshot() signal {units} available units", _myID, units);
+            LeaderState.LogLimiter.Signal(units);
+        }
+        _smEvents.Signal();
+        return true;
+    }
+
+    public Configuration GetConfiguration() {
+        return RaftLog.GetConfiguration();
     }
 
     public Output GetOutput() {
@@ -166,117 +255,42 @@ public partial class FSM {
         return output;
     }
 
-    private void BroadcastReadQuorum(ulong readId) {
-        Log.Debug("[{my_id}] BroadcastReadQuorum() send read id {id}", _myID, readId);
-        foreach (var (_, p) in LeaderState.Tracker.FollowerProgresses) {
-            if (!p.CanVote) continue;
-
-            if (p.Id == _myID) {
-                HandleReadQuorumResponse(_myID, new ReadQuorumResponse {
-                    CurrentTerm = CurrentTerm,
-                    CommitIdx = _commitIdx,
-                    Id = readId
-                });
-            } else {
-                SendTo(p.Id, new ReadQuorumRequest {
-                    CurrentTerm = CurrentTerm,
-                    LeaderCommitIdx = Math.Min(p.MatchIdx, _commitIdx),
-                    Id = readId
-                });
-            }
-        }
+    public bool HasOutput() {
+        Log.Debug("[{my_id}] FSM.HasOutput() stable_idx={stable_idx} last_idx={last_idx}", _myID, RaftLog.StableIdx(),
+            RaftLog.LastIdx());
+        var diff = RaftLog.LastIdx() - RaftLog.StableIdx();
+        return diff > 0 ||
+               _messages.Count != 0 ||
+               !_observed.Equals(this) ||
+               _output.MaxReadIdWithQuorum.HasValue ||
+               IsLeader && LeaderState.LastReadIdChanged ||
+               _output.Snapshot != null ||
+               _output.SnapshotsToDrop.Any() ||
+               _output.StateChanged;
     }
 
-    public void Tick() {
-        _clock.Advance();
-
-        if (IsLeader) {
-            TickLeader();
-        } else if (HasStableLeader()) {
-            _lastElectionTime = _clock.Now();
-        } else if (ElectionElapsed >= _randomizedElectionTimeout) {
-            Log.Debug("[{my_id}] Tick() becoming a candidate at term={term} last_election={last_election} now={now}",
-                _myID, CurrentTerm, _lastElectionTime, _clock.Now());
-            BecomeCandidate(_config.EnablePreVote);
-        }
-
-        if (IsFollower && CurrentLeader == 0 && _pingLeader) {
-            var cfg = GetConfiguration();
-            if (!cfg.IsJoint() && cfg.Current.Any(x => x.ServerAddress.ServerId == _myID)) {
-                foreach (var s in cfg.Current) {
-                    if (s.CanVote && s.ServerAddress.ServerId != _myID && _failureDetector.IsAlive(s.ServerAddress.ServerId)) {
-                        Log.Debug("[{my_id}] Tick() searching for a leader. Pinging {server_id}", _myID,
-                            s.ServerAddress.ServerId);
-                        SendTo(s.ServerAddress.ServerId, new AppendResponse {
-                            CurrentTerm = CurrentTerm,
-                            CommitIdx = _commitIdx,
-                            Rejected = new AppendRejected {
-                                NonMatchingIdx = 0,
-                                LastIdx = 0
-                            }
-                        });
-                    }
-                }
-            }
-        }
+    public void PingLeader() {
+        Debug.Assert(CurrentLeader == 0);
+        _pingLeader = true;
     }
 
-    public LogEntry AddEntry(string command) {
-        return AddEntry(Encoding.UTF8.GetBytes(command));
-    }
-
-    public LogEntry AddEntry(OneOf<Void, byte[], Configuration> command) {
-        // It's only possible to add entries on a leader.
+    public (ulong, ulong)? StartReadBarrier(ulong requester) {
         CheckIsLeader();
-        if (LeaderState.StepDown != null) {
-            // A leader stepping down should not add new entries
-            // to its log (see 3.10), but it still does not know who the new
-            // leader will be.
-            throw new NotLeaderException();
+
+        if (requester != _myID && LeaderState.Tracker.Find(requester) == null) {
+            throw new OutsideConfigurationException(requester);
         }
 
-        var isConfig = command.IsT2;
-        if (isConfig) {
-            // Do not permit changes which would render the cluster
-            // unusable, such as transitioning to an empty configuration or
-            // one with no voters.
-            Messages.CheckConfiguration(command.AsT2.Current);
-            if (RaftLog.LastConfIdx > _commitIdx || RaftLog.GetConfiguration().IsJoint()) {
-                Log.Debug(
-                    "[{my_id}] A{joint}configuration change at index {last_conf_idx} is not yet committed (config {config}) (commit_idx: {commit_idx})",
-                    _myID, RaftLog.GetConfiguration().IsJoint() ? " joint " : " ",
-                    RaftLog.LastConfIdx, RaftLog.GetConfiguration(), _commitIdx);
-                throw new ConfigurationChangeInProgressException();
-            }
-            // 4.3. Arbitrary configuration changes using joint consensus
-            //
-            // When the leader receives a request to change the
-            // configuration from C_old to C_new, it stores the
-            // configuration for joint consensus (C_old, new) as a log
-            // entry and replicates that entry using the normal Raft
-            // mechanism.
-            var tmp = RaftLog.GetConfiguration().Clone();
-            tmp.EnterJoint(command.AsT2.Current);
-            command = tmp;
+        var termForCommitIdx = RaftLog.TermFor(_commitIdx);
+        Debug.Assert(termForCommitIdx != null);
 
-            Log.Debug("[{my_id}] appending joint config entry at {next_idx}: {command}", _myID, RaftLog.NextIdx(), command);
+        if (termForCommitIdx.Value != CurrentTerm) {
+            return null;
         }
 
-        var logEntry = new LogEntry { Term = CurrentTerm, Idx = RaftLog.NextIdx() };
-        command.Switch(
-            _ => { logEntry.Fake = new Void(); },
-            buffer => { logEntry.Command = new Command { Buffer = ByteString.CopyFrom(buffer) }; },
-            config => { logEntry.Configuration = config; }
-        );
-        Log.Information("[{my_id}] AddEntry() idx={idx} term={term}", _myID, logEntry.Idx, logEntry.Term);
-        RaftLog.Add(logEntry);
-        _smEvents.Signal();
-
-        if (isConfig) {
-            LeaderState.Tracker.SetConfiguration(RaftLog.GetConfiguration(), RaftLog.LastIdx());
-        }
-
-        return RaftLog[RaftLog.LastIdx()];
+        var id = NextReadId();
+        Log.Debug("[{my_id}] StartReadBarrier() starting read barrier with id {id}", _myID, id);
+        return (id, _commitIdx);
     }
 
     public void Step(ulong from, VoteRequest msg) {
@@ -386,6 +400,81 @@ public partial class FSM {
             candidate => { Step(from, candidate, msg); },
             leader => { Step(from, leader, msg); }
         );
+    }
+
+    public void Tick() {
+        _clock.Advance();
+
+        if (IsLeader) {
+            TickLeader();
+        } else if (HasStableLeader()) {
+            _lastElectionTime = _clock.Now();
+        } else if (ElectionElapsed >= _randomizedElectionTimeout) {
+            Log.Debug("[{my_id}] Tick() becoming a candidate at term={term} last_election={last_election} now={now}",
+                _myID, CurrentTerm, _lastElectionTime, _clock.Now());
+            BecomeCandidate(_config.EnablePreVote);
+        }
+
+        if (IsFollower && CurrentLeader == 0 && _pingLeader) {
+            var cfg = GetConfiguration();
+            if (!cfg.IsJoint() && cfg.Current.Any(x => x.ServerAddress.ServerId == _myID)) {
+                foreach (var s in cfg.Current) {
+                    if (s.CanVote && s.ServerAddress.ServerId != _myID && _failureDetector.IsAlive(s.ServerAddress.ServerId)) {
+                        Log.Debug("[{my_id}] Tick() searching for a leader. Pinging {server_id}", _myID,
+                            s.ServerAddress.ServerId);
+                        SendTo(s.ServerAddress.ServerId, new AppendResponse {
+                            CurrentTerm = CurrentTerm,
+                            CommitIdx = _commitIdx,
+                            Rejected = new AppendRejected {
+                                NonMatchingIdx = 0,
+                                LastIdx = 0
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    public void TransferLeadership(long timeout = 0) {
+        CheckIsLeader();
+        var leader = LeaderState.Tracker.Find(_myID);
+        var voterCount = GetConfiguration().Current.Count(x => x.CanVote);
+
+        if (voterCount == 1 && leader is { CanVote: true }) {
+            throw new NoOtherVotingMemberException();
+        }
+
+        LeaderState.StepDown = _clock.Now() + timeout;
+        LeaderState.LogLimiter.Consume(_config.MaxLogSize);
+
+        foreach (var (_, progress) in LeaderState.Tracker.FollowerProgresses) {
+            if (progress.Id != _myID && progress.CanVote && progress.MatchIdx == RaftLog.LastIdx()) {
+                SendTimeoutNow(progress.Id);
+                break;
+            }
+        }
+    }
+
+    private void BroadcastReadQuorum(ulong readId) {
+        Log.Debug("[{my_id}] BroadcastReadQuorum() send read id {id}", _myID, readId);
+        foreach (var (_, p) in LeaderState.Tracker.FollowerProgresses) {
+            if (!p.CanVote) continue;
+
+            if (p.Id == _myID) {
+                HandleReadQuorumResponse(_myID, new ReadQuorumResponse {
+                    CurrentTerm = CurrentTerm,
+                    CommitIdx = _commitIdx,
+                    Id = readId
+                });
+            } else {
+                SendTo(p.Id, new ReadQuorumRequest {
+                    CurrentTerm = CurrentTerm,
+                    LeaderCommitIdx = Math.Min(p.MatchIdx, _commitIdx),
+                    Id = readId
+                });
+            }
+        }
     }
 
     private void Step(ulong from, Leader leader, Message message) {
@@ -499,64 +588,6 @@ public partial class FSM {
                 // ignored
             }
         );
-    }
-
-    public void TransferLeadership(long timeout = 0) {
-        CheckIsLeader();
-        var leader = LeaderState.Tracker.Find(_myID);
-        var voterCount = GetConfiguration().Current.Count(x => x.CanVote);
-
-        if (voterCount == 1 && leader is { CanVote: true }) {
-            throw new NoOtherVotingMemberException();
-        }
-
-        LeaderState.StepDown = _clock.Now() + timeout;
-        LeaderState.LogLimiter.Consume(_config.MaxLogSize);
-
-        foreach (var (_, progress) in LeaderState.Tracker.FollowerProgresses) {
-            if (progress.Id != _myID && progress.CanVote && progress.MatchIdx == RaftLog.LastIdx()) {
-                SendTimeoutNow(progress.Id);
-                break;
-            }
-        }
-    }
-
-    public bool ApplySnapshot(
-        SnapshotDescriptor snapshot, int maxTrailingEntries, int maxTrailingBytes, bool local
-    ) {
-        Log.Debug("[{my_id}] ApplySnapshot() current_term={current_term} term={term} idx={idx} id={id} local={local}",
-            _myID, CurrentTerm, snapshot.Term, snapshot.Idx, snapshot.Id, local);
-        Debug.Assert(local && snapshot.Idx <= _observed.CommitIdx || !local && IsFollower);
-
-        var currentSnapshot = RaftLog.GetSnapshot();
-        if (snapshot.Idx <= currentSnapshot.Idx || !local && snapshot.Idx <= _commitIdx) {
-            Log.Error(
-                "[{my_id}] ApplySnapshot() ignore outdated snapshot {snapshot_id}/{snapshot_idx} current one is {current_snapshot_id}/{current_snapshot_idx}, commit_idx={commit_idx}",
-                _myID, snapshot.Id, snapshot.Idx, currentSnapshot.Id, currentSnapshot.Idx, _commitIdx);
-            _output.SnapshotsToDrop.Add(snapshot.Id);
-            return false;
-        }
-
-        _output.SnapshotsToDrop.Add(currentSnapshot.Id);
-
-        _commitIdx = ulong.Max(_commitIdx, snapshot.Idx);
-        var (units, newFirstIndex) = RaftLog.ApplySnapshot(snapshot, maxTrailingEntries, maxTrailingBytes);
-        currentSnapshot = RaftLog.GetSnapshot();
-        _output.Snapshot = new AppliedSnapshot(
-            currentSnapshot,
-            local,
-            currentSnapshot.Idx + 1 - newFirstIndex
-        );
-        if (IsLeader) {
-            Log.Debug("[{my_id}] ApplySnapshot() signal {units} available units", _myID, units);
-            LeaderState.LogLimiter.Signal(units);
-        }
-        _smEvents.Signal();
-        return true;
-    }
-
-    public Configuration GetConfiguration() {
-        return RaftLog.GetConfiguration();
     }
 
     private void Replicate() {
@@ -1116,30 +1147,6 @@ public partial class FSM {
         }
     }
 
-    public void PingLeader() {
-        Debug.Assert(CurrentLeader == 0);
-        _pingLeader = true;
-    }
-
-    public (ulong, ulong)? StartReadBarrier(ulong requester) {
-        CheckIsLeader();
-
-        if (requester != _myID && LeaderState.Tracker.Find(requester) == null) {
-            throw new OutsideConfigurationException(requester);
-        }
-
-        var termForCommitIdx = RaftLog.TermFor(_commitIdx);
-        Debug.Assert(termForCommitIdx != null);
-
-        if (termForCommitIdx.Value != CurrentTerm) {
-            return null;
-        }
-
-        var id = NextReadId();
-        Log.Debug("[{my_id}] StartReadBarrier() starting read barrier with id {id}", _myID, id);
-        return (id, _commitIdx);
-    }
-
     private ulong NextReadId() {
         Debug.Assert(IsLeader);
         ++LeaderState.LastReadId;
@@ -1147,10 +1154,4 @@ public partial class FSM {
         _smEvents.Signal();
         return LeaderState.LastReadId;
     }
-
-    public ulong Id => _myID;
-    public int InMemoryLogSize => RaftLog.InMemorySize();
-    public int LogMemoryUsage => RaftLog.MemoryUsage();
-    public ulong LogLastIdx => RaftLog.LastIdx();
-    public ulong LogLastTerm => RaftLog.LastTerm();
 }
