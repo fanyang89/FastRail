@@ -65,8 +65,7 @@ public class RaftService : IRaftRpcHandler {
             options.AppendRequestThreshold,
             options.MaxLogSize
         );
-        _fsm = new FSM(
-            _myId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify);
+        _fsm = new FSM(_myId, term, votedFor, log, commitedIdx, fd, fsmConfig, _fsmEventNotify);
 
         if (snapshot is { Id: > 0 }) {
             _stateMachine.LoadSnapshot(snapshot.Id);

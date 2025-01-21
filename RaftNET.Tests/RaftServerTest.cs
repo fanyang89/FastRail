@@ -39,17 +39,16 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         _addressBook.Add(MyId, _listenAddress);
 
         var tempDir = Directory.CreateTempSubdirectory();
-        var addressBook = new AddressBook();
-        var rpc = new ConnectionManager(MyId, addressBook);
+        var rpc = new ConnectionManager(MyId, _addressBook);
         var sm = new EmptyStateMachine();
         var persistence = new RocksPersistence(tempDir.FullName);
         var options = new RaftServiceOptions();
         var clock = new SystemClock();
-        var fd = new RpcFailureDetector(MyId, addressBook,
+        var fd = new RpcFailureDetector(MyId, _addressBook,
             TimeSpan.FromMilliseconds(options.PingInterval),
             TimeSpan.FromMilliseconds(options.PingTimeout),
             clock);
-        var service = new RaftService(MyId, rpc, sm, persistence, fd, addressBook, new RaftServiceOptions());
+        var service = new RaftService(MyId, rpc, sm, persistence, fd, _addressBook, new RaftServiceOptions());
         _server = new RaftServer(service, IPAddress.Loopback, Port);
         _ = _server.Start();
         Log.Information("Raft server started at {}", _listenAddress);
@@ -63,9 +62,7 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     [Test]
     public void TestSingleServerCanAppend() {
         Assert.That(_server.IsLeader, Is.True);
-        Log.Information("Adding entry");
         _server.AddEntry("Hello World");
-        Log.Information("Entry added");
     }
 
     [Test]
@@ -74,10 +71,5 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         var client = new RaftGrpcClient(myId, _listenAddress);
         var cts = new CancellationTokenSource();
         await client.PingAsync(DateTime.UtcNow + TimeSpan.FromSeconds(1), cts.Token);
-    }
-
-    [Test]
-    public void TestSingleServerIsLeader() {
-        Assert.That(_server.IsLeader, Is.True);
     }
 }
