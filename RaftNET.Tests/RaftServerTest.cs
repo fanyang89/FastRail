@@ -73,7 +73,7 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         const ulong myId = 2;
         var client = new RaftGrpcClient(myId, _listenAddress);
         var cts = new CancellationTokenSource();
-        await client.PingAsync(DateTime.Now + TimeSpan.FromSeconds(1), cts.Token);
+        await client.PingAsync(DateTime.UtcNow + TimeSpan.FromSeconds(1), cts.Token);
     }
 
     [Test]
