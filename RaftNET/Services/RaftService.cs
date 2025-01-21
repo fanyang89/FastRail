@@ -28,6 +28,8 @@ public class RaftService : IRaftRpcHandler {
     private Task? _ioTask;
     private ulong _snapshotDescIdx;
     private Timer? _ticker;
+    private const int MaxElectionRounds = 100;
+    private readonly TimeSpan _waitElectionInterval = TimeSpan.FromMilliseconds(100);
 
     public RaftService(ulong myId, IRaftRpcClient rpc, IStateMachine sm, IPersistence persistence,
         IFailureDetector fd, AddressBook addressBook, RaftServiceOptions options) {
@@ -38,7 +40,7 @@ public class RaftService : IRaftRpcHandler {
         _fsmEventNotify = new Notifier();
         _options = options;
 
-        Log.Information("Raft service initializing");
+        Log.Information("[{my_id}] Raft service initializing", _myId);
 
         ulong term = 0;
         ulong votedFor = 0;
@@ -236,10 +238,17 @@ public class RaftService : IRaftRpcHandler {
     }
 
     public async Task WaitElectionDone() {
-        lock (_fsm) {
-            while (_fsm.IsCandidate) {
-                throw new NotImplementedException();
+        var now = DateTime.Now;
+        var rounds = 0;
+        bool isCandidate;
+        do {
+            await Task.Delay(_waitElectionInterval);
+            lock (_fsm) {
+                isCandidate = _fsm.IsCandidate;
             }
+        } while (isCandidate && rounds++ < MaxElectionRounds);
+        if (rounds >= MaxElectionRounds) {
+            throw new ElectionTimeoutException(DateTime.Now - now);
         }
     }
 
