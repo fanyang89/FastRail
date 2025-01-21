@@ -3,8 +3,8 @@ using Spectre.Console.Cli;
 
 namespace RaftNET.Examples;
 
-class Program {
-    static int Main(string[] args) {
+static class Program {
+    private static int Main(string[] args) {
         Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
         var app = new CommandApp();
         app.Configure(c => {
