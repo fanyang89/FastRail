@@ -2,13 +2,11 @@
 
 namespace RaftNET.Services;
 
-public class ApplyMessage : OneOfBase<List<LogEntry>, SnapshotDescriptor, OnExit> {
-    protected ApplyMessage(OneOf<List<LogEntry>, SnapshotDescriptor, OnExit> input) : base(input) {}
-
+public class ApplyMessage : OneOfBase<Exiting, List<LogEntry>, SnapshotDescriptor, RemovedFromConfig> {
+    public ApplyMessage(Exiting exit) : base(exit) {}
     public ApplyMessage(List<LogEntry> entries) : base(entries) {}
     public ApplyMessage(SnapshotDescriptor snapshotDescriptor) : base(snapshotDescriptor) {}
+    public ApplyMessage(RemovedFromConfig removedFromConfig) : base(removedFromConfig) {}
 
-    public ApplyMessage() : base(new OnExit()) {}
-
-    public bool IsExit => IsT2;
+    public bool IsExit => IsT0;
 }

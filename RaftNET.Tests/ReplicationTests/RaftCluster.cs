@@ -241,7 +241,7 @@ public class RaftCluster {
     }
 
     public async Task StartAllAsync() {
-        await Task.WhenAll(_servers.Values.Select(s => s.Service.Start(_startCancellationTokenSource.Token)));
+        await Task.WhenAll(_servers.Values.Select(s => s.Service.StartAsync(_startCancellationTokenSource.Token)));
         await InitRaftTickersAsync();
         Log.Information("Electing first leader {leader}", _leader);
         _servers[_leader].Service.WaitUntilCandidate();
@@ -429,7 +429,7 @@ public class RaftCluster {
 
     private async Task ResetServerAsync(ulong id, InitialState state) {
         _servers[id] = CreateService(id, state);
-        await _servers[id].Service.Start(_startCancellationTokenSource.Token);
+        await _servers[id].Service.StartAsync(_startCancellationTokenSource.Token);
         SetTickerCallback(id);
     }
 

@@ -4,17 +4,26 @@ using Serilog;
 
 namespace RaftNET.FailureDetectors;
 
-public class RpcFailureDetector(
-    ulong myId,
-    AddressBook addressBook,
-    TimeSpan interval,
-    TimeSpan timeout,
-    IClock clock
-) : IFailureDetector {
+public class RpcFailureDetector : IFailureDetector {
     private readonly Dictionary<ulong, bool> _alive = new();
     private readonly Dictionary<ulong, CancellationTokenSource> _cancellationTokenSources = new();
-    private readonly ConnectionManager _connectionManager = new(myId, addressBook);
-    private readonly Dictionary<ulong, Task> _workers = new();
+    private readonly ConnectionManagerProxy _connectionManager;
+    private readonly ulong _myId;
+    private readonly TimeSpan _interval;
+    private readonly TimeSpan _timeout;
+    private readonly IClock _clock;
+
+    public RpcFailureDetector(ulong myId,
+        AddressBook addressBook,
+        TimeSpan interval,
+        TimeSpan timeout,
+        IClock clock) {
+        _myId = myId;
+        _interval = interval;
+        _timeout = timeout;
+        _clock = clock;
+        _connectionManager = new(new ConnectionManager(myId, addressBook), this);
+    }
 
     public bool IsAlive(ulong server) {
         lock (_alive) {
@@ -22,44 +31,49 @@ public class RpcFailureDetector(
         }
     }
 
+    public void AddEndpoint(ulong serverId) {
+        Add(serverId);
+    }
+
+    public void RemoveEndpoint(ulong serverId) {
+        Remove(serverId);
+    }
+
     public void Add(ulong serverId) {
-        lock (_workers)
         lock (_cancellationTokenSources) {
             var cts = new CancellationTokenSource();
-            _workers.Add(serverId, WorkerAsync(serverId, cts.Token));
+            _ = WorkerAsync(serverId, cts.Token);
             _cancellationTokenSources.Add(serverId, cts);
         }
     }
 
     public void Remove(ulong serverId) {
-        lock (_workers)
         lock (_cancellationTokenSources) {
             _cancellationTokenSources.Remove(serverId, out var cts);
             cts?.Cancel();
-            _workers.Remove(serverId);
         }
     }
 
     private Task WorkerAsync(ulong to, CancellationToken cancellationToken) {
         return Task.Run(async delegate {
-            Log.Information("[{my_id}] PingWorker started, to={to}", myId, to);
-            var lastAlive = clock.Now;
+            Log.Information("[{my_id}] PingWorker started, to={to}", _myId, to);
+            var lastAlive = _clock.Now;
             while (!cancellationToken.IsCancellationRequested) {
-                var deadline = clock.Now + timeout;
+                var deadline = _clock.Now + _timeout;
                 try {
                     await _connectionManager.PingAsync(to, deadline, cancellationToken);
-                    lastAlive = clock.Now;
+                    lastAlive = _clock.Now;
                 }
                 catch (RpcException ex) {
-                    Log.Error("[{my_id}] Ping failed, to={to} code={code} detail={detail}", myId, to, ex.StatusCode,
+                    Log.Error("[{my_id}] Ping failed, to={to} code={code} detail={detail}", _myId, to, ex.StatusCode,
                         ex.Status.Detail);
                 }
                 lock (_alive) {
-                    _alive[to] = clock.Now - lastAlive < timeout;
+                    _alive[to] = _clock.Now - lastAlive < _timeout;
                 }
-                await Task.Delay(interval, cancellationToken);
+                await Task.Delay(_interval, cancellationToken);
             }
-            Log.Information("[{my_id}] PingWorker exiting, to={to}", myId, to);
+            Log.Information("[{my_id}] PingWorker exiting, to={to}", _myId, to);
         }, cancellationToken);
     }
 }

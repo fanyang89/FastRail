@@ -8,6 +8,10 @@ public class DiscreteFailureDetector : IFailureDetector {
         return _isAlive && !_dead.Contains(id);
     }
 
+    public void AddEndpoint(ulong serverId) {}
+
+    public void RemoveEndpoint(ulong serverId) {}
+
     public void MarkAlive(ulong id) {
         _dead.Remove(id);
     }

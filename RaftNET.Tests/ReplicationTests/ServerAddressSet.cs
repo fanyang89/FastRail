@@ -6,6 +6,6 @@ public class ServerAddressSet : HashSet<ServerAddress>, IEquatable<RpcAddressSet
             return false;
         }
         return other.Count == Count &&
-               other.All(address => this.Any(x => x.ServerId == (ulong)address.Id));
+               other.All(address => this.Any(x => x.ServerId == address.Id));
     }
 }

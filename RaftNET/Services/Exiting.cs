@@ -1,3 +1,3 @@
 ﻿namespace RaftNET.Services;
 
-public class OnExit {}
+public class Exiting;

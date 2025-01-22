@@ -30,6 +30,12 @@ public class RaftService : IRaftRpcHandler {
     private Task? _ioTask;
     private ulong _snapshotDescIdx;
     private Timer? _ticker;
+    private TaskCompletionSource? _leaderPromise;
+    private TaskCompletionSource? _stateChangePromise;
+    private readonly HashSet<ServerAddress> _currentRpcConfig = new();
+    private TaskCompletionSource? _nonJointConfCommitPromise;
+    private Queue<ActiveRead> _reads;
+    private TaskCompletionSource? _stepDownPromise;
 
     public RaftService(ulong myId, IRaftRpcClient rpc, IStateMachine sm, IPersistence persistence,
         IFailureDetector fd, AddressBook addressBook, RaftServiceOptions options) {
@@ -204,11 +210,12 @@ public class RaftService : IRaftRpcHandler {
         throw new NotImplementedException();
     }
 
-    public void Start(CancellationToken token) {
+    public Task StartAsync(CancellationToken token) {
         _ticker = new Timer(Tick, null, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100));
         _applyTask = Task.Run(DoApply(token), token);
         _ioTask = Task.Run(DoIO(token, 0), token);
         Log.Information("[{my_id}] RaftService started", _myId);
+        return Task.CompletedTask;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken) {
@@ -217,7 +224,7 @@ public class RaftService : IRaftRpcHandler {
             await _ioTask.WaitAsync(cancellationToken);
         }
 
-        _applyMessages.Add(new ApplyMessage(), cancellationToken);
+        _applyMessages.Add(new ApplyMessage(new Exiting()), cancellationToken);
 
         if (_applyTask != null) {
             await _applyTask.WaitAsync(cancellationToken);
@@ -296,6 +303,7 @@ public class RaftService : IRaftRpcHandler {
                 }
 
                 message.Switch(
+                    _ => {},
                     entries => {
                         Log.Debug("[{my_id}] Apply() on {entries} entries", _myId, entries.Count);
 
@@ -322,11 +330,17 @@ public class RaftService : IRaftRpcHandler {
                         _stateMachine.LoadSnapshot(snapshot.Id);
                         _appliedIdx = snapshot.Idx;
                     },
-                    _ => {}
+                    removedFromConfig => {
+                        DropWaiters();
+                    }
                 );
             }
             Log.Information("[{my_id}] Apply stopped", _myId);
         };
+    }
+
+    private void DropWaiters() {
+        throw new NotImplementedException();
     }
 
     private void NotifyWaiters(OrderedDictionary<TermIdx, Notifier> waiters, List<LogEntry> entries) {
@@ -429,14 +443,119 @@ public class RaftService : IRaftRpcHandler {
             lastStable = entries.Last().Idx;
         }
 
-        foreach (var message in batch.Messages) {
-            await SendMessage(message.To, message.Message);
+        RpcConfigDiff? rpcDiff = null;
+        if (batch.Configuration != null) {
+            rpcDiff = DiffAddressSets(GetRpcConfig(), batch.Configuration);
+            foreach (var addr in rpcDiff.Joining) {
+                _currentRpcConfig.Add(addr);
+            }
+            _rpcClient.OnConfigurationChange(rpcDiff.Joining, new HashSet<ServerAddress>());
         }
 
+        foreach (var message in batch.Messages) {
+            try {
+                await SendMessage(message.To, message.Message);
+            }
+            catch (Exception ex) {
+                Log.Error(ex, "[{my_id}] I/O thread failed to send message to {to}", _myId, message.To);
+            }
+        }
+
+        if (batch.Configuration != null) {
+            Debug.Assert(rpcDiff != null);
+            foreach (var address in rpcDiff.Leaving) {
+                AbortSnapshotTransfer(address.ServerId);
+                _currentRpcConfig.RemoveWhere(x => x.ServerId == address.ServerId);
+            }
+            _rpcClient.OnConfigurationChange(new HashSet<ServerAddress>(), rpcDiff.Leaving);
+        }
+
+        // Process committed entries
         if (batch.Committed.Count > 0) {
+            if (_nonJointConfCommitPromise != null) {
+                foreach (var logEntry in batch.Committed) {
+                    if (logEntry.DataCase == LogEntry.DataOneofCase.Configuration && !logEntry.Configuration.IsJoint()) {
+                        _nonJointConfCommitPromise.SetResult();
+                        break;
+                    }
+                }
+            }
             _persistence.StoreCommitIdx(batch.Committed.Last().Idx);
             _applyMessages.Add(new ApplyMessage(batch.Committed));
         }
+
+        if (batch.MaxReadIdWithQuorum != null) {
+            while (_reads.Count != 0 && _reads.First().Id <= batch.MaxReadIdWithQuorum) {
+                var read = _reads.Dequeue();
+                read.Promise.SetResult(new ReadBarrierResponse(read.Idx));
+            }
+        }
+
+        ulong currentLeader;
+        bool isLeader;
+        lock (_fsm) {
+            currentLeader = _fsm.CurrentLeader;
+            isLeader = _fsm.IsLeader;
+        }
+
+        if (!isLeader) {
+            if (_stepDownPromise != null) {
+                _stepDownPromise.SetResult();
+                _stepDownPromise = null;
+            }
+            if (_currentRpcConfig.All(x => x.ServerId != _myId)) {
+                _applyMessages.Add(new ApplyMessage(new RemovedFromConfig()));
+            }
+            AbortSnapshotTransfer();
+            foreach (var read in _reads) {
+                read.Promise.SetResult(new ReadBarrierResponse(new NotLeaderException(currentLeader)));
+            }
+            _reads.Clear();
+        } else if (batch.AbortLeadershipTransfer) {
+            if (_stepDownPromise != null) {
+                _stepDownPromise.SetException(new TimeoutException("Step down process timeout"));
+                _stepDownPromise = null;
+            }
+        }
+
+        // notify the current leader
+        if (_leaderPromise != null && currentLeader != 0) {
+            _leaderPromise.SetResult();
+            _leaderPromise = null;
+        }
+
+        // notify state changed
+        if (_stateChangePromise != null && batch.StateChanged) {
+            _stateChangePromise.SetResult();
+            _stateChangePromise = null;
+        }
+    }
+
+    private void AbortSnapshotTransfer() {
+        throw new NotImplementedException();
+    }
+
+    private void AbortSnapshotTransfer(ulong addressServerId) {
+        throw new NotImplementedException();
+    }
+
+    private ISet<ServerAddress> GetRpcConfig() {
+        return _currentRpcConfig;
+    }
+
+    private static RpcConfigDiff DiffAddressSets(ISet<ServerAddress> prev, ISet<ConfigMember> current) {
+        var result = new RpcConfigDiff();
+        foreach (var s in current) {
+            if (prev.All(x => x.ServerId != s.ServerAddress.ServerId)) {
+                result.Joining.Add(s.ServerAddress);
+            }
+        }
+        foreach (var s in prev) {
+            if (current.All(x => x.ServerAddress.ServerId != s.ServerId)) {
+                result.Leaving.Add(s);
+            }
+        }
+        return result;
     }
 
     private async Task SendMessage(ulong to, Message message) {
@@ -513,17 +632,13 @@ public class RaftService : IRaftRpcHandler {
         notifier.Wait();
     }
 
-    private TaskCompletionSource? _leaderPromise = new();
-
     public async Task WaitForLeader(CancellationToken cancellationToken) {
         lock (_fsm) {
             if (_fsm.CurrentLeader != 0) {
                 return;
             }
-
             _fsm.PingLeader();
         }
-
         _leaderPromise ??= new TaskCompletionSource();
         await _leaderPromise.Task.WaitAsync(cancellationToken);
     }

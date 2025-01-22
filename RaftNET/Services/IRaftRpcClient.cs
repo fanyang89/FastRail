@@ -10,4 +10,5 @@ public interface IRaftRpcClient {
     public Task TimeoutNowRequestAsync(ulong to, TimeoutNowRequest request);
     public Task VoteRequestAsync(ulong to, VoteRequest request);
     public Task VoteResponseAsync(ulong to, VoteResponse response);
+    public void OnConfigurationChange(ISet<ServerAddress> add, ISet<ServerAddress> del);
 }

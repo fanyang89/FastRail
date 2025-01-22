@@ -16,6 +16,9 @@ public sealed class MockRpc : IRaftRpcClient {
     private readonly Snapshots _snapshots;
     private ulong? _delaySnapshotId;
     private bool delays;
+    private int _serverAdded;
+    private int _serverRemoved;
+    public ServerAddressSet KnownPeers { get; } = [];
 
     public MockRpc(ulong id, Connected connected, Snapshots snapshots, RpcNet net, RpcConfig rpcConfig) {
         _id = id;
@@ -26,8 +29,6 @@ public sealed class MockRpc : IRaftRpcClient {
         _delays = _rpcConfig.NetworkDelay > TimeSpan.Zero;
         _sameNodePrefix = (1 << sizeof(uint)) - 1;
     }
-
-    public ServerAddressSet KnownPeers { get; } = new();
 
     public async Task AppendRequestAsync(ulong to, AppendRequest request) {
         if (!_net.TryGetValue(to, out var toRpc)) {
@@ -184,6 +185,17 @@ public sealed class MockRpc : IRaftRpcClient {
             var handler = toRpc.Item2;
             await handler.HandleVoteResponseAsync(_id, response);
         }
+    }
+
+    public void OnConfigurationChange(ISet<ServerAddress> add, ISet<ServerAddress> del) {
+        foreach (var address in add) {
+            KnownPeers.Add(address);
+        }
+        _serverAdded += add.Count;
+        foreach (var address in del) {
+            KnownPeers.RemoveWhere(x => x.ServerId == address.ServerId);
+        }
+        _serverRemoved += del.Count;
     }
 
     public void DelaySendSnapshot(ulong snapshotId) {
