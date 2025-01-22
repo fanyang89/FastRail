@@ -8,7 +8,8 @@ public class RaftGrpcService(RaftService handler) : Raft.RaftBase, IHostedServic
     public const string KeyFromId = "raftnet-from-id";
 
     public Task StartAsync(CancellationToken cancellationToken) {
-        return handler.StartAsync(cancellationToken);
+        handler.Start(cancellationToken);
+        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken) {

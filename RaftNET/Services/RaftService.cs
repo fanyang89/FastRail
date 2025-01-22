@@ -204,12 +204,11 @@ public class RaftService : IRaftRpcHandler {
         throw new NotImplementedException();
     }
 
-    public Task StartAsync(CancellationToken token) {
+    public void Start(CancellationToken token) {
         _ticker = new Timer(Tick, null, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(100));
         _applyTask = Task.Run(DoApply(token), token);
         _ioTask = Task.Run(DoIO(token, 0), token);
         Log.Information("[{my_id}] RaftService started", _myId);
-        return Task.CompletedTask;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken) {
