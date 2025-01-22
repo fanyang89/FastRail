@@ -74,13 +74,12 @@ public class RaftCluster {
         }
     }
 
-    public async Task AddEntriesAsync(ulong n, ulong? server = null) {
+    public Task AddEntriesAsync(ulong n, ulong? server = null) {
         var end = _nextValue + n;
         while (_nextValue != end) {
-            AddEntry(_nextValue, server);
-            _nextValue++;
+            AddEntry(_nextValue++, server);
         }
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
     public async Task AddEntriesConcurrentAsync(ulong n, ulong? server) {
@@ -96,8 +95,8 @@ public class RaftCluster {
         await Task.WhenAll(tasks);
     }
 
-    public async Task AddRemainingEntriesAsync() {
-        await AddEntriesAsync(_applyEntries - _nextValue);
+    public Task AddRemainingEntriesAsync() {
+        return AddEntriesAsync(_applyEntries - _nextValue);
     }
 
     public async Task ChangeConfigurationAsync(SetConfig sc) {
@@ -269,6 +268,7 @@ public class RaftCluster {
 
     public void Verify() {
         {
+            Log.Information("Verify() _applyEntries={apply_entries}", _applyEntries);
             var expected = HasherInt.HashRange(_applyEntries).FinalizeUInt64();
             foreach (var i in _inConfiguration) {
                 var digest = _servers[i].StateMachine.Hasher.FinalizeUInt64();
@@ -308,17 +308,9 @@ public class RaftCluster {
     }
 
     private void AddEntry(ulong value, ulong? server) {
-        while (true) {
-            try {
-                var at = _servers[server ?? _leader].Service;
-                at.AddEntry(value, WaitType.Committed);
-                break;
-            }
-            catch (Exception e) {
-                // TODO: handle AddEntry() exception
-                throw new NotImplementedException();
-            }
-        }
+        var id = server ?? _leader;
+        Log.Debug("AddEntry() value={value} server={id}", value, id);
+        _servers[id].Service.AddEntry(value, WaitType.Committed);
     }
 
     private void CancelTicker(ulong id) {

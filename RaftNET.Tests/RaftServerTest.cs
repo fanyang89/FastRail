@@ -14,6 +14,24 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
     private string _listenAddress;
     private RaftServer _server;
 
+    public void Apply(List<Command> commands) {
+        foreach (var command in commands) {
+            Log.Information("Applying command: {command}", command);
+        }
+    }
+
+    public void DropSnapshot(ulong snapshot) {}
+
+    public void LoadSnapshot(ulong snapshot) {}
+
+    public void OnEvent(Event e) {}
+
+    public ulong TakeSnapshot() {
+        return 0;
+    }
+
+    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {}
+
     [SetUp]
     public new void Setup() {
         _listenAddress = $"http://127.0.0.1:{Port}";
@@ -54,22 +72,4 @@ public class RaftServerTest : RaftTestBase, IStateMachine {
         Assert.That(_server.IsLeader, Is.True);
         _server.AddEntry("Hello World");
     }
-
-    public void Apply(List<Command> commands) {
-        foreach (var command in commands) {
-            Log.Information("Applying command: {command}", command);
-        }
-    }
-
-    public ulong TakeSnapshot() {
-        return 0;
-    }
-
-    public void DropSnapshot(ulong snapshot) {}
-
-    public void LoadSnapshot(ulong snapshot) {}
-
-    public void TransferSnapshot(ulong from, SnapshotDescriptor snapshot) {}
-
-    public void OnEvent(Event e) {}
 }

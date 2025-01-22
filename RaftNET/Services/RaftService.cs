@@ -298,13 +298,13 @@ public class RaftService : IRaftRpcHandler {
 
                 message.Switch(
                     entries => {
-                        Log.Debug("[{my_id}] Apply on apply {entries} entries", _myId, entries.Count);
+                        Log.Debug("[{my_id}] Apply() on {entries} entries", _myId, entries.Count);
 
                         lock (_commitNotifiers) {
                             NotifyWaiters(_commitNotifiers, entries);
                         }
 
-                        Log.Debug("[{my_id}] Apply applying...", _myId);
+                        Log.Debug("[{my_id}] Applying...", _myId);
                         _stateMachine.Apply(entries
                             .Where(x => x.DataCase == LogEntry.DataOneofCase.Command)
                             .Select(x => x.Command)

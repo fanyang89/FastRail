@@ -56,16 +56,16 @@ public class ReplicationTestBase : RaftTestBase {
         }
     }
 
-    protected int ApplyChanges(ulong id, List<Command> commands, HasherInt hasher) {
+    private int ApplyChanges(ulong id, List<Command> commands, HasherInt hasher) {
         Log.Information("[{my_id}] ApplyChanges() got entries, count={count}", id, commands.Count);
         var entries = 0;
-        foreach (var command in commands) {
-            var n = BitConverter.ToUInt64(command.Buffer.Span);
-            if (n != ulong.MinValue) {
-                entries++;
-                hasher.Update(n);
-                Log.Information("[{my_id}] Apply changes, n={n}", id, n);
-            }
+        var appliedCommands = commands
+            .Select(command => BitConverter.ToInt32(command.Buffer.Span))
+            .Where(n => n != int.MinValue);
+        foreach (var n in appliedCommands) {
+            entries++;
+            hasher.Update(n);
+            Log.Information("[{my_id}] Apply changes, n={n}", id, n);
         }
         return entries;
     }

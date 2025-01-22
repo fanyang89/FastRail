@@ -3,10 +3,9 @@
 namespace RaftNET.Tests.ReplicationTests;
 
 public record ReplicationTestCase {
-    public bool CommutativeHash = false;
-    public Dictionary<ulong, RaftServiceOptions> Config = [];
-    public ulong InitialLeader = 1;
-    public Dictionary<ulong, SnapshotDescriptor> InitialSnapshots = [];
+    public readonly Dictionary<ulong, RaftServiceOptions> Config = [];
+    public readonly ulong InitialLeader = 1;
+    public readonly Dictionary<ulong, SnapshotDescriptor> InitialSnapshots = [];
     public Dictionary<ulong, List<LogEntrySlim>> InitialStates = [];
     public ulong InitialTerm = 1;
     public required ulong Nodes;

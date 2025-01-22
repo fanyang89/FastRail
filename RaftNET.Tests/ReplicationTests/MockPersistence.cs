@@ -12,8 +12,16 @@ public class MockPersistence(
     : IPersistence {
     private readonly ulong _id = id;
 
-    public void StoreTermVote(ulong term, ulong vote) {
-        Thread.Sleep(TimeSpan.FromMicroseconds(1));
+    public ulong LoadCommitIdx() {
+        return 0;
+    }
+
+    public List<LogEntry> LoadLog() {
+        return initialState.Log.Select(log => log.Clone()).ToList();
+    }
+
+    public SnapshotDescriptor? LoadSnapshotDescriptor() {
+        return initialState.Snapshot;
     }
 
     public TermVote LoadTermVote() {
@@ -22,8 +30,8 @@ public class MockPersistence(
 
     public void StoreCommitIdx(ulong idx) {}
 
-    public ulong LoadCommitIdx() {
-        return 0;
+    public void StoreLogEntries(IEnumerable<LogEntry> entries) {
+        Thread.Sleep(TimeSpan.FromMicroseconds(1));
     }
 
     public void StoreSnapshotDescriptor(SnapshotDescriptor snapshot, ulong preserveLogEntries) {
@@ -32,16 +40,8 @@ public class MockPersistence(
         Log.Information("[{my_id}] StateMachine() persist snapshot, hash={hash}", id, snp.Hasher.FinalizeUInt64());
     }
 
-    public SnapshotDescriptor? LoadSnapshotDescriptor() {
-        return initialState.Snapshot;
-    }
-
-    public void StoreLogEntries(IEnumerable<LogEntry> entries) {
+    public void StoreTermVote(ulong term, ulong vote) {
         Thread.Sleep(TimeSpan.FromMicroseconds(1));
-    }
-
-    public List<LogEntry> LoadLog() {
-        return initialState.Log.Select(log => log.Clone()).ToList();
     }
 
     public void TruncateLog(ulong idx) {}
