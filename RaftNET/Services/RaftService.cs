@@ -512,4 +512,19 @@ public class RaftService : IRaftRpcHandler {
         Debug.Assert(ok);
         notifier.Wait();
     }
+
+    private TaskCompletionSource? _leaderPromise = new();
+
+    public async Task WaitForLeader(CancellationToken cancellationToken) {
+        lock (_fsm) {
+            if (_fsm.CurrentLeader != 0) {
+                return;
+            }
+
+            _fsm.PingLeader();
+        }
+
+        _leaderPromise ??= new TaskCompletionSource();
+        await _leaderPromise.Task.WaitAsync(cancellationToken);
+    }
 }
