@@ -36,6 +36,13 @@ public class RaftService : IRaftRpcHandler {
     private TaskCompletionSource? _nonJointConfCommitPromise;
     private Queue<ActiveRead> _reads;
     private TaskCompletionSource? _stepDownPromise;
+    private bool _isAlive = true;
+    private string? _aborted;
+
+    private void HandleBackgroundError(Exception exception) {
+        _isAlive = false;
+        _options.OnBackgroundError(exception);
+    }
 
     public RaftService(ulong myId, IRaftRpcClient rpc, IStateMachine sm, IPersistence persistence,
         IFailureDetector fd, AddressBook addressBook, RaftServiceOptions options) {
@@ -217,6 +224,8 @@ public class RaftService : IRaftRpcHandler {
         Log.Information("[{my_id}] RaftService started", _myId);
         return Task.CompletedTask;
     }
+
+    public bool IsAlive => _isAlive;
 
     public async Task StopAsync(CancellationToken cancellationToken) {
         _fsmEventNotify.Signal();
@@ -528,6 +537,45 @@ public class RaftService : IRaftRpcHandler {
         if (_stateChangePromise != null && batch.StateChanged) {
             _stateChangePromise.SetResult();
             _stateChangePromise = null;
+        }
+    }
+
+    private void CheckNotAborted() {
+        if (_aborted != null) {
+            throw new StoppedException(_aborted);
+        }
+    }
+
+    public async Task SetConfiguration(ConfigMemberSet cNew) {
+        CheckNotAborted();
+
+        LogEntry logEntry;
+        lock (_fsm) {
+            var cfg = _fsm.GetConfiguration();
+            var diff = cfg.Diff(cNew);
+            if (diff.Joining.Count == 0 && diff.Leaving.Count == 0) {
+                return;
+            }
+            var logLastConfIdx = _fsm.LogLastConfIdx;
+
+            if (_nonJointConfCommitPromise != null) {
+                Log.Warning(
+                    "[{my_id}] SetConfiguration() a configuration change is still in progress, index={index} config={config}",
+                    _myId, logLastConfIdx, cfg);
+                throw new ConfigurationChangeInProgressException();
+            }
+
+            logEntry = _fsm.AddEntry(Messages.CreateConfiguration(cNew));
+            _nonJointConfCommitPromise = new TaskCompletionSource();
+        }
+
+        try {
+            WaitForEntry(logEntry, WaitType.Committed);
+        }
+        catch (Exception e) {
+            _nonJointConfCommitPromise.SetException(e);
+            _nonJointConfCommitPromise = null;
+            throw;
         }
     }
 

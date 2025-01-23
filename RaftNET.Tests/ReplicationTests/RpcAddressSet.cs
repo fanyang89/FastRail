@@ -2,6 +2,9 @@
 
 public class RpcAddressSet : HashSet<NodeId>, IEquatable<ServerAddressSet> {
     public bool Equals(ServerAddressSet? other) {
-        return !ReferenceEquals(other, null) && other.Equals(this);
+        if (ReferenceEquals(null, other)) {
+            return false;
+        }
+        return other.Count == Count && other.All(address => this.Any(x => x.Id == address.ServerId));
     }
 }

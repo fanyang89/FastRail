@@ -73,6 +73,14 @@ public static class Messages {
         return s;
     }
 
+    public static Configuration CreateConfiguration(ConfigMemberSet members) {
+        var configuration = new Configuration();
+        foreach (var member in members) {
+            configuration.Current.Add(member.Clone());
+        }
+        return configuration;
+    }
+
     public static LogEntry CreateConfiguration(Configuration cfg) {
         return new LogEntry { Configuration = cfg };
     }
@@ -134,5 +142,23 @@ public static class Messages {
             Term = log.LastTerm(),
             Config = log.GetSnapshot().Config
         };
+    }
+
+    public static ConfigurationDiff Diff(this Configuration cfg, ConfigMemberSet cNew) {
+        var diff = new ConfigurationDiff();
+        foreach (var s in cNew) {
+            var it = cfg.Current.FirstOrDefault(x => s.ServerAddress.ServerId == x.ServerAddress.ServerId);
+            if (it == null || it.CanVote != s.CanVote) {
+                diff.Joining.Add(s);
+            }
+        }
+
+        foreach (var s in cfg.Current) {
+            if (cNew.Contains(s)) {
+                diff.Leaving.Add(s);
+            }
+        }
+
+        return diff;
     }
 }

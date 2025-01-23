@@ -89,6 +89,7 @@ public partial class FSM {
 
     public RaftLog RaftLog { get; }
     public Role Role => IsFollower ? Role.Follower : IsLeader ? Role.Leader : Role.Candidate;
+    public ulong LogLastConfIdx => RaftLog.LastConfIdx;
 
     public LogEntry AddEntry(string command) {
         return AddEntry(Encoding.UTF8.GetBytes(command));

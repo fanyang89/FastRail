@@ -1,4 +1,6 @@
-﻿namespace RaftNET.Services;
+﻿using Serilog;
+
+namespace RaftNET.Services;
 
 public record RaftServiceOptions {
     // max size of appended entries in bytes
@@ -29,8 +31,10 @@ public record RaftServiceOptions {
 
     // A callback to invoke if one of internal server
     // background activities has stopped because of an error.
-    public Action<Exception> OnBackgroundError = _ => {};
+    public Action<Exception> OnBackgroundError = OnBackgroundErrorDefault;
+
     public int PingInterval = 1000; // ms
+
     public int PingTimeout = 1000; // ms
 
     // automatically snapshot state machine after applying this number of entries
@@ -51,4 +55,8 @@ public record RaftServiceOptions {
     // It is recommended to set this value to no more than half of snapshot_threshold_log_size
     // so that not all memory is held for trailing when taking a snapshot.
     public ulong SnapshotTrailingSize = 1 * 1024 * 1024;
+
+    public static void OnBackgroundErrorDefault(Exception ex) {
+        Log.Error(ex, "Unexpected background error");
+    }
 }
